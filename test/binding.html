@@ -1,0 +1,67 @@
+<script>
+  this.users = [{
+    name: 'John Doe',
+    age: 30,
+    occupation: 'Software Engineer',
+    hobbies: ['Hiking', 'Reading', 'Coding'],
+    address: {
+      street: '123 Main St',
+      city: 'Anytown',
+      state: 'CA',
+      zip: 12345
+    },
+    projects: [
+      {
+        name: 'Project Alpha',
+        description: 'A web application for managing tasks',
+        status: 'Completed'
+      },
+      {
+        name: 'Project Beta',
+        description: 'A mobile app for tracking expenses',
+        status: 'In Progress'
+      }
+    ]
+  }];
+
+  this.statuses = [
+    { title: 'Draft', value: 'draft' },
+    { title: 'In Progress', value: 'inprogress' },
+    { title: 'Done', value: 'done' },
+  ];
+</script>
+
+<div for={users}>
+  <h1>{name}, {age}</h1>
+  <p>{occupation}</p>
+  <p for={hobbies}>{}</p>
+  <address in={address}>
+    {street}<br />
+    {city}<br />
+    {state}<br />
+    {zip}<br />
+  </address>
+  <section for={projects}>
+    <h2>{name}</h2>
+    <p>{description}</p>
+    <label for="project-status">Set project status:</label>
+    <select name="project-status">
+      <option for={statuses} value={value}>{title}</option>
+    </select>
+</div>
+
+<script>
+  await new Promise((res) => setTimeout(res, 1000));
+  this.users[0].age += 1;
+  this.statuses[0].title += ' Beer';
+  await new Promise((res) => setTimeout(res, 1000));
+  this.users[0].age += 1;
+  this.statuses.push('Хуяк');
+</script>
+
+<style>
+  div {
+    background-color: aliceblue;
+    padding: 50px;
+  }
+</style>

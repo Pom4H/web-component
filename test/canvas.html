@@ -1,0 +1,22 @@
+<script>
+  this.width = 500;
+  this.height = 400;
+  this.x = 1;
+  this.y = 1;
+
+  this.setPosition = ({ target, clientX, clientY }) => {
+    const rect = target.getBoundingClientRect();
+    this.x = clientX - rect.left + 1;
+    this.y = clientY - rect.top + 1;
+  };
+</script>
+
+<canvas width={width} height={height} onmousemove="$.setPosition(event)"></canvas>
+
+<p>{x}:{y}</p>
+
+<style>
+  canvas {
+    background-color: aliceblue;
+  }
+</style>

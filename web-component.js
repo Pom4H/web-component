@@ -1,5 +1,3 @@
-const empty = ['\n', '\n\n']
-const isEmptyNode = ({ nodeValue }) => empty.includes(nodeValue);
 const EVENT_TYPES = {
   ASSIGN: 'assign',
   CHANGE: 'change',
@@ -21,6 +19,7 @@ const createObserver = (target, emitEvent, path = []) => {
       const oldValue = Reflect.get(target, property, receiver);
       const result = Reflect.set(target, property, value, receiver);
       const eventPath = [...path, property];
+      if (typeof value === 'function') return result;
       if (oldValue !== undefined) {
         emitEvent(EVENT_TYPES.CHANGE, eventPath, oldValue, value);
       } else {
@@ -81,8 +80,8 @@ const createObserver = (target, emitEvent, path = []) => {
 };
 
 const defineElement = (tag) => {
+  if (!tag || !tag.includes('-')) return false;
   if (tag in WebComponent.tags) return true;
-  if (!tag.includes('-')) return false;
   customElements.define(tag, WebComponent.tags[tag] = class extends WebComponent {
     constructor() {
       super();
@@ -116,26 +115,15 @@ class CodeLoader {
 }
 
 class Template {
-  static curlyBraces = /{([^}]+)}/g;
+  static curlyBraces = /\${([^}]+)}/g;
   static match = (text = '') => text.match(Template.curlyBraces);
-  static keyFrom = (curlyBraces = '') => curlyBraces.startsWith('{') ? curlyBraces.slice(1, -1) : curlyBraces;
+  static keyFrom = (curlyBraces = '') => curlyBraces.startsWith('${') ? curlyBraces.slice(2, -1) : curlyBraces;
   static fill = (text, data) => text.replace(Template.curlyBraces, (match, key) => data[key] || '');
-  static applyTemplate = (node, data) => {
-    if (node.nodeType === Node.TEXT_NODE) {
-      node.textContent = Template.fill(node.textContent, data);
-    } else {
-      for (const child of node.childNodes) {
-        Template.applyTemplate(child, data);
-      }
-    }
-  }
 }
 
 class StateManager {
   consumers = new Map();
-
   #events = [];
-
   #state = {};
 
   /** @param {HTMLElement} element   */
@@ -143,6 +131,153 @@ class StateManager {
     if (element.state) this.#state = element.state;
     element.state = createObserver(this.#state, this.#emitEvent);
     this.element = element;
+  }
+
+  bind = (node, parent) => this.#traverse(node, parent);
+
+  /**
+ * @param {string[]} path
+ * @returns {any}
+ */
+  #getState(path = []) {
+    if (path.length === 0) return this.#state;
+    let currentObject = this.#state;
+    for (let i = 0; i < path.length; i++) {
+      const key = path[i];
+      if (currentObject === undefined || currentObject[key] === undefined && path.length > 1) {
+        const previous = [...path];
+        const last = previous.pop();
+        previous.pop();
+        previous.push(last);
+        return this.#getState(previous);
+      }
+      currentObject = currentObject[key];
+    }
+    return currentObject;
+  }
+
+  #fillState(template = '', path = [], vars = []) {
+    // Handle empty path or invalid variables
+    if (!vars.length) return template;
+
+    // Create a copy of the path to avoid modifying the original
+    const currentPath = [...path];
+
+    // Get the current object from the state using the path
+    let currentObject = this.#state;
+    for (const key of currentPath) {
+      if (!currentObject[key]) {
+        // If a key is not found, go up one level in the path and try again
+        currentPath.pop();
+        if (!currentPath.length) return template; // Reached the top level without finding the key
+        currentObject = this.#state; // Reset to the top level state
+        for (const k of currentPath) {
+          currentObject = currentObject[k];
+        }
+      } else {
+        currentObject = currentObject[key];
+      }
+    }
+
+    return template.replace(Template.curlyBraces, (match, varName) => {
+      // Check if the variable exists in the current object or any parent object
+      let value;
+      for (let i = currentPath.length; i >= 0 && !value; i--) {
+        const obj = i === 0 ? this.#state : currentPath.slice(0, i).reduce((acc, k) => acc[k], this.#state);
+        value = obj[varName];
+      }
+
+      return value || match; // Return the value if found, otherwise the original variable
+    });
+  }
+
+  /** 
+ * @param {Node} node 
+ * @returns {Node}
+ */
+  #traverse(node, parent = document.createDocumentFragment(), path = []) {
+    if (!node) return;
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      if (node.hasAttribute('for') && node.localName !== 'label') {
+        return this.#bindListNode(node, parent, path);
+      }
+      return parent.appendChild(this.#bindElementNode(node, path));
+    } else if (node.nodeType === Node.TEXT_NODE) {
+      return parent.appendChild(this.#bindTextNode(node, path));
+    }
+  }
+
+  /** @param {HTMLElement} node */
+  #bindTextNode(node, path) {
+    const clone = node.cloneNode();
+    const vars = Template.match(node.textContent);
+    if (vars) {
+      const consumer = () => clone.textContent = this.#fillState(node.textContent, path, vars);
+      this.#subscribe(path, vars, consumer);
+      consumer();
+    }
+    return clone;
+  }
+
+  /** @param {HTMLElement} node */
+  #bindElementNode(node, path) {
+    defineElement(node.localName);
+    if (node.hasAttribute('in')) path = [...path, Template.keyFrom(node.getAttribute('in'))];
+    const clone = node.cloneNode();
+    this.#bindAttributes(clone, path);
+    for (const child of node.childNodes) this.#traverse(child, clone, path);
+    this.#defineHelpers(clone);
+    return clone;
+  }
+
+  #bindAttributes = (node, path) => {
+    const state = this.#getState(path);
+    for (const name of node.getAttributeNames()) {
+      const value = node.getAttribute(name);
+      if (!value) continue;
+      const vars = Template.match(value);
+      if (!vars) continue;
+      const [template] = vars;
+      if (template) {
+        const consumer = () => {
+          const attribute = Template.fill(template, state);
+          if (attribute) node.setAttribute(name, attribute);
+          else node.removeAttribute(name);
+        }
+        consumer();
+      }
+    }
+  }
+
+  /** 
+   * @param {HTMLElement} node 
+   * @param {HTMLElement} parent 
+   */
+  #bindListNode = (node, parent, path = []) => {
+    const key = Template.keyFrom(node.getAttribute('for'));
+    const target = [...path, key];
+    const consumer = this.#createListConsumer(node);
+    const elements = [];
+    this.#subscribeList(target, () => {
+      while (elements.length) elements.pop().remove();
+      for (const index in this.#getState(target)) {
+        const element = consumer([...target, index]);
+        elements.push(element);
+        parent.appendChild(element);
+      }
+    });
+  }
+
+  /** 
+ * @param {HTMLElement} node 
+ */
+  #createListConsumer = (node) => (path) => {
+    const clone = node.cloneNode();
+    clone.removeAttribute('for');
+    for (const child of node.childNodes) {
+      clone.appendChild(this.#traverse(child, clone, path));
+    }
+    return clone;
   }
 
   #processEvents = () => {
@@ -156,18 +291,28 @@ class StateManager {
         }
       }
       for (const consumer of consumers) {
-        consumer(event, path, oldValue, newValue);
+        consumer(path);
       }
     }
   }
 
   #emitEvent = (event, path, oldValue, newValue) => {
+    console.log({ event, path, oldValue, newValue });
     this.#events.push({ event, path, oldValue, newValue });
     const frame = requestAnimationFrame(this.#processEvents);
     console.debug({ frame, events: this.#events });
   }
 
-  subscribe(path, vars, consumer) {
+  #subscribeList(path, consumer) {
+    const subject = path.toString();
+    if (this.consumers.has(subject)) {
+      this.consumers.get(subject).push(consumer);
+    } else {
+      this.consumers.set(subject, [consumer]);
+    }
+  }
+
+  #subscribe(path, vars, consumer) {
     for (const key of vars.map(Template.keyFrom)) {
       const subject = [...path, key].toString();
       if (this.consumers.has(subject)) {
@@ -178,110 +323,10 @@ class StateManager {
     }
   }
 
-  bind = (node) => this.#traverseBottomUp(node)
-
-  /** 
-   * @param {Node} node 
-   * @returns {Node}
-   */
-  #traverseBottomUp(node, path = []) {
-    if (isEmptyNode(node)) return node;
-
-    if (node.localName) defineElement(node.localName);
-
-    this.#defineHelpers(node);
-
-    if (node.nodeType === Node.ELEMENT_NODE) {
-      if (node.hasAttribute('in')) {
-        path = [...path, Template.keyFrom(node.getAttribute('in'))];
-      }
-      if (node.hasAttribute('for')) {
-        return this.#bindList(node, path);
-      }
-    }
-
-    for (const child of node.childNodes) {
-      node.replaceChild(this.#traverseBottomUp(child, path), child);
-    }
-
-    return this.#bindNode(node, path);
-  }
-
   #defineHelpers(node) {
     node.$ = this.element.state;
     node.open = this.element.open;
     node.replace = this.element.replace;
-  }
-
-  /** @param {string[]} path  */
-  #getByPath(path) {
-    return path.reduce((obj, key) => obj[key], this.#state);
-  }
-
-  /** 
-   * @param {Element} node 
-   * @returns {Node}
-   */
-  #bindList = (node, path = []) => {
-    const key = Template.keyFrom(node.getAttribute('for'));
-    const fragment = document.createDocumentFragment();
-    let data = this.#getByPath([...path, key]);
-    if (!data) {
-      data = this.#getByPath([key]);
-      path = [key];
-    } else {
-      path = [...path, key];
-    }
-    for (const index in data) {
-      const clone = node.cloneNode(true);
-      clone.removeAttribute('for');
-      fragment.appendChild(this.#traverseBottomUp(clone, [...path, index]));
-    }
-    return fragment;
-  }
-
-  /** @param {HTMLElement} node */
-  #bindNode = (node, path) => {
-    if (node.textContent) this.#bindTextContent(node, path);
-    if (node instanceof Element && node.hasAttributes()) this.#bindAttributes(node, path);
-    return node;
-  }
-
-  /** @param {HTMLElement} node */
-  #bindTextContent = (node, path) => {
-    const state = this.#getByPath(path);
-    if (node.textContent === '{}') {
-      node.textContent = state;
-      return;
-    }
-    const vars = Template.match(node.textContent);
-    if (vars) {
-      const template = node.textContent;
-      const consumer = () => node.textContent = Template.fill(template, state);
-      this.subscribe(path, vars, consumer);
-      consumer();
-    }
-  }
-
-  /** @param {HTMLElement} node */
-  #bindAttributes = (node, path) => {
-    const state = this.#getByPath(path);
-    for (const name of node.getAttributeNames()) {
-      const value = node.getAttribute(name);
-      if (!value) continue;
-      const vars = Template.match(value);
-      if (!vars) continue;
-      const [template] = vars;
-      if (template) {
-        const consumer = () => {
-          const attribute = Template.fill(template, state);
-          if (attribute) node.setAttribute(name, attribute);
-          else node.removeAttribute(name);
-        }
-        this.subscribe(path, [template], consumer);
-        consumer();
-      }
-    }
   }
 }
 
@@ -310,18 +355,15 @@ class WebComponent extends HTMLElement {
 
   async connectedCallback() {
     const body = await CodeLoader.loadFromTag(this.localName, this.#signal);
-    for (const child of body.childNodes) {
-      const node = child.cloneNode(true);
+    for (const node of body.childNodes) {
       if (node instanceof HTMLScriptElement) {
         const script = document.createElement('script');
-        script.innerHTML = `(async function () {${node.textContent}}).call(WebComponent.instances['${this.key}'].state);`;
+        script.innerHTML = `'use strict';(async function () {${node.textContent}}).call(WebComponent.instances['${this.key}'].state);`;
         this.appendChild(script);
         continue;
-      } else if (node instanceof HTMLStyleElement) {
-        this.shadowRoot.appendChild(node);
-        continue;
       }
-      this.shadowRoot.appendChild(this.stateManager.bind(node));
+      const binded = this.stateManager.bind(node);
+      if (binded) this.shadowRoot.appendChild(binded);
     }
   }
 

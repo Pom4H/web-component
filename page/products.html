@@ -1,0 +1,196 @@
+<script>
+  const _products = [
+    { name: 'Laptop', category: 'Electronics', price: 1200 },
+    { name: 'Shirt', category: 'Clothing', price: 25 },
+    { name: 'Headphones', category: 'Electronics', price: 80 },
+    { name: 'Book', category: 'Books', price: 15 },
+    { name: 'Sneakers', category: 'Clothing', price: 70 },
+  ];
+
+  this.products = _products;
+
+  let sortColumn = null;
+  let sortUp = true;
+
+  this.sort = (columnEl) => {
+    const column = columnEl.id;
+
+    if (sortColumn) sortColumn.classList.remove(sortUp ? 'asc' : 'desc');
+    if (sortColumn === columnEl) sortUp = !sortUp;
+
+    sortColumn = columnEl;
+    columnEl.classList.add(sortUp ? 'asc' : 'desc');
+
+    if (column === 'price') {
+      this.products = _products.sort((a, b) => sortUp ? (a[column] - b[column]) : (b[column] - a[column]));
+    } else {
+      this.products = _products.sort((a, b) => a[column] > b[column] ? (sortUp ? 1 : -1) : (sortUp ? -1 : 1));
+    }
+  };
+
+  this.filter = (value) => {
+    this.products = _products.filter(
+      product =>
+        product.name.startsWith(value) ||
+        product.category.startsWith(value) ||
+        product.price == value
+    );
+  };
+
+  this.add = (event) => {
+    event.preventDefault();
+    const product = Object.fromEntries(new FormData(event.target));
+    if (product.name && product.category && product.price) {
+      this.products.push(product);
+    }
+  }
+</script>
+
+<div class="container">
+  <h1>Products</h1>
+  <input class="search" placeholder="Search" oninput="$.filter(this.value)" />
+  <table>
+    <thead>
+      <tr>
+        <th id="name" onclick="$.sort(this)">Product</th>
+        <th id="category" onclick="$.sort(this)">Category</th>
+        <th id="price" onclick="$.sort(this)">Price</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr for="${products}">
+        <td>${name}</td>
+        <td>${category}</td>
+        <td>${price}</td>
+      </tr>
+    </tbody>
+  </table>
+  <form onsubmit="$.add(event)">
+    <input value="name" name="name" type="text" minlength="3" placeholder="name" />
+    <input value="category" name="category" type="text" minlength="3" placeholder="category" />
+    <input value="5" name="price" type="number" min="3" placeholder="5" />
+    <button>Add product</button>
+  </form>
+</div>
+
+<style>
+  .container {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #fff;
+    text-align: center;
+  }
+
+  form {
+    margin: 20px auto;
+  }
+
+  input,
+  button {
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+    padding: 10px;
+    border: none;
+    background-color: rgba(255, 255, 255, 0.2);
+    color: #fff;
+    outline: unset;
+    min-width: 100px;
+  }
+
+  input.search {
+    width: 300px;
+    margin: 20px auto;
+  }
+
+  input::placeholder {
+    color: inherit;
+    opacity: .5;
+  }
+
+  table {
+    width: 600px;
+    border-collapse: collapse;
+    overflow: hidden;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+  }
+
+  th,
+  td {
+    text-align: left;
+    padding: 15px;
+    background-color: rgba(255, 255, 255, 0.2);
+  }
+
+  th {
+    text-align: left;
+  }
+
+  thead {
+    th {
+      background-color: #55608f;
+      position: relative;
+
+      &:before,
+      &:after {
+        border: 4px solid transparent;
+        content: "";
+        display: block;
+        height: 0;
+        right: 5px;
+        top: 50%;
+        position: absolute;
+        width: 0;
+      }
+
+      &:before {
+        border-bottom-color: #888;
+        margin-top: -9px;
+      }
+
+      &:after {
+        border-top-color: #888;
+        margin-top: 1px;
+      }
+    }
+
+    th.asc {
+      &:before {
+        border-bottom-color: #fff;
+        margin-top: -9px;
+      }
+    }
+
+    th.desc {
+      &:after {
+        border-top-color: #fff;
+        margin-top: 1px;
+      }
+    }
+  }
+
+  tbody {
+    tr {
+      &:hover {
+        background-color: rgba(255, 255, 255, 0.3);
+      }
+    }
+
+    td {
+      position: relative;
+
+      &:hover {
+        &:before {
+          content: "";
+          position: absolute;
+          left: 0;
+          right: 0;
+          top: -9999px;
+          bottom: -9999px;
+          background-color: rgba(255, 255, 255, 0.2);
+          z-index: -1;
+        }
+      }
+    }
+  }
+</style>

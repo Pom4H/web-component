@@ -1,83 +1,93 @@
-const EVENT_TYPES = {
-  ASSIGN: 'assign',
-  CHANGE: 'change',
-  REMOVE: 'remove',
-  ADD: 'add',
-  MOVE: 'move',
+const EVENT = {
+  SET: Symbol('SET'),
+  DELETE: Symbol('DELETE'),
+  APPEND: Symbol('APPEND'),
 };
 
-const createObserver = (target, emitEvent, path = []) => {
-  const handlers = {
-    get(target, property, receiver) {
-      const value = Reflect.get(target, property, receiver);
-      if (typeof value === 'object' && value !== null) {
-        return createObserver(value, emitEvent, [...path, property]);
-      }
-      return value;
-    },
-    set(target, property, value, receiver) {
-      const oldValue = Reflect.get(target, property, receiver);
-      const result = Reflect.set(target, property, value, receiver);
-      const eventPath = [...path, property];
-      if (typeof value === 'function') return result;
-      if (oldValue !== undefined) {
-        emitEvent(EVENT_TYPES.CHANGE, eventPath, oldValue, value);
-      } else {
-        emitEvent(EVENT_TYPES.ASSIGN, eventPath, undefined, value);
-      }
-      return result;
-    },
-    deleteProperty(target, property) {
-      const oldValue = Reflect.get(target, property);
-      const result = Reflect.deleteProperty(target, property);
-      emitEvent(EVENT_TYPES.REMOVE, [...path, property], oldValue);
-      return result;
-    },
-  };
+class ProxyState {
+  constructor(state) {
+    return this.#proxyObject(state);
+  }
 
-  if (Array.isArray(target)) {
-    Object.assign(handlers, {
-      push: (...items) => {
-        const result = Array.prototype.push.apply(target, items);
-        emitEvent(EVENT_TYPES.ADD, [...path, target.length - items.length], undefined, items);
+  #proxyObject(object, path = []) {
+    const self = this;
+    return new Proxy(object, {
+      get(target, property, receiver) {
+        const value = Reflect.get(target, property, receiver);
+        if (Array.isArray(value)) {
+          return self.#proxyArray(value, [...path, property]);
+        } else if (typeof value === 'object' && value !== null) {
+          return self.#proxyObject(value, [...path, property]);
+        }
+        return value;
+      },
+      set(target, property, value, receiver) {
+        //StateManager.consumers.set(target, []);
+
+        if (typeof value === 'object' && StateManager.consumers.has(target[property])) {
+          const consumers = StateManager.consumers.get(target[property]);
+          StateManager.consumers.set(value, consumers);
+        }
+
+        const result = Reflect.set(target, property, value, receiver);
+        if (typeof value === 'function') return result;
+
+        if (StateManager.consumers.has(value)) {
+          StateManager.consumers.get(value).forEach(consume => {
+            consume(EVENT.SET, value);
+          });
+        } else if (StateManager.consumers.has(target)) {
+          StateManager.consumers.get(target).forEach(consume => {
+            consume(EVENT.SET, target);
+          });
+        }
+
         return result;
       },
-      pop: () => {
-        const oldValue = target.pop();
-        emitEvent(EVENT_TYPES.REMOVE, [...path, target.length], oldValue);
-        return oldValue;
-      },
-      shift: () => {
-        const oldValue = target.shift();
-        emitEvent(EVENT_TYPES.REMOVE, [...path, 0], oldValue);
-        return oldValue;
-      },
-      unshift: (...items) => {
-        const result = target.unshift(...items);
-        emitEvent(EVENT_TYPES.ADD, [...path, 0], undefined, items);
-        return result;
-      },
-      splice: (start, deleteCount, ...items) => {
-        const deletedItems = target.splice(start, deleteCount, ...items);
-        if (deletedItems.length > 0) {
-          emitEvent(EVENT_TYPES.REMOVE, [...path, start], deletedItems);
+      deleteProperty(target, property) {
+        //const oldValue = Reflect.get(target, property);
+        const result = Reflect.deleteProperty(target, property);
+        if (StateManager.consumers.has(target)) {
+          StateManager.consumers.get(target).forEach(consume => {
+            consume(EVENT.DELETE, property);
+          });
         }
-        if (items.length > 0) {
-          emitEvent(EVENT_TYPES.ADD, [...path, start], undefined, items);
-        }
-        return deletedItems;
-      },
-      sort: (compareFn) => {
-        const oldArr = [...target];
-        const result = Array.prototype.sort.apply(target, [compareFn]);
-        emitEvent(EVENT_TYPES.MOVE, path, oldArr, target);
         return result;
       },
     });
   }
 
-  return new Proxy(target, handlers);
-};
+  #proxyArray(array, path) {
+    const self = this;
+    return new Proxy(array, ({
+      get(target, property, receiver) {
+        const value = Reflect.get(target, property, receiver);
+        if (typeof value === 'function') {
+          return function (...args) {
+            const result = value.apply(target, args);
+            if (['push', 'pop'].includes(property)) {
+              if (StateManager.consumers.has(target)) {
+                StateManager.consumers.get(target).forEach(consume => {
+                  consume(EVENT.APPEND, target);
+                });
+              }
+            }
+            if (typeof result === 'object') {
+              return self.#proxyObject(result, path);
+            }
+            return result;
+          };
+        } else if (typeof value === 'object') {
+          return self.#proxyObject(value, path);
+        } else return value;
+      },
+      set(target, property, value) {
+        target[prop] = value;
+        return true;
+      }
+    }));
+  }
+}
 
 const defineElement = (tag) => {
   if (!tag || !tag.includes('-')) return false;
@@ -122,14 +132,14 @@ class Template {
 }
 
 class StateManager {
-  consumers = new Map();
-  #events = [];
   #state = {};
+
+  static consumers = new WeakMap();
 
   /** @param {HTMLElement} element   */
   constructor(element) {
     if (element.state) this.#state = element.state;
-    element.state = createObserver(this.#state, this.#emitEvent);
+    element.state = new ProxyState(this.#state);
     this.element = element;
   }
 
@@ -139,55 +149,41 @@ class StateManager {
  * @param {string[]} path
  * @returns {any}
  */
-  #getState(path = []) {
-    if (path.length === 0) return this.#state;
-    let currentObject = this.#state;
-    for (let i = 0; i < path.length; i++) {
-      const key = path[i];
-      if (currentObject === undefined || currentObject[key] === undefined && path.length > 1) {
-        const previous = [...path];
-        const last = previous.pop();
-        previous.pop();
-        previous.push(last);
-        return this.#getState(previous);
-      }
-      currentObject = currentObject[key];
+  #getState(_path, _state = this.#state, way = []) {
+    const [key, ...path] = _path;
+    if (!key) return _state;
+    if (_state[key]) {
+      way.push(key);
+      return this.#getState(path, _state[key], way);
     }
-    return currentObject;
+    if (typeof key === 'string' && key.startsWith('[')) {
+      way.push(key);
+      return this.#getByWay(way);
+    }
+    if (path.length) return this.#getState([key, ...path], this.#state, way);
+    if (_state[key]) return _state[key];
+    return this.#state[key];
   }
 
-  #fillState(template = '', path = [], vars = []) {
-    // Handle empty path or invalid variables
-    if (!vars.length) return template;
-
-    // Create a copy of the path to avoid modifying the original
-    const currentPath = [...path];
-
-    // Get the current object from the state using the path
-    let currentObject = this.#state;
-    for (const key of currentPath) {
-      if (!currentObject[key]) {
-        // If a key is not found, go up one level in the path and try again
-        currentPath.pop();
-        if (!currentPath.length) return template; // Reached the top level without finding the key
-        currentObject = this.#state; // Reset to the top level state
-        for (const k of currentPath) {
-          currentObject = currentObject[k];
-        }
-      } else {
-        currentObject = currentObject[key];
-      }
+  #getByWay(way = []) {
+    const key = way.pop().slice(1, -1);
+    let valueObject = this.#state;
+    let keyObject;
+    for (const part of way) {
+      if (keyObject && keyObject[part]) keyObject = keyObject[part];
+      else if (valueObject[part]) valueObject = valueObject[part];
+      else if (!keyObject) keyObject = this.#state[part];
     }
+    return valueObject[keyObject[key]];
+  }
 
-    return template.replace(Template.curlyBraces, (match, varName) => {
-      // Check if the variable exists in the current object or any parent object
-      let value;
-      for (let i = currentPath.length; i >= 0 && !value; i--) {
-        const obj = i === 0 ? this.#state : currentPath.slice(0, i).reduce((acc, k) => acc[k], this.#state);
-        value = obj[varName];
-      }
+  getState(path) {
+    return this.#getState(path);
+  }
 
-      return value || match; // Return the value if found, otherwise the original variable
+  #fillState(template = '', path = []) {
+    return template.replace(Template.curlyBraces, (_, variable) => {
+      return this.#getState([...path, variable]);
     });
   }
 
@@ -210,12 +206,16 @@ class StateManager {
   /** @param {HTMLElement} node */
   #bindTextNode(node, path) {
     const clone = node.cloneNode();
-    const vars = Template.match(node.textContent);
-    if (vars) {
-      const consumer = () => clone.textContent = this.#fillState(node.textContent, path, vars);
-      this.#subscribe(path, vars, consumer);
-      consumer();
+    const target = this.#getState(path);
+    if (!target) return clone;
+    const consumer = (action) => {
+      if (action === EVENT.SET) {
+        clone.textContent = this.#fillState(node.textContent, path);
+      }
     }
+    consumer(EVENT.SET);
+    if (!StateManager.consumers.has(target)) StateManager.consumers.set(target, []);
+    const consumers = StateManager.consumers.get(target).push(consumer);
     return clone;
   }
 
@@ -230,8 +230,7 @@ class StateManager {
     return clone;
   }
 
-  #bindAttributes = (node, path) => {
-    const state = this.#getState(path);
+  #bindAttributes = (node, _path) => {
     for (const name of node.getAttributeNames()) {
       const value = node.getAttribute(name);
       if (!value) continue;
@@ -239,12 +238,24 @@ class StateManager {
       if (!vars) continue;
       const [template] = vars;
       if (template) {
-        const consumer = () => {
-          const attribute = Template.fill(template, state);
-          if (attribute) node.setAttribute(name, attribute);
-          else node.removeAttribute(name);
+        const target = this.getState(_path);
+        const path = [..._path, Template.keyFrom(template)];
+        const setConsumer = (action) => {
+          if (action !== EVENT.SET) return;
+          const attribute = this.#getState(path);
+          if (typeof attribute === 'object' || typeof attribute === 'function') {
+            node.setAttribute(name, [this.element.key, path]);
+          } else if (attribute) {
+            node.setAttribute(name, attribute);
+          } else node.removeAttribute(name);
         }
-        consumer();
+        const deleteConsumer = (action, attribute) => {
+          if (action !== EVENT.DELETE) return;
+          node.removeAttribute(attribute)
+        };
+        if (!StateManager.consumers.has(target)) StateManager.consumers.set(target, []);
+        StateManager.consumers.get(target).push(setConsumer, deleteConsumer);
+        setConsumer(EVENT.SET);
       }
     }
   }
@@ -253,74 +264,43 @@ class StateManager {
    * @param {HTMLElement} node 
    * @param {HTMLElement} parent 
    */
-  #bindListNode = (node, parent, path = []) => {
+  #bindListNode = (node, parent, _path = []) => {
     const key = Template.keyFrom(node.getAttribute('for'));
-    const target = [...path, key];
-    const consumer = this.#createListConsumer(node);
+    const path = [..._path, key];
+    const target = this.#getState(path);
+    const createListNode = this.#createListNode(node);
     const elements = [];
-    this.#subscribeList(target, () => {
-      while (elements.length) elements.pop().remove();
-      for (const index in this.#getState(target)) {
-        const element = consumer([...target, index]);
-        elements.push(element);
-        parent.appendChild(element);
+
+    const consumer = (action, target) => {
+      if (action === EVENT.SET || action === EVENT.APPEND) {
+        while (elements.length) elements.pop().remove();
+        for (const index in target) {
+          const element = createListNode([...path, index]);
+          elements.push(element);
+          parent.appendChild(element);
+        }
       }
-    });
+    };
+
+    consumer(EVENT.SET, target);
+
+    if (!StateManager.consumers.has(target)) StateManager.consumers.set(target, []);
+    StateManager.consumers.get(target).push(consumer);
   }
 
   /** 
- * @param {HTMLElement} node 
- */
-  #createListConsumer = (node) => (path) => {
+  * @param {HTMLElement} node 
+  */
+  #createListNode = (node) => (path) => {
     const clone = node.cloneNode();
     clone.removeAttribute('for');
     for (const child of node.childNodes) {
-      clone.appendChild(this.#traverse(child, clone, path));
+      const result = this.#traverse(child, clone, path);
+      if (result) clone.appendChild(result);
     }
+    this.#bindAttributes(clone, path);
+    this.#defineHelpers(clone);
     return clone;
-  }
-
-  #processEvents = () => {
-    console.debug('events', this.#events.length);
-    while (this.#events.length) {
-      const { event, path, oldValue, newValue } = this.#events.shift();
-      const consumers = [];
-      for (const [subject, subs] of this.consumers) {
-        if (subject === path.join()) {
-          consumers.push(...subs);
-        }
-      }
-      for (const consumer of consumers) {
-        consumer(path);
-      }
-    }
-  }
-
-  #emitEvent = (event, path, oldValue, newValue) => {
-    console.log({ event, path, oldValue, newValue });
-    this.#events.push({ event, path, oldValue, newValue });
-    const frame = requestAnimationFrame(this.#processEvents);
-    console.debug({ frame, events: this.#events });
-  }
-
-  #subscribeList(path, consumer) {
-    const subject = path.toString();
-    if (this.consumers.has(subject)) {
-      this.consumers.get(subject).push(consumer);
-    } else {
-      this.consumers.set(subject, [consumer]);
-    }
-  }
-
-  #subscribe(path, vars, consumer) {
-    for (const key of vars.map(Template.keyFrom)) {
-      const subject = [...path, key].toString();
-      if (this.consumers.has(subject)) {
-        this.consumers.get(subject).push(consumer);
-      } else {
-        this.consumers.set(subject, [consumer]);
-      }
-    }
   }
 
   #defineHelpers(node) {
@@ -340,7 +320,7 @@ class WebComponent extends HTMLElement {
   #abort = new AbortController();
   #signal = this.#abort.signal;
 
-  state = null;
+  state = {};
 
   constructor() {
     super();
@@ -354,16 +334,25 @@ class WebComponent extends HTMLElement {
   }
 
   async connectedCallback() {
+    this.#loadProps();
     const body = await CodeLoader.loadFromTag(this.localName, this.#signal);
     for (const node of body.childNodes) {
       if (node instanceof HTMLScriptElement) {
         const script = document.createElement('script');
         script.innerHTML = `'use strict';(async function () {${node.textContent}}).call(WebComponent.instances['${this.key}'].state);`;
         this.appendChild(script);
-        continue;
+      } else {
+        this.stateManager.bind(node, this.shadowRoot);
       }
-      const binded = this.stateManager.bind(node);
-      if (binded) this.shadowRoot.appendChild(binded);
+    }
+  }
+
+  #loadProps() {
+    for (const attribute of this.getAttributeNames()) {
+      const value = this.getAttribute(attribute);
+      //if (!value || !value.startsWith('${')) continue;
+      const [key, ...path] = value.split(',');
+      this.state[attribute] = WebComponent.instances[key].stateManager.getState(path);
     }
   }
 

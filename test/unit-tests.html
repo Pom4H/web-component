@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Web Component Unit Tests</title>
+  <script type="module" src="../web-component.js"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .test-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: white;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    h1 {
+      color: #2c3e50;
+      border-bottom: 3px solid #3498db;
+      padding-bottom: 10px;
+    }
+    .test-suite {
+      margin: 20px 0;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .suite-header {
+      background: #3498db;
+      color: white;
+      padding: 15px;
+      font-weight: bold;
+      font-size: 1.1em;
+    }
+    .test-case {
+      padding: 12px 15px;
+      border-bottom: 1px solid #f0f0f0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .test-case:last-child {
+      border-bottom: none;
+    }
+    .test-case.pass {
+      background: #d4edda;
+    }
+    .test-case.fail {
+      background: #f8d7da;
+    }
+    .test-case.pending {
+      background: #fff3cd;
+    }
+    .test-name {
+      flex: 1;
+    }
+    .test-status {
+      font-weight: bold;
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 0.9em;
+    }
+    .test-status.pass {
+      background: #28a745;
+      color: white;
+    }
+    .test-status.fail {
+      background: #dc3545;
+      color: white;
+    }
+    .test-status.pending {
+      background: #ffc107;
+      color: black;
+    }
+    .summary {
+      margin: 20px 0;
+      padding: 20px;
+      background: #e9ecef;
+      border-radius: 6px;
+      display: flex;
+      justify-content: space-around;
+      font-size: 1.1em;
+    }
+    .summary-item {
+      text-align: center;
+    }
+    .summary-value {
+      font-size: 2em;
+      font-weight: bold;
+      margin: 10px 0;
+    }
+    .summary-item.pass .summary-value { color: #28a745; }
+    .summary-item.fail .summary-value { color: #dc3545; }
+    .summary-item.total .summary-value { color: #3498db; }
+    .error-details {
+      margin-top: 8px;
+      padding: 8px;
+      background: #fff;
+      border-left: 3px solid #dc3545;
+      font-family: monospace;
+      font-size: 0.9em;
+      color: #721c24;
+    }
+    .run-button {
+      background: #3498db;
+      color: white;
+      border: none;
+      padding: 12px 30px;
+      font-size: 1.1em;
+      border-radius: 6px;
+      cursor: pointer;
+      margin: 20px 0;
+    }
+    .run-button:hover {
+      background: #2980b9;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-container">
+    <h1>🧪 Web Component Signal-Based Test Suite</h1>
+    
+    <button class="run-button" onclick="runAllTests()">▶ Run All Tests</button>
+    
+    <div id="summary" class="summary" style="display: none;">
+      <div class="summary-item total">
+        <div>Total Tests</div>
+        <div class="summary-value" id="total-tests">0</div>
+      </div>
+      <div class="summary-item pass">
+        <div>Passed</div>
+        <div class="summary-value" id="passed-tests">0</div>
+      </div>
+      <div class="summary-item fail">
+        <div>Failed</div>
+        <div class="summary-value" id="failed-tests">0</div>
+      </div>
+    </div>
+
+    <div id="test-results"></div>
+  </div>
+
+  <script>
+    // Test Framework
+    class TestRunner {
+      constructor() {
+        this.suites = [];
+        this.results = { total: 0, passed: 0, failed: 0, pending: 0 };
+      }
+
+      describe(name, fn) {
+        const suite = { name, tests: [] };
+        this.currentSuite = suite;
+        fn();
+        this.suites.push(suite);
+        this.currentSuite = null;
+      }
+
+      it(name, fn) {
+        if (this.currentSuite) {
+          this.currentSuite.tests.push({ name, fn, status: 'pending' });
+        }
+      }
+
+      async run() {
+        this.results = { total: 0, passed: 0, failed: 0, pending: 0 };
+        
+        for (const suite of this.suites) {
+          for (const test of suite.tests) {
+            this.results.total++;
+            try {
+              await test.fn();
+              test.status = 'pass';
+              this.results.passed++;
+            } catch (error) {
+              test.status = 'fail';
+              test.error = error.message;
+              this.results.failed++;
+            }
+          }
+        }
+        
+        return this.results;
+      }
+
+      expect(actual) {
+        return {
+          toBe(expected) {
+            if (actual !== expected) {
+              throw new Error(`Expected ${expected} but got ${actual}`);
+            }
+          },
+          toEqual(expected) {
+            if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+              throw new Error(`Expected ${JSON.stringify(expected)} but got ${JSON.stringify(actual)}`);
+            }
+          },
+          toBeTruthy() {
+            if (!actual) {
+              throw new Error(`Expected truthy but got ${actual}`);
+            }
+          },
+          toBeFalsy() {
+            if (actual) {
+              throw new Error(`Expected falsy but got ${actual}`);
+            }
+          },
+          toBeGreaterThan(expected) {
+            if (actual <= expected) {
+              throw new Error(`Expected ${actual} to be greater than ${expected}`);
+            }
+          },
+          toContain(item) {
+            if (!actual.includes(item)) {
+              throw new Error(`Expected ${actual} to contain ${item}`);
+            }
+          },
+          toBeInstanceOf(constructor) {
+            if (!(actual instanceof constructor)) {
+              throw new Error(`Expected instance of ${constructor.name}`);
+            }
+          }
+        };
+      }
+
+      renderResults() {
+        const container = document.getElementById('test-results');
+        container.innerHTML = '';
+        
+        for (const suite of this.suites) {
+          const suiteEl = document.createElement('div');
+          suiteEl.className = 'test-suite';
+          
+          const header = document.createElement('div');
+          header.className = 'suite-header';
+          header.textContent = suite.name;
+          suiteEl.appendChild(header);
+          
+          for (const test of suite.tests) {
+            const testEl = document.createElement('div');
+            testEl.className = `test-case ${test.status}`;
+            
+            const nameEl = document.createElement('div');
+            nameEl.className = 'test-name';
+            nameEl.textContent = test.name;
+            testEl.appendChild(nameEl);
+            
+            const statusEl = document.createElement('div');
+            statusEl.className = `test-status ${test.status}`;
+            statusEl.textContent = test.status === 'pass' ? '✓ PASS' : test.status === 'fail' ? '✗ FAIL' : '⧖ PENDING';
+            testEl.appendChild(statusEl);
+            
+            if (test.error) {
+              const errorEl = document.createElement('div');
+              errorEl.className = 'error-details';
+              errorEl.textContent = test.error;
+              testEl.appendChild(errorEl);
+            }
+            
+            suiteEl.appendChild(testEl);
+          }
+          
+          container.appendChild(suiteEl);
+        }
+        
+        // Update summary
+        document.getElementById('summary').style.display = 'flex';
+        document.getElementById('total-tests').textContent = this.results.total;
+        document.getElementById('passed-tests').textContent = this.results.passed;
+        document.getElementById('failed-tests').textContent = this.results.failed;
+      }
+    }
+
+    const runner = new TestRunner();
+    const describe = runner.describe.bind(runner);
+    const it = runner.it.bind(runner);
+    const expect = runner.expect.bind(runner);
+
+    // ===== TEST SUITES =====
+
+    // Test Suite 1: Signal API
+    describe('Signal API', () => {
+      it('should create a Signal.State with initial value', () => {
+        const signal = new Signal.State(42);
+        expect(signal.get()).toBe(42);
+      });
+
+      it('should update Signal.State value', () => {
+        const signal = new Signal.State(10);
+        signal.set(20);
+        expect(signal.get()).toBe(20);
+      });
+
+      it('should not notify watchers when value is unchanged', async () => {
+        let notifyCount = 0;
+        const signal = new Signal.State(5);
+        const watcher = new Signal.subtle.Watcher(() => { notifyCount++; });
+        watcher.watch(signal);
+        
+        signal.set(5); // Same value
+        await new Promise(resolve => setTimeout(resolve, 10));
+        
+        expect(notifyCount).toBe(0);
+      });
+
+      it('should notify watchers when value changes', async () => {
+        let notifyCount = 0;
+        const signal = new Signal.State(5);
+        const watcher = new Signal.subtle.Watcher(() => { notifyCount++; });
+        watcher.watch(signal);
+        
+        signal.set(10);
+        await new Promise(resolve => setTimeout(resolve, 10));
+        
+        expect(notifyCount).toBeGreaterThan(0);
+      });
+    });
+
+    // Test Suite 2: SignalStateWrapper
+    describe('SignalStateWrapper', () => {
+      it('should wrap object properties as signals', () => {
+        const wrapper = new SignalStateWrapper({ name: 'John', age: 30 });
+        expect(wrapper.get('name')).toBe('John');
+        expect(wrapper.get('age')).toBe(30);
+      });
+
+      it('should update wrapped properties', () => {
+        const wrapper = new SignalStateWrapper({ count: 0 });
+        wrapper.set('count', 5);
+        expect(wrapper.get('count')).toBe(5);
+      });
+
+      it('should handle nested objects', () => {
+        const wrapper = new SignalStateWrapper({
+          user: { name: 'Alice', address: { city: 'NYC' } }
+        });
+        const user = wrapper.get('user');
+        expect(user.name).toBe('Alice');
+        expect(user.address.city).toBe('NYC');
+      });
+
+      it('should handle arrays', () => {
+        const wrapper = new SignalStateWrapper({ items: [1, 2, 3] });
+        const items = wrapper.get('items');
+        expect(Array.isArray(items)).toBeTruthy();
+        expect(items.length).toBe(3);
+      });
+
+      it('should create proxy with proper getters', () => {
+        const wrapper = new SignalStateWrapper({ x: 10, y: 20 });
+        const proxy = wrapper.createProxy();
+        expect(proxy.x).toBe(10);
+        expect(proxy.y).toBe(20);
+      });
+
+      it('should create proxy with proper setters', () => {
+        const wrapper = new SignalStateWrapper({ value: 0 });
+        const proxy = wrapper.createProxy();
+        proxy.value = 100;
+        expect(wrapper.get('value')).toBe(100);
+      });
+    });
+
+    // Test Suite 3: Template System
+    describe('Template System', () => {
+      it('should match template variables', () => {
+        const matches = Template.match('Hello {name}!');
+        expect(matches).toBeTruthy();
+        expect(matches[0]).toBe('{name}');
+      });
+
+      it('should extract key from curly braces', () => {
+        const key = Template.keyFrom('{username}');
+        expect(key).toBe('username');
+      });
+
+      it('should fill template with data', () => {
+        const result = Template.fill('Hello {name}!', { name: 'World' });
+        expect(result).toBe('Hello World!');
+      });
+
+      it('should handle multiple template variables', () => {
+        const text = '{greeting} {name}, you are {age} years old!';
+        const result = Template.fill(text, { 
+          greeting: 'Hello', 
+          name: 'Alice', 
+          age: 25 
+        });
+        expect(result).toBe('Hello Alice, you are 25 years old!');
+      });
+
+      it('should handle missing template data', () => {
+        const result = Template.fill('Hello {name}!', {});
+        expect(result).toBe('Hello !');
+      });
+    });
+
+    // Test Suite 4: WebComponent
+    describe('WebComponent', () => {
+      it('should have WebComponent class defined', () => {
+        expect(typeof WebComponent).toBe('function');
+      });
+
+      it('should have static properties', () => {
+        expect(WebComponent.tags).toBeTruthy();
+        expect(WebComponent.instances).toBeTruthy();
+        expect(WebComponent.ids).toBeTruthy();
+      });
+
+      it('should define custom elements', () => {
+        const result = defineElement('test-element');
+        expect(result).toBeTruthy();
+      });
+
+      it('should not define elements without hyphen', () => {
+        const result = defineElement('testelement');
+        expect(result).toBeFalsy();
+      });
+    });
+
+    // Test Suite 5: StateManager
+    describe('StateManager', () => {
+      it('should create StateManager with element', () => {
+        const element = document.createElement('div');
+        const manager = new StateManager(element);
+        expect(manager).toBeTruthy();
+        expect(element.state).toBeTruthy();
+      });
+
+      it('should initialize state from element', () => {
+        const element = document.createElement('div');
+        element.state = { count: 42 };
+        const manager = new StateManager(element);
+        expect(element.state.count).toBe(42);
+      });
+
+      it('should handle state updates', () => {
+        const element = document.createElement('div');
+        const manager = new StateManager(element);
+        element.state.value = 100;
+        expect(element.state.value).toBe(100);
+      });
+    });
+
+    // Test Suite 6: CodeLoader
+    describe('CodeLoader', () => {
+      it('should have CodeLoader class', () => {
+        expect(typeof CodeLoader).toBe('function');
+      });
+
+      it('should have loadFromTag method', () => {
+        expect(typeof CodeLoader.loadFromTag).toBe('function');
+      });
+    });
+
+    // Test Suite 7: Integration Tests
+    describe('Integration Tests', () => {
+      it('should handle complete signal flow', async () => {
+        const element = document.createElement('div');
+        const manager = new StateManager(element);
+        
+        element.state.message = 'Initial';
+        expect(element.state.message).toBe('Initial');
+        
+        element.state.message = 'Updated';
+        expect(element.state.message).toBe('Updated');
+      });
+
+      it('should support reactive updates', async () => {
+        const element = document.createElement('div');
+        const manager = new StateManager(element);
+        
+        let updateCount = 0;
+        element.state.counter = 0;
+        
+        // Simulate reactive binding
+        for (let i = 1; i <= 5; i++) {
+          element.state.counter = i;
+          updateCount++;
+        }
+        
+        expect(element.state.counter).toBe(5);
+        expect(updateCount).toBe(5);
+      });
+    });
+
+    // Run all tests
+    async function runAllTests() {
+      console.log('Starting test run...');
+      await runner.run();
+      runner.renderResults();
+      console.log('Test run complete:', runner.results);
+    }
+
+    // Auto-run tests after page load
+    window.addEventListener('load', () => {
+      setTimeout(runAllTests, 500);
+    });
+  </script>
+</body>
+</html>

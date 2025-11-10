@@ -1,84 +1,229 @@
+/**
+ * TC39 Signals Polyfill
+ * This provides a basic implementation of the TC39 Signals proposal
+ * https://github.com/tc39/proposal-signals
+ */
+if (typeof Signal === 'undefined') {
+  window.Signal = class Signal {
+    static State = class State {
+      #value;
+      #watchers = new Set();
+
+      constructor(value) {
+        this.#value = value;
+      }
+
+      get() {
+        return this.#value;
+      }
+
+      set(newValue) {
+        if (this.#value !== newValue) {
+          this.#value = newValue;
+          this.#notify();
+        }
+      }
+
+      #notify() {
+        for (const watcher of this.#watchers) {
+          watcher.notify();
+        }
+      }
+
+      _addWatcher(watcher) {
+        this.#watchers.add(watcher);
+      }
+
+      _removeWatcher(watcher) {
+        this.#watchers.delete(watcher);
+      }
+    };
+
+    static Computed = class Computed {
+      #fn;
+      #value;
+      #dirty = true;
+
+      constructor(fn) {
+        this.#fn = fn;
+      }
+
+      get() {
+        if (this.#dirty) {
+          this.#value = this.#fn();
+          this.#dirty = false;
+        }
+        return this.#value;
+      }
+    };
+
+    static subtle = class {
+      static Watcher = class Watcher {
+        #callback;
+        #signals = new Set();
+        #pending = false;
+
+        constructor(callback) {
+          this.#callback = callback;
+        }
+
+        watch(signal) {
+          this.#signals.add(signal);
+          signal._addWatcher(this);
+        }
+
+        unwatch(signal) {
+          this.#signals.delete(signal);
+          signal._removeWatcher(this);
+        }
+
+        notify() {
+          if (!this.#pending) {
+            this.#pending = true;
+            queueMicrotask(() => {
+              this.#pending = false;
+              this.#callback();
+            });
+          }
+        }
+
+        getPending() {
+          return Array.from(this.#signals);
+        }
+      };
+    };
+  };
+}
+
 const empty = ['\n', '\n\n']
 const isEmptyNode = ({ nodeValue }) => empty.includes(nodeValue);
-const EVENT_TYPES = {
-  ASSIGN: 'assign',
-  CHANGE: 'change',
-  REMOVE: 'remove',
-  ADD: 'add',
-  MOVE: 'move',
-};
 
-const createObserver = (target, emitEvent, path = []) => {
-  const handlers = {
-    get(target, property, receiver) {
-      const value = Reflect.get(target, property, receiver);
+/**
+ * SignalStateWrapper wraps objects and arrays with Signal.State for reactivity
+ * Each property is converted to a Signal.State for fine-grained reactivity
+ */
+class SignalStateWrapper {
+  #signals = new Map();
+  #path = [];
+  #watchers = new Set();
+
+  constructor(initialValue = {}, path = []) {
+    this.#path = path;
+    this.#initializeSignals(initialValue);
+  }
+
+  #initializeSignals(obj) {
+    if (typeof obj !== 'object' || obj === null) return;
+    
+    for (const [key, value] of Object.entries(obj)) {
       if (typeof value === 'object' && value !== null) {
-        return createObserver(value, emitEvent, [...path, property]);
-      }
-      return value;
-    },
-    set(target, property, value, receiver) {
-      const oldValue = Reflect.get(target, property, receiver);
-      const result = Reflect.set(target, property, value, receiver);
-      const eventPath = [...path, property];
-      if (oldValue !== undefined) {
-        emitEvent(EVENT_TYPES.CHANGE, eventPath, oldValue, value);
+        if (Array.isArray(value)) {
+          this.#signals.set(key, new Signal.State(value));
+        } else {
+          this.#signals.set(key, new Signal.State(value));
+        }
       } else {
-        emitEvent(EVENT_TYPES.ASSIGN, eventPath, undefined, value);
+        this.#signals.set(key, new Signal.State(value));
       }
-      return result;
-    },
-    deleteProperty(target, property) {
-      const oldValue = Reflect.get(target, property);
-      const result = Reflect.deleteProperty(target, property);
-      emitEvent(EVENT_TYPES.REMOVE, [...path, property], oldValue);
-      return result;
-    },
-  };
+    }
+  }
 
-  if (Array.isArray(target)) {
-    Object.assign(handlers, {
-      push: (...items) => {
-        const result = Array.prototype.push.apply(target, items);
-        emitEvent(EVENT_TYPES.ADD, [...path, target.length - items.length], undefined, items);
-        return result;
-      },
-      pop: () => {
-        const oldValue = target.pop();
-        emitEvent(EVENT_TYPES.REMOVE, [...path, target.length], oldValue);
-        return oldValue;
-      },
-      shift: () => {
-        const oldValue = target.shift();
-        emitEvent(EVENT_TYPES.REMOVE, [...path, 0], oldValue);
-        return oldValue;
-      },
-      unshift: (...items) => {
-        const result = target.unshift(...items);
-        emitEvent(EVENT_TYPES.ADD, [...path, 0], undefined, items);
-        return result;
-      },
-      splice: (start, deleteCount, ...items) => {
-        const deletedItems = target.splice(start, deleteCount, ...items);
-        if (deletedItems.length > 0) {
-          emitEvent(EVENT_TYPES.REMOVE, [...path, start], deletedItems);
+  getSignal(key) {
+    if (!this.#signals.has(key)) {
+      this.#signals.set(key, new Signal.State(undefined));
+    }
+    return this.#signals.get(key);
+  }
+
+  get(key) {
+    return this.getSignal(key).get();
+  }
+
+  set(key, value) {
+    this.getSignal(key).set(value);
+  }
+
+  has(key) {
+    return this.#signals.has(key);
+  }
+
+  delete(key) {
+    const signal = this.getSignal(key);
+    signal.set(undefined);
+    return this.#signals.delete(key);
+  }
+
+  keys() {
+    return Array.from(this.#signals.keys());
+  }
+
+  addWatcher(watcher) {
+    this.#watchers.add(watcher);
+  }
+
+  createProxy() {
+    return new Proxy(this, {
+      get(target, property) {
+        if (typeof property === 'string' && !property.startsWith('_') && property !== 'constructor') {
+          const value = target.get(property);
+          // If value is object/array, wrap it in a proxy too
+          if (typeof value === 'object' && value !== null) {
+            return target.#createNestedProxy(property, value);
+          }
+          return value;
         }
-        if (items.length > 0) {
-          emitEvent(EVENT_TYPES.ADD, [...path, start], undefined, items);
+        return Reflect.get(target, property);
+      },
+      set(target, property, value) {
+        if (typeof property === 'string' && !property.startsWith('_')) {
+          target.set(property, value);
+          return true;
         }
-        return deletedItems;
+        return Reflect.set(target, property, value);
       },
-      sort: (compareFn) => {
-        const oldArr = [...target];
-        const result = Array.prototype.sort.apply(target, [compareFn]);
-        emitEvent(EVENT_TYPES.MOVE, path, oldArr, target);
-        return result;
+      deleteProperty(target, property) {
+        return target.delete(property);
       },
+      has(target, property) {
+        return target.has(property);
+      },
+      ownKeys(target) {
+        return target.keys();
+      },
+      getOwnPropertyDescriptor(target, property) {
+        if (target.has(property)) {
+          return {
+            enumerable: true,
+            configurable: true,
+          };
+        }
+      }
     });
   }
 
-  return new Proxy(target, handlers);
-};
+  #createNestedProxy(key, obj) {
+    const handler = {
+      get: (target, property) => {
+        if (typeof property === 'symbol' || property === 'length') {
+          return Reflect.get(target, property);
+        }
+        const value = Array.isArray(target) ? target[property] : target[property];
+        if (typeof value === 'object' && value !== null) {
+          return new Proxy(value, handler);
+        }
+        return value;
+      },
+      set: (target, property, value) => {
+        const result = Reflect.set(target, property, value);
+        // Trigger signal update for the parent
+        const signal = this.getSignal(key);
+        signal.set(target);
+        return result;
+      }
+    };
+    return new Proxy(obj, handler);
+  }
+}
 
 const defineElement = (tag) => {
   if (tag in WebComponent.tags) return true;
@@ -132,50 +277,75 @@ class Template {
 }
 
 class StateManager {
-  consumers = new Map();
-
-  #events = [];
-
-  #state = {};
+  #stateWrapper = null;
+  #watchers = new Map();
+  #effects = new Map();
 
   /** @param {HTMLElement} element   */
   constructor(element) {
-    if (element.state) this.#state = element.state;
-    element.state = createObserver(this.#state, this.#emitEvent);
+    const initialState = element.state || {};
+    this.#stateWrapper = new SignalStateWrapper(initialState);
+    element.state = this.#stateWrapper.createProxy();
     this.element = element;
   }
 
-  #processEvents = () => {
-    console.debug('events', this.#events.length);
-    while (this.#events.length) {
-      const { event, path, oldValue, newValue } = this.#events.shift();
-      const consumers = [];
-      for (const [subject, subs] of this.consumers) {
-        if (subject === path.join()) {
-          consumers.push(...subs);
-        }
-      }
-      for (const consumer of consumers) {
-        consumer(event, path, oldValue, newValue);
-      }
-    }
-  }
-
-  #emitEvent = (event, path, oldValue, newValue) => {
-    this.#events.push({ event, path, oldValue, newValue });
-    const frame = requestAnimationFrame(this.#processEvents);
-    console.debug({ frame, events: this.#events });
-  }
-
+  /**
+   * Subscribe to state changes using Signal.subtle.Watcher
+   * @param {string[]} path - Path to the state property
+   * @param {string[]} vars - Template variables to watch
+   * @param {Function} consumer - Callback function
+   */
   subscribe(path, vars, consumer) {
     for (const key of vars.map(Template.keyFrom)) {
-      const subject = [...path, key].toString();
-      if (this.consumers.has(subject)) {
-        this.consumers.get(subject).push(consumer);
-      } else {
-        this.consumers.set(subject, [consumer]);
+      const signal = this.#getSignalByPath([...path, key]);
+      if (!signal) continue;
+
+      // Create a watcher for this signal
+      const watcherKey = [...path, key].toString();
+      
+      if (!this.#effects.has(watcherKey)) {
+        this.#effects.set(watcherKey, new Set());
+      }
+      this.#effects.get(watcherKey).add(consumer);
+
+      if (!this.#watchers.has(watcherKey)) {
+        // Create computed effect that runs consumer when signal changes
+        const watcher = new Signal.subtle.Watcher(() => {
+          const effects = this.#effects.get(watcherKey);
+          if (effects) {
+            for (const effect of effects) {
+              effect();
+            }
+          }
+        });
+        
+        watcher.watch(signal);
+        this.#watchers.set(watcherKey, watcher);
       }
     }
+  }
+
+  /**
+   * Get Signal by path
+   * @param {string[]} path 
+   * @returns {Signal.State | null}
+   */
+  #getSignalByPath(path) {
+    if (path.length === 0) return null;
+    
+    let current = this.#stateWrapper;
+    for (let i = 0; i < path.length - 1; i++) {
+      const value = current.get(path[i]);
+      if (typeof value === 'object' && value !== null) {
+        // For nested objects, we need to access through the wrapper
+        current = value;
+      } else {
+        return null;
+      }
+    }
+    
+    const lastKey = path[path.length - 1];
+    return current.getSignal ? current.getSignal(lastKey) : null;
   }
 
   bind = (node) => this.#traverseBottomUp(node)
@@ -215,7 +385,16 @@ class StateManager {
 
   /** @param {string[]} path  */
   #getByPath(path) {
-    return path.reduce((obj, key) => obj[key], this.#state);
+    if (path.length === 0) return this.element.state;
+    let current = this.element.state;
+    for (const key of path) {
+      if (current && typeof current === 'object') {
+        current = current[key];
+      } else {
+        return undefined;
+      }
+    }
+    return current;
   }
 
   /** 

@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Signal-based Web Component Tests</title>
+  <script type="module" src="web-component.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    .test-section {
+      border: 2px solid #333;
+      margin: 20px 0;
+      padding: 20px;
+      border-radius: 8px;
+    }
+    .test-section h2 {
+      margin-top: 0;
+      color: #0066cc;
+    }
+    .pass { color: green; font-weight: bold; }
+    .fail { color: red; font-weight: bold; }
+    .test-result {
+      margin: 10px 0;
+      padding: 10px;
+      background: #f5f5f5;
+      border-radius: 4px;
+    }
+    button {
+      padding: 8px 16px;
+      margin: 5px;
+      cursor: pointer;
+      border: 1px solid #333;
+      border-radius: 4px;
+      background: #fff;
+    }
+    button:hover {
+      background: #e0e0e0;
+    }
+  </style>
+</head>
+<body>
+  <h1>TC39 Signals Web Component Test Suite</h1>
+  
+  <div class="test-section">
+    <h2>Test 1: Basic Signal Reactivity</h2>
+    <div id="test1-output"></div>
+    <button onclick="runTest1()">Run Test 1</button>
+  </div>
+
+  <div class="test-section">
+    <h2>Test 2: Nested Object Reactivity</h2>
+    <div id="test2-output"></div>
+    <button onclick="runTest2()">Run Test 2</button>
+  </div>
+
+  <div class="test-section">
+    <h2>Test 3: Array Reactivity</h2>
+    <div id="test3-output"></div>
+    <button onclick="runTest3()">Run Test 3</button>
+  </div>
+
+  <div class="test-section">
+    <h2>Test 4: Template Binding</h2>
+    <div id="test4-output"></div>
+    <button onclick="runTest4()">Run Test 4</button>
+  </div>
+
+  <div class="test-section">
+    <h2>Test 5: Signal Watcher</h2>
+    <div id="test5-output"></div>
+    <button onclick="runTest5()">Run Test 5</button>
+  </div>
+
+  <div class="test-section">
+    <h2>Test 6: Component Integration</h2>
+    <test-component-demo></test-component-demo>
+    <div id="test6-output"></div>
+    <button onclick="runTest6()">Run Test 6</button>
+  </div>
+
+  <script>
+    // Test utilities
+    function assert(condition, message) {
+      if (condition) {
+        return `<span class="pass">✓ PASS:</span> ${message}`;
+      } else {
+        return `<span class="fail">✗ FAIL:</span> ${message}`;
+      }
+    }
+
+    function logResult(testId, results) {
+      const output = document.getElementById(testId);
+      output.innerHTML = `<div class="test-result">${results.join('<br>')}</div>`;
+    }
+
+    // Test 1: Basic Signal Reactivity
+    function runTest1() {
+      const results = [];
+      try {
+        // Test Signal.State creation
+        const signal = new Signal.State(10);
+        results.push(assert(signal.get() === 10, 'Signal initialized with value 10'));
+        
+        // Test Signal.State update
+        signal.set(20);
+        results.push(assert(signal.get() === 20, 'Signal value updated to 20'));
+        
+        // Test Signal.State no-change optimization
+        let notified = false;
+        const watcher = new Signal.subtle.Watcher(() => { notified = true; });
+        watcher.watch(signal);
+        signal.set(20); // Same value
+        
+        setTimeout(() => {
+          results.push(assert(!notified, 'Watcher not triggered for same value'));
+          logResult('test1-output', results);
+        }, 10);
+        
+      } catch (e) {
+        results.push(assert(false, `Exception: ${e.message}`));
+        logResult('test1-output', results);
+      }
+    }
+
+    // Test 2: Nested Object Reactivity
+    function runTest2() {
+      const results = [];
+      try {
+        const wrapper = new SignalStateWrapper({
+          user: {
+            name: 'John',
+            age: 30
+          }
+        });
+        
+        results.push(assert(wrapper.get('user').name === 'John', 'Nested object property accessed'));
+        
+        wrapper.set('user', { name: 'Jane', age: 25 });
+        results.push(assert(wrapper.get('user').name === 'Jane', 'Nested object updated'));
+        
+        logResult('test2-output', results);
+      } catch (e) {
+        results.push(assert(false, `Exception: ${e.message}`));
+        logResult('test2-output', results);
+      }
+    }
+
+    // Test 3: Array Reactivity
+    function runTest3() {
+      const results = [];
+      try {
+        const wrapper = new SignalStateWrapper({
+          items: [1, 2, 3]
+        });
+        
+        const items = wrapper.get('items');
+        results.push(assert(Array.isArray(items), 'Array stored in signal'));
+        results.push(assert(items.length === 3, 'Array has correct length'));
+        
+        // Test array modification
+        items.push(4);
+        wrapper.set('items', items);
+        const updated = wrapper.get('items');
+        results.push(assert(updated.length === 4, 'Array push detected'));
+        
+        logResult('test3-output', results);
+      } catch (e) {
+        results.push(assert(false, `Exception: ${e.message}`));
+        logResult('test3-output', results);
+      }
+    }
+
+    // Test 4: Template Binding
+    function runTest4() {
+      const results = [];
+      try {
+        const text = 'Hello {name}!';
+        const match = Template.match(text);
+        results.push(assert(match !== null, 'Template pattern matched'));
+        results.push(assert(match[0] === '{name}', 'Template variable extracted'));
+        
+        const key = Template.keyFrom('{name}');
+        results.push(assert(key === 'name', 'Template key extracted correctly'));
+        
+        const filled = Template.fill(text, { name: 'World' });
+        results.push(assert(filled === 'Hello World!', 'Template filled correctly'));
+        
+        logResult('test4-output', results);
+      } catch (e) {
+        results.push(assert(false, `Exception: ${e.message}`));
+        logResult('test4-output', results);
+      }
+    }
+
+    // Test 5: Signal Watcher
+    async function runTest5() {
+      const results = [];
+      try {
+        let watchCount = 0;
+        const signal = new Signal.State(0);
+        const watcher = new Signal.subtle.Watcher(() => {
+          watchCount++;
+        });
+        
+        watcher.watch(signal);
+        
+        signal.set(1);
+        signal.set(2);
+        signal.set(3);
+        
+        // Wait for microtasks to complete
+        await new Promise(resolve => setTimeout(resolve, 10));
+        
+        results.push(assert(watchCount >= 1, `Watcher triggered (count: ${watchCount})`));
+        results.push(assert(signal.get() === 3, 'Signal has final value'));
+        
+        logResult('test5-output', results);
+      } catch (e) {
+        results.push(assert(false, `Exception: ${e.message}`));
+        logResult('test5-output', results);
+      }
+    }
+
+    // Test 6: Component Integration
+    async function runTest6() {
+      const results = [];
+      try {
+        results.push(assert(typeof WebComponent !== 'undefined', 'WebComponent class defined'));
+        results.push(assert(typeof Signal !== 'undefined', 'Signal API available'));
+        results.push(assert(typeof Signal.State !== 'undefined', 'Signal.State available'));
+        results.push(assert(typeof Signal.subtle.Watcher !== 'undefined', 'Signal.subtle.Watcher available'));
+        
+        logResult('test6-output', results);
+      } catch (e) {
+        results.push(assert(false, `Exception: ${e.message}`));
+        logResult('test6-output', results);
+      }
+    }
+
+    // Auto-run all tests on load
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        console.log('Running automated tests...');
+        runTest1();
+        setTimeout(() => runTest2(), 100);
+        setTimeout(() => runTest3(), 200);
+        setTimeout(() => runTest4(), 300);
+        setTimeout(() => runTest5(), 400);
+        setTimeout(() => runTest6(), 500);
+      }, 500);
+    });
+  </script>
+</body>
+</html>

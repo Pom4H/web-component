@@ -1,0 +1,44 @@
+<script>
+  this.counter = 0;
+  this.message = 'Click the button!';
+  
+  this.increment = () => {
+    this.counter++;
+    this.message = `Button clicked ${this.counter} time${this.counter !== 1 ? 's' : ''}`;
+  };
+</script>
+
+<div>
+  <h3>Signal-Based Component Demo</h3>
+  <p>{message}</p>
+  <button onclick="$.increment()">Increment Counter</button>
+  <p>Counter: <strong>{counter}</strong></p>
+</div>
+
+<style>
+  div {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 20px;
+    border-radius: 8px;
+    text-align: center;
+  }
+  
+  button {
+    background: white;
+    color: #667eea;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 4px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: transform 0.2s;
+  }
+  
+  button:hover {
+    transform: scale(1.05);
+  }
+  
+  button:active {
+    transform: scale(0.95);
+  }

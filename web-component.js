@@ -8,6 +8,106 @@ const EVENT_TYPES = {
   MOVE: 'move',
 };
 
+const Signal = (() => {
+  if (typeof globalThis.Signal === 'object' || typeof globalThis.Signal === 'function') {
+    return globalThis.Signal;
+  }
+
+  let currentObserver = null;
+
+  class StateSignal {
+    #value;
+    observers = new Set();
+    constructor(value) {
+      this.#value = value;
+    }
+
+    get value() {
+      if (currentObserver) {
+        currentObserver.subscribe(this);
+      }
+      return this.#value;
+    }
+
+    set value(next) {
+      if (Object.is(this.#value, next)) return;
+      this.#value = next;
+      this.#notify();
+    }
+
+    peek() {
+      return this.#value;
+    }
+
+    #notify() {
+      for (const observer of [...this.observers]) {
+        observer.schedule();
+      }
+    }
+  }
+
+  const createObserver = (callback, options = {}) => {
+    const controller = new AbortController();
+    if (options.signal instanceof AbortSignal) {
+      if (options.signal.aborted) {
+        controller.abort();
+      } else {
+        options.signal.addEventListener('abort', () => controller.abort(), { once: true });
+      }
+    }
+
+    const observer = {
+      signals: new Set(),
+      pending: false,
+      subscribe(signal) {
+        if (controller.signal.aborted) return;
+        signal.observers.add(observer);
+        observer.signals.add(signal);
+      },
+      cleanup() {
+        for (const signal of observer.signals) {
+          signal.observers.delete(observer);
+        }
+        observer.signals.clear();
+      },
+      run() {
+        if (controller.signal.aborted) return;
+        observer.cleanup();
+        currentObserver = observer;
+        try {
+          callback();
+        } finally {
+          currentObserver = null;
+        }
+      },
+      schedule() {
+        if (controller.signal.aborted || observer.pending) return;
+        observer.pending = true;
+        queueMicrotask(() => {
+          observer.pending = false;
+          observer.run();
+        });
+      }
+    };
+
+    controller.signal.addEventListener('abort', () => observer.cleanup(), { once: true });
+    observer.run();
+    return controller;
+  };
+
+  const effect = (callback, options = {}) => createObserver(callback, options);
+
+  const polyfill = {
+    state(initialValue) {
+      return new StateSignal(initialValue);
+    },
+    effect,
+  };
+
+  globalThis.Signal = polyfill;
+  return polyfill;
+})();
+
 const createObserver = (target, emitEvent, path = []) => {
   const handlers = {
     get(target, property, receiver) {
@@ -119,7 +219,13 @@ class Template {
   static curlyBraces = /{([^}]+)}/g;
   static match = (text = '') => text.match(Template.curlyBraces);
   static keyFrom = (curlyBraces = '') => curlyBraces.startsWith('{') ? curlyBraces.slice(1, -1) : curlyBraces;
-  static fill = (text, data) => text.replace(Template.curlyBraces, (match, key) => data[key] || '');
+  static fill = (text, data) => text.replace(
+    Template.curlyBraces,
+    (_match, key) => {
+      const value = data?.[key];
+      return value == null ? '' : value;
+    }
+  );
   static applyTemplate = (node, data) => {
     if (node.nodeType === Node.TEXT_NODE) {
       node.textContent = Template.fill(node.textContent, data);
@@ -132,53 +238,75 @@ class Template {
 }
 
 class StateManager {
-  consumers = new Map();
-
-  #events = [];
-
   #state = {};
+  #signals = new Map();
+  #effects = new Set();
 
   /** @param {HTMLElement} element   */
   constructor(element) {
     if (element.state) this.#state = element.state;
-    element.state = createObserver(this.#state, this.#emitEvent);
     this.element = element;
+    element.state = createObserver(this.#state, this.#emitEvent);
   }
 
-  #processEvents = () => {
-    console.debug('events', this.#events.length);
-    while (this.#events.length) {
-      const { event, path, oldValue, newValue } = this.#events.shift();
-      const consumers = [];
-      for (const [subject, subs] of this.consumers) {
-        if (subject === path.join()) {
-          consumers.push(...subs);
-        }
-      }
-      for (const consumer of consumers) {
-        consumer(event, path, oldValue, newValue);
-      }
+  dispose() {
+    for (const controller of this.#effects) {
+      controller.abort();
     }
-  }
-
-  #emitEvent = (event, path, oldValue, newValue) => {
-    this.#events.push({ event, path, oldValue, newValue });
-    const frame = requestAnimationFrame(this.#processEvents);
-    console.debug({ frame, events: this.#events });
-  }
-
-  subscribe(path, vars, consumer) {
-    for (const key of vars.map(Template.keyFrom)) {
-      const subject = [...path, key].toString();
-      if (this.consumers.has(subject)) {
-        this.consumers.get(subject).push(consumer);
-      } else {
-        this.consumers.set(subject, [consumer]);
-      }
-    }
+    this.#effects.clear();
   }
 
   bind = (node) => this.#traverseBottomUp(node)
+
+  #emitEvent = (_event, path) => {
+    for (let i = path.length; i >= 0; i--) {
+      const subject = this.#subjectFrom(path.slice(0, i));
+      const signal = this.#signalFor(subject);
+      signal.value = signal.peek() + 1;
+    }
+  }
+
+  #signalFor(subject) {
+    if (!this.#signals.has(subject)) {
+      this.#signals.set(subject, Signal.state(0));
+    }
+    return this.#signals.get(subject);
+  }
+
+  #subjectFrom(path) {
+    if (!path.length) return '[root]';
+    return path.map(String).join();
+  }
+
+  #watchPath(path, consumer) {
+    const subject = this.#subjectFrom(path);
+    const signal = this.#signalFor(subject);
+    const controller = Signal.effect(() => {
+      signal.value;
+      consumer();
+    });
+    this.#effects.add(controller);
+    controller.signal.addEventListener('abort', () => this.#effects.delete(controller), { once: true });
+  }
+
+  subscribe(path, vars, consumer) {
+    const keys = vars.map(Template.keyFrom);
+    if (!keys.length) return;
+    const controller = Signal.effect(() => {
+      for (const key of keys) {
+        const subject = this.#subjectFrom([...path, key]);
+        const signal = this.#signalFor(subject);
+        signal.value;
+      }
+      consumer();
+    });
+    this.#effects.add(controller);
+    controller.signal.addEventListener('abort', () => this.#effects.delete(controller), { once: true });
+  }
+
+  #safeGet(path) {
+    return path.reduce((obj, key) => (obj == null ? undefined : obj[key]), this.#state);
+  }
 
   /** 
    * @param {Node} node 
@@ -213,11 +341,6 @@ class StateManager {
     node.replace = this.element.replace;
   }
 
-  /** @param {string[]} path  */
-  #getByPath(path) {
-    return path.reduce((obj, key) => obj[key], this.#state);
-  }
-
   /** 
    * @param {Element} node 
    * @returns {Node}
@@ -225,9 +348,9 @@ class StateManager {
   #bindList = (node, path = []) => {
     const key = Template.keyFrom(node.getAttribute('for'));
     const fragment = document.createDocumentFragment();
-    let data = this.#getByPath([...path, key]);
+    let data = this.#safeGet([...path, key]);
     if (!data) {
-      data = this.#getByPath([key]);
+      data = this.#safeGet([key]);
       path = [key];
     } else {
       path = [...path, key];
@@ -249,15 +372,25 @@ class StateManager {
 
   /** @param {HTMLElement} node */
   #bindTextContent = (node, path) => {
-    const state = this.#getByPath(path);
-    if (node.textContent === '{}') {
-      node.textContent = state;
+    const content = node.textContent;
+    if (!content) return;
+    if (content.trim() === '{}') {
+      const initial = this.#safeGet(path);
+      node.textContent = initial == null ? '' : initial;
+      this.#watchPath(path, () => {
+        const value = this.#safeGet(path);
+        node.textContent = value == null ? '' : value;
+      });
       return;
     }
-    const vars = Template.match(node.textContent);
+    const vars = Template.match(content);
     if (vars) {
-      const template = node.textContent;
-      const consumer = () => node.textContent = Template.fill(template, state);
+      const template = content;
+      const consumer = () => {
+        const state = this.#safeGet(path);
+        const data = state && typeof state === 'object' ? state : {};
+        node.textContent = Template.fill(template, data);
+      };
       this.subscribe(path, vars, consumer);
       consumer();
     }
@@ -265,22 +398,22 @@ class StateManager {
 
   /** @param {HTMLElement} node */
   #bindAttributes = (node, path) => {
-    const state = this.#getByPath(path);
     for (const name of node.getAttributeNames()) {
       const value = node.getAttribute(name);
       if (!value) continue;
       const vars = Template.match(value);
       if (!vars) continue;
       const [template] = vars;
-      if (template) {
-        const consumer = () => {
-          const attribute = Template.fill(template, state);
-          if (attribute) node.setAttribute(name, attribute);
-          else node.removeAttribute(name);
-        }
-        this.subscribe(path, [template], consumer);
-        consumer();
-      }
+      if (!template) continue;
+      const consumer = () => {
+        const state = this.#safeGet(path);
+        const data = state && typeof state === 'object' ? state : {};
+        const attribute = Template.fill(template, data);
+        if (attribute) node.setAttribute(name, attribute);
+        else node.removeAttribute(name);
+      };
+      this.subscribe(path, [template], consumer);
+      consumer();
     }
   }
 }
@@ -327,6 +460,7 @@ class WebComponent extends HTMLElement {
 
   disconnectedCallback() {
     this.#abort.abort();
+    this.stateManager.dispose();
   }
 
   open = (tag) => {

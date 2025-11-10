@@ -1,0 +1,26 @@
+<script>
+  this.count = 1;
+  this.items = ['alpha'];
+  this.increment = () => {
+    this.count += 1;
+  };
+  this.updateItem = (value) => {
+    this.items[0] = value;
+  };
+</script>
+
+<section>
+  <p id="count">{count}</p>
+  <span id="data" data-count="{count}"></span>
+  <ul>
+    <li for={items} class="item">{}</li>
+  </ul>
+</section>
+
+<style>
+  section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+</style>

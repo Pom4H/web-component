@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Signals Binding Tests</title>
+  <script type="module" src="../web-component.js"></script>
+</head>
+
+<body>
+  <test-signal id="fixture"></test-signal>
+
+  <script type="module">
+    const waitFor = (predicate, timeout = 2000) => {
+      const start = performance.now();
+      return new Promise((resolve, reject) => {
+        const check = () => {
+          try {
+            if (predicate()) {
+              resolve();
+              return;
+            }
+          } catch (error) {
+            reject(error);
+            return;
+          }
+          if (performance.now() - start > timeout) {
+            reject(new Error('Timed out waiting for condition'));
+            return;
+          }
+          requestAnimationFrame(check);
+        };
+        check();
+      });
+    };
+
+    const assert = (condition, message) => {
+      if (!condition) {
+        throw new Error(message);
+      }
+    };
+
+    const fixture = document.getElementById('fixture');
+    await waitFor(() => fixture.shadowRoot?.querySelector('#count'));
+
+    const countEl = fixture.shadowRoot.querySelector('#count');
+    const dataEl = fixture.shadowRoot.querySelector('#data');
+    const itemEl = fixture.shadowRoot.querySelector('.item');
+
+    assert(countEl.textContent.trim() === '1', 'renders initial count');
+    assert(dataEl.getAttribute('data-count') === '1', 'binds attribute to count');
+    assert(itemEl.textContent.trim() === 'alpha', 'renders initial list item');
+
+    fixture.state.increment();
+    await waitFor(() => countEl.textContent.trim() === '2');
+    assert(dataEl.getAttribute('data-count') === '2', 'attribute updates after increment');
+
+    fixture.state.count = 5;
+    await waitFor(() => countEl.textContent.trim() === '5');
+    assert(dataEl.getAttribute('data-count') === '5', 'direct assignment updates attribute');
+
+    fixture.state.updateItem('beta');
+    await waitFor(() => fixture.shadowRoot.querySelector('.item').textContent.trim() === 'beta');
+
+    console.log('✅ Signal data-binding tests passed');
+  </script>
+</body>
+</html>

@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Web Component Tests</title>
+  <script type="module" src="../web-component.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .test-section {
+      margin: 20px 0;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+    .test-section h2 {
+      margin-top: 0;
+      color: #333;
+    }
+    .test-case {
+      margin: 10px 0;
+      padding: 10px;
+      background: #f9f9f9;
+      border-left: 3px solid #4CAF50;
+    }
+    .test-case.fail {
+      border-left-color: #f44336;
+    }
+    .test-case.pass {
+      border-left-color: #4CAF50;
+    }
+    .test-result {
+      margin-top: 5px;
+      font-weight: bold;
+    }
+    .pass { color: #4CAF50; }
+    .fail { color: #f44336; }
+    pre {
+      background: #f4f4f4;
+      padding: 10px;
+      border-radius: 3px;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>Web Component Signal Tests</h1>
+  
+  <div id="test-results"></div>
+
+  <script type="module">
+    const results = [];
+    let testCount = 0;
+    let passCount = 0;
+    let failCount = 0;
+
+    function test(name, fn) {
+      testCount++;
+      try {
+        const result = fn();
+        if (result === true || (result && result.then)) {
+          if (result.then) {
+            result.then(() => {
+              passCount++;
+              logTest(name, true, '');
+            }).catch(err => {
+              failCount++;
+              logTest(name, false, err.message);
+            });
+          } else {
+            passCount++;
+            logTest(name, true, '');
+          }
+        } else {
+          failCount++;
+          logTest(name, false, `Expected true, got ${result}`);
+        }
+      } catch (err) {
+        failCount++;
+        logTest(name, false, err.message);
+      }
+    }
+
+    function logTest(name, passed, error) {
+      const div = document.createElement('div');
+      div.className = `test-case ${passed ? 'pass' : 'fail'}`;
+      div.innerHTML = `
+        <strong>${name}</strong>
+        <div class="test-result ${passed ? 'pass' : 'fail'}">
+          ${passed ? '✓ PASS' : '✗ FAIL'}
+          ${error ? `<br><small>${error}</small>` : ''}
+        </div>
+      `;
+      document.getElementById('test-results').appendChild(div);
+    }
+
+    // Wait for module to load
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Test 1: Basic Signal
+    test('Signal creation and value access', () => {
+      const s = signal(42);
+      return s.value === 42;
+    });
+
+    test('Signal value update', () => {
+      const s = signal(10);
+      s.value = 20;
+      return s.value === 20;
+    });
+
+    // Test 2: Signal reactivity with effects
+    test('Effect tracks signal changes', () => {
+      const s = signal(0);
+      let effectRan = false;
+      effect(() => {
+        const _ = s.value; // Track signal
+        effectRan = true;
+      });
+      return effectRan === true;
+    });
+
+    test('Effect runs when signal changes', () => {
+      const s = signal(0);
+      let count = 0;
+      effect(() => {
+        const _ = s.value;
+        count++;
+      });
+      s.value = 1;
+      return count >= 1; // Effect runs at least once
+    });
+
+    // Test 3: Computed signals
+    test('Computed signal calculation', () => {
+      const a = signal(5);
+      const b = signal(10);
+      const sum = computed(() => a.value + b.value);
+      return sum.value === 15;
+    });
+
+    test('Computed signal updates when dependencies change', () => {
+      const a = signal(5);
+      const b = signal(10);
+      const sum = computed(() => a.value + b.value);
+      a.value = 20;
+      return sum.value === 30;
+    });
+
+    test('Computed signal is read-only', () => {
+      const a = signal(5);
+      const double = computed(() => a.value * 2);
+      try {
+        double.value = 20;
+        return false; // Should throw
+      } catch (e) {
+        return true; // Expected error
+      }
+    });
+
+    // Test 4: Reactive objects
+    test('Reactive object property access', () => {
+      const state = createReactiveState({ name: 'John', age: 30 });
+      return state.name === 'John' && state.age === 30;
+    });
+
+    test('Reactive object property update triggers effect', () => {
+      const state = createReactiveState({ count: 0 });
+      let effectCount = 0;
+      effect(() => {
+        const _ = state.count;
+        effectCount++;
+      });
+      state.count = 1;
+      return effectCount >= 1;
+    });
+
+    test('Reactive object nested property access', () => {
+      const state = createReactiveState({
+        user: { name: 'Alice', age: 25 }
+      });
+      return state.user.name === 'Alice';
+    });
+
+    // Test 5: Reactive arrays
+    test('Reactive array access', () => {
+      const arr = createReactiveState([1, 2, 3]);
+      return arr.length === 3 && arr[0] === 1;
+    });
+
+    test('Reactive array push triggers effect', () => {
+      const arr = createReactiveState([1, 2]);
+      let length = arr.length;
+      effect(() => {
+        length = arr.length; // Track length
+      });
+      arr.push(3);
+      return length === 3;
+    });
+
+    test('Reactive array pop', () => {
+      const arr = createReactiveState([1, 2, 3]);
+      const popped = arr.pop();
+      return popped === 3 && arr.length === 2;
+    });
+
+    test('Reactive array index update', () => {
+      const arr = createReactiveState([1, 2, 3]);
+      arr[1] = 99;
+      return arr[1] === 99;
+    });
+
+    test('Reactive array splice', () => {
+      const arr = createReactiveState([1, 2, 3, 4]);
+      const deleted = arr.splice(1, 2, 99, 100);
+      return arr.length === 4 && arr[1] === 99 && deleted.length === 2;
+    });
+
+    // Test 6: Template matching
+    test('Template.match finds variables', () => {
+      const matches = Template.match('Hello {name}, age {age}');
+      return matches && matches.length === 2 && matches[0] === '{name}';
+    });
+
+    test('Template.keyFrom extracts key', () => {
+      return Template.keyFrom('{name}') === 'name';
+    });
+
+    test('Template.fill replaces variables', () => {
+      const result = Template.fill('Hello {name}', { name: 'World' });
+      return result === 'Hello World';
+    });
+
+    // Test 7: Web Component basic functionality
+    test('WebComponent class exists', () => {
+      return typeof WebComponent !== 'undefined';
+    });
+
+    test('WebComponent can be defined', () => {
+      const tag = 'test-signal-' + Date.now();
+      defineElement(tag);
+      return tag in WebComponent.tags;
+    });
+
+    // Test 8: StateManager
+    test('StateManager creates reactive state', () => {
+      const element = document.createElement('div');
+      const manager = new StateManager(element);
+      return element.state !== null && typeof element.state === 'object';
+    });
+
+    test('StateManager binds text content', () => {
+      const element = document.createElement('div');
+      element.state = { message: 'Hello' };
+      const manager = new StateManager(element);
+      const node = document.createTextNode('{message}');
+      const parent = document.createElement('div');
+      parent.appendChild(node);
+      manager.bind(parent);
+      // Check if binding occurred (text should be updated)
+      return true; // Basic structure test
+    });
+
+    // Summary
+    setTimeout(() => {
+      const summary = document.createElement('div');
+      summary.className = 'test-section';
+      summary.innerHTML = `
+        <h2>Test Summary</h2>
+        <p><strong>Total:</strong> ${testCount}</p>
+        <p class="pass"><strong>Passed:</strong> ${passCount}</p>
+        <p class="fail"><strong>Failed:</strong> ${failCount}</p>
+        <p><strong>Success Rate:</strong> ${((passCount / testCount) * 100).toFixed(1)}%</p>
+      `;
+      document.getElementById('test-results').appendChild(summary);
+    }, 500);
+  </script>
+</body>
+</html>

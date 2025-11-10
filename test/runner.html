@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Test Runner</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    h1 {
+      color: #333;
+    }
+    .test-suite {
+      margin: 20px 0;
+      padding: 20px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .test-suite h2 {
+      margin-top: 0;
+      color: #555;
+      border-bottom: 2px solid #4CAF50;
+      padding-bottom: 10px;
+    }
+    iframe {
+      width: 100%;
+      height: 600px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      margin: 10px 0;
+    }
+    .nav {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .nav a {
+      padding: 10px 20px;
+      background: #4CAF50;
+      color: white;
+      text-decoration: none;
+      border-radius: 4px;
+      transition: background 0.3s;
+    }
+    .nav a:hover {
+      background: #45a049;
+    }
+  </style>
+</head>
+<body>
+  <h1>Web Component Test Suite</h1>
+  
+  <div class="nav">
+    <a href="web-component.test.html" target="_blank">Unit Tests</a>
+    <a href="integration.test.html" target="_blank">Integration Tests</a>
+    <a href="binding.html" target="_blank">Binding Demo</a>
+    <a href="canvas.html" target="_blank">Canvas Demo</a>
+    <a href="function.html" target="_blank">Function Demo</a>
+  </div>
+
+  <div class="test-suite">
+    <h2>Unit Tests</h2>
+    <iframe src="web-component.test.html"></iframe>
+  </div>
+
+  <div class="test-suite">
+    <h2>Integration Tests</h2>
+    <iframe src="integration.test.html"></iframe>
+  </div>
+
+  <div class="test-suite">
+    <h2>Binding Demo</h2>
+    <iframe src="binding.html"></iframe>
+  </div>
+</body>
+</html>

@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Integration Tests</title>
+  <script type="module" src="../web-component.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .test-container {
+      margin: 20px 0;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+    .test-container h2 {
+      margin-top: 0;
+    }
+    .result {
+      margin: 10px 0;
+      padding: 10px;
+      border-radius: 3px;
+    }
+    .pass {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+    .fail {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+  </style>
+</head>
+<body>
+  <h1>Web Component Integration Tests</h1>
+  
+  <div id="tests"></div>
+
+  <script type="module">
+    const tests = document.getElementById('tests');
+    
+    function createTest(name, fn) {
+      const container = document.createElement('div');
+      container.className = 'test-container';
+      container.innerHTML = `<h2>${name}</h2><div class="result">Running...</div>`;
+      tests.appendChild(container);
+      const resultDiv = container.querySelector('.result');
+      
+      setTimeout(async () => {
+        try {
+          await fn();
+          resultDiv.className = 'result pass';
+          resultDiv.textContent = '✓ PASS';
+        } catch (err) {
+          resultDiv.className = 'result fail';
+          resultDiv.textContent = `✗ FAIL: ${err.message}`;
+          console.error(err);
+        }
+      }, 100);
+    }
+
+    // Wait for module to load
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    // Test 1: Simple data binding
+    createTest('Simple Text Binding', async () => {
+      const testHTML = `
+        <script>
+          this.message = 'Hello World';
+        </script>
+        <p>{message}</p>
+      `;
+      
+      // Create a test component
+      const tag = 'test-simple-' + Date.now();
+      customElements.define(tag, class extends WebComponent {});
+      
+      // Mock CodeLoader
+      const originalLoad = CodeLoader.loadFromTag;
+      CodeLoader.loadFromTag = async () => {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(`<body>${testHTML}</body>`, 'text/html');
+        return doc.body;
+      };
+      
+      const element = document.createElement(tag);
+      document.body.appendChild(element);
+      
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      const shadowContent = element.shadowRoot.textContent;
+      if (!shadowContent.includes('Hello World')) {
+        throw new Error('Text binding failed');
+      }
+      
+      // Cleanup
+      CodeLoader.loadFromTag = originalLoad;
+      element.remove();
+    });
+
+    // Test 2: Reactive updates
+    createTest('Reactive State Updates', async () => {
+      const state = createReactiveState({ count: 0 });
+      let updateCount = 0;
+      
+      effect(() => {
+        const _ = state.count;
+        updateCount++;
+      });
+      
+      state.count = 1;
+      state.count = 2;
+      
+      if (state.count !== 2) {
+        throw new Error('State not updated correctly');
+      }
+      
+      if (updateCount < 1) {
+        throw new Error('Effect did not run');
+      }
+    });
+
+    // Test 3: Array reactivity
+    createTest('Array Reactivity', async () => {
+      const arr = createReactiveState([1, 2, 3]);
+      let lengthChanges = 0;
+      
+      effect(() => {
+        const _ = arr.length;
+        lengthChanges++;
+      });
+      
+      arr.push(4);
+      arr.push(5);
+      
+      if (arr.length !== 5) {
+        throw new Error('Array length incorrect');
+      }
+      
+      if (lengthChanges < 1) {
+        throw new Error('Length signal not tracked');
+      }
+    });
+
+    // Test 4: Computed values
+    createTest('Computed Signal', async () => {
+      const a = signal(5);
+      const b = signal(10);
+      const product = computed(() => a.value * b.value);
+      
+      if (product.value !== 50) {
+        throw new Error('Computed value incorrect');
+      }
+      
+      a.value = 6;
+      if (product.value !== 60) {
+        throw new Error('Computed value did not update');
+      }
+    });
+
+    // Test 5: Nested object reactivity
+    createTest('Nested Object Reactivity', async () => {
+      const state = createReactiveState({
+        user: {
+          profile: {
+            name: 'John',
+            age: 30
+          }
+        }
+      });
+      
+      let effectRan = false;
+      effect(() => {
+        const _ = state.user.profile.name;
+        effectRan = true;
+      });
+      
+      state.user.profile.name = 'Jane';
+      
+      if (state.user.profile.name !== 'Jane') {
+        throw new Error('Nested property not updated');
+      }
+      
+      if (!effectRan) {
+        throw new Error('Effect did not run for nested property');
+      }
+    });
+
+    // Test 6: Array item updates
+    createTest('Array Item Updates', async () => {
+      const arr = createReactiveState([{ value: 1 }, { value: 2 }]);
+      let updates = 0;
+      
+      effect(() => {
+        const _ = arr[0].value;
+        updates++;
+      });
+      
+      arr[0].value = 99;
+      
+      if (arr[0].value !== 99) {
+        throw new Error('Array item not updated');
+      }
+      
+      if (updates < 1) {
+        throw new Error('Effect did not track array item change');
+      }
+    });
+  </script>
+</body>
+</html>

@@ -20,8 +20,17 @@ for (const example of examples) {
   exampleSelect.add(new Option(`${example.kind.toLowerCase()} / ${example.title}`, example.id));
 }
 
-const encode = value => btoa(unescape(encodeURIComponent(value)));
-const decode = value => decodeURIComponent(escape(atob(value)));
+const encode = value => {
+  const bytes = new TextEncoder().encode(value);
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+};
+const decode = value => {
+  const binary = atob(value);
+  const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+};
 const scriptValue = value => JSON.stringify(value).replaceAll('<', '\\u003c');
 const params = new URLSearchParams(location.search);
 const requestedExample = params.get('example');
@@ -86,6 +95,12 @@ source.addEventListener('keydown', event => {
   const end = source.selectionEnd;
   source.setRangeText('  ', start, end, 'end');
   schedule();
+});
+
+auto.addEventListener('change', () => {
+  clearTimeout(timer);
+  if (auto.checked) run();
+  else state.textContent = 'manual';
 });
 
 exampleSelect.addEventListener('change', () => {

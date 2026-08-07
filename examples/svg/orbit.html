@@ -1,0 +1,33 @@
+<script>
+  this.cx = 210
+  this.cy = 110
+  this.t = 0
+  let frame
+  const draw = () => {
+    this.t += .018
+    this.cx = 210 + Math.cos(this.t * 1.7) * 118
+    this.cy = 110 + Math.sin(this.t * 2.2) * 72
+    frame = requestAnimationFrame(draw)
+  }
+  frame = requestAnimationFrame(draw)
+  onCleanup(() => cancelAnimationFrame(frame))
+</script>
+
+<svg viewBox="0 0 420 220" role="img" aria-label="Reactive orbit">
+  <defs>
+    <filter id="glow"><feGaussianBlur stdDeviation="8" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <path d="M55 110 C105 22 315 22 365 110 C315 198 105 198 55 110Z" />
+  <path class="cross" d="M210 20V200M55 110H365" />
+  <circle cx={cx} cy={cy} r="18" filter="url(#glow)" />
+  <circle class="core" cx={cx} cy={cy} r="4" />
+</svg>
+
+<style>
+  :host { display:grid; place-items:center; height:100%; background:#e9ff67; }
+  svg { width:min(92%, 720px); overflow:visible; }
+  path { fill:none; stroke:#121212; stroke-width:1.2; }
+  .cross { stroke-dasharray:2 7; opacity:.45; }
+  circle { fill:#6b45ff; }
+  .core { fill:#fff; }
+</style>

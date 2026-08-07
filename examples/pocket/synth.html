@@ -1,0 +1,106 @@
+<script>
+  this.wave = input('wave', 'sawtooth')
+  this.volume = input('volume', .18)
+  this.notes = [
+    { id:'c4', label:'C', key:'A', freq:261.63, active:false },
+    { id:'d4', label:'D', key:'S', freq:293.66, active:false },
+    { id:'e4', label:'E', key:'D', freq:329.63, active:false },
+    { id:'f4', label:'F', key:'F', freq:349.23, active:false },
+    { id:'g4', label:'G', key:'G', freq:392.00, active:false },
+    { id:'a4', label:'A', key:'H', freq:440.00, active:false },
+    { id:'b4', label:'B', key:'J', freq:493.88, active:false },
+    { id:'c5', label:'C', key:'K', freq:523.25, active:false }
+  ]
+  this.playing = computed(() => this.notes.filter(note => note.active).map(note => note.label).join(' · ') || 'ready')
+  let audio
+  const voices = new Map()
+
+  const emit = (type, detail) => host.dispatchEvent(new CustomEvent(type, { detail, bubbles:true, composed:true }))
+  const context = () => audio ||= new AudioContext()
+  const start = note => {
+    if (!note || voices.has(note.id)) return
+    const ctx = context()
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    const level = Math.max(.001, Math.min(.6, Number(this.volume) || 0))
+    osc.type = this.wave
+    osc.frequency.value = note.freq
+    gain.gain.setValueAtTime(.0001, ctx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(level, ctx.currentTime + .018)
+    osc.connect(gain).connect(ctx.destination)
+    osc.start()
+    voices.set(note.id, { osc, gain })
+    note.active = true
+    emit('note', { note:note.label, id:note.id, frequency:note.freq, velocity:level })
+  }
+  const stop = note => {
+    const voice = note && voices.get(note.id)
+    if (!voice) return
+    const now = audio.currentTime
+    voice.gain.gain.cancelScheduledValues(now)
+    voice.gain.gain.setValueAtTime(Math.max(voice.gain.gain.value,.0001), now)
+    voice.gain.gain.exponentialRampToValueAtTime(.0001, now + .08)
+    voice.osc.stop(now + .09)
+    voices.delete(note.id)
+    note.active = false
+  }
+  const byId = event => this.notes.find(note => note.id === event.currentTarget.dataset.id)
+  this.down = event => { event.currentTarget.setPointerCapture?.(event.pointerId); start(byId(event)) }
+  this.up = event => stop(byId(event))
+  this.changeWave = event => {
+    this.wave = event.currentTarget.value
+    emit('wave-change', { wave:this.wave })
+  }
+
+  window.addEventListener('keydown', event => {
+    if (event.repeat) return
+    start(this.notes.find(note => note.key === event.key.toUpperCase()))
+  }, { signal:abortSignal })
+  window.addEventListener('keyup', event => {
+    stop(this.notes.find(note => note.key === event.key.toUpperCase()))
+  }, { signal:abortSignal })
+  onCleanup(() => {
+    for (const note of this.notes) stop(note)
+    audio?.close()
+  })
+</script>
+
+<section class="synth">
+  <header>
+    <div><small>SKEIN / WEB AUDIO</small><h1>POLY–8</h1></div>
+    <label>WAVE
+      <select .value={wave} @change={changeWave}>
+        <option value="sine">sine</option><option value="triangle">triangle</option>
+        <option value="square">square</option><option value="sawtooth">sawtooth</option>
+      </select>
+    </label>
+  </header>
+  <div class="display"><i></i><span>{playing}</span></div>
+  <div class="keys">
+    <button for={notes} key={id} data-id={id} data-active={active}
+      @pointerdown={down} @pointerup={up} @pointercancel={up} @pointerleave={up}>
+      <kbd>{key}</kbd><strong>{label}</strong><small>{freq}</small>
+    </button>
+  </div>
+  <p>play with pointer or A S D F G H J K</p>
+</section>
+
+<style>
+  :host { display:block; height:100%; background:#d8ff58; color:#111; font-family:system-ui,sans-serif; }
+  .synth { min-height:100%; padding:22px; box-sizing:border-box; background:linear-gradient(135deg,#eaff69,#c8ff43); }
+  header { display:flex; justify-content:space-between; align-items:start; gap:20px; }
+  header small { font:700 9px ui-monospace,monospace; letter-spacing:.14em; }
+  h1 { margin:3px 0 0; font:900 clamp(36px,8vw,72px)/.8 Arial Black,sans-serif; letter-spacing:-.08em; }
+  label { display:grid; gap:5px; font:700 9px ui-monospace,monospace; letter-spacing:.1em; }
+  select { border:1px solid #111; background:transparent; padding:6px; }
+  .display { margin:22px 0 12px; display:flex; align-items:center; gap:8px; padding:9px 11px; border:1px solid #111; font:11px ui-monospace,monospace; text-transform:uppercase; }
+  .display i { width:7px; aspect-ratio:1; border-radius:50%; background:#ff4d37; box-shadow:0 0 14px #ff4d37; }
+  .keys { display:grid; grid-template-columns:repeat(8,1fr); height:190px; border:2px solid #111; border-right:0; }
+  .keys button { position:relative; min-width:0; border:0; border-right:2px solid #111; background:#f8f5e9; color:#111; cursor:pointer; touch-action:none; transition:transform 40ms,background 40ms; }
+  .keys button[data-active="true"] { background:#ff5d49; transform:translateY(5px); }
+  kbd { position:absolute; top:10px; left:50%; translate:-50% 0; font:700 9px ui-monospace,monospace; border:1px solid #111; border-radius:50%; width:22px; aspect-ratio:1; display:grid; place-items:center; }
+  .keys strong { position:absolute; bottom:28px; left:0; right:0; font-size:22px; }
+  .keys small { position:absolute; bottom:9px; left:0; right:0; font:8px ui-monospace,monospace; opacity:.45; }
+  p { margin:10px 0 0; font:700 9px ui-monospace,monospace; letter-spacing:.08em; text-align:right; }
+  @media(max-width:600px){.synth{padding:14px}.keys{height:160px}.keys strong{font-size:17px}.keys small{display:none}}
+</style>

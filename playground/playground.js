@@ -16,6 +16,12 @@ const runtime = fetch(new URL('../skein.min.js', location.href)).then(async resp
   return response.text();
 });
 
+const loadExample = async example => {
+  const response = await fetch(new URL(example.file, location.href));
+  if (!response.ok) throw new Error(`Cannot load ${example.file}: ${response.status}`);
+  return response.text();
+};
+
 for (const example of examples) {
   exampleSelect.add(new Option(`${example.kind.toLowerCase()} / ${example.title}`, example.id));
 }
@@ -34,7 +40,7 @@ const decode = value => {
 const scriptValue = value => JSON.stringify(value).replaceAll('<', '\\u003c');
 const params = new URLSearchParams(location.search);
 const requestedExample = params.get('example');
-const selected = exampleById(requestedExample || 'kinetic');
+const selected = exampleById(requestedExample || 'signal-room');
 exampleSelect.value = selected.id;
 
 let sharedSource;
@@ -43,7 +49,8 @@ if (location.hash.startsWith('#code=')) {
 }
 
 const saved = localStorage.getItem('skein.playground');
-source.value = sharedSource ?? (requestedExample ? selected.source : saved || selected.source);
+const selectedSource = await loadExample(selected);
+source.value = sharedSource ?? (requestedExample ? selectedSource : saved || selectedSource);
 
 function paint() {
   highlighted.innerHTML = highlight(source.value);
@@ -103,12 +110,20 @@ auto.addEventListener('change', () => {
   else state.textContent = 'manual';
 });
 
-exampleSelect.addEventListener('change', () => {
+exampleSelect.addEventListener('change', async () => {
   const example = exampleById(exampleSelect.value);
-  source.value = example.source;
-  history.replaceState(null, '', `?example=${example.id}`);
-  paint();
-  run();
+  state.textContent = 'loading…';
+  errorBox.hidden = true;
+  try {
+    source.value = await loadExample(example);
+    history.replaceState(null, '', `?example=${example.id}`);
+    paint();
+    run();
+  } catch (error) {
+    state.textContent = 'error';
+    errorBox.hidden = false;
+    errorBox.textContent = error.stack || String(error);
+  }
 });
 
 $('#run').addEventListener('click', run);

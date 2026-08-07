@@ -29,7 +29,7 @@ Skein.define('skein-nav', `
 Skein.define('skein-footer', `
 <footer>
   <div><strong>Skein</strong><span>native web, tightly woven.</span></div>
-  <div class="right"><a href="https://github.com/Pom4H/web-component">source</a><span>4.6 kB brotli</span><span>zero dependencies</span><span>2026</span></div>
+  <div class="right"><a href="https://github.com/Pom4H/web-component">source</a><span>4.8 kB brotli</span><span>zero dependencies</span><span>2026</span></div>
 </footer>
 <style>
   :host{display:block;border-top:1px solid var(--line,#d4d0c6);margin-top:80px}

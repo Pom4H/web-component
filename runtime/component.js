@@ -62,6 +62,7 @@ export class SkeinElement extends HTMLElement {
   #mounting = null;
   #disposed = false;
   #generation = 0;
+  #inputs = null;
 
   constructor() {
     super();
@@ -86,6 +87,24 @@ export class SkeinElement extends HTMLElement {
     });
   }
 
+  acceptInput(name, fallback) {
+    if (typeof name !== 'string' || !name) throw new TypeError('Skein input name must be a non-empty string');
+    if (this.#inputs?.has(name)) return this.state[name];
+
+    const pending = Object.hasOwn(this, name);
+    const initial = pending ? this[name] : fallback;
+    if (pending) delete this[name];
+
+    Object.defineProperty(this, name, {
+      configurable: true,
+      enumerable: true,
+      get: () => this.state[name],
+      set: value => { this.state[name] = value; },
+    });
+    (this.#inputs ||= new Set()).add(name);
+    return initial;
+  }
+
   disconnectedCallback() { SkeinElement.instances.delete(this); this.#scope?.pause(); }
   connectedMoveCallback() { this.#scope?.resume(); }
 
@@ -105,16 +124,17 @@ export class SkeinElement extends HTMLElement {
 
   runScript(source, scope) {
     try {
+      const input = (name, fallback) => this.acceptInput(name, fallback);
       const computed = callback => new ComputedRef(callback, scope);
       const effect = callback => new ReactiveEffect(callback, scope);
       const onCleanup = callback => scope.cleanup(callback);
       const abortSignal = source.includes('abortSignal') ? scope.signal : undefined;
       let script = scriptCache.get(source);
       if (!script) {
-        script = new AsyncFunction('computed', 'effect', 'onCleanup', 'host', 'abortSignal', source);
+        script = new AsyncFunction('input', 'computed', 'effect', 'onCleanup', 'host', 'abortSignal', source);
         scriptCache.set(source, script);
       }
-      script.call(this.state, computed, effect, onCleanup, this, abortSignal)?.catch(error => this.report(error));
+      script.call(this.state, input, computed, effect, onCleanup, this, abortSignal)?.catch(error => this.report(error));
     } catch (error) {
       this.report(error);
     }

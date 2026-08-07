@@ -1,0 +1,82 @@
+<script>
+  this.playing = false
+  this.bpm = 112
+  this.step = 0
+  this.pattern = [true,false,true,false,true,true,false,true]
+  this.wave = 'sawtooth'
+  this.volume = .18
+  this.note = '—'
+  this.level = 0
+
+  this.transport = event => this.playing = event.detail.playing
+  this.tempo = event => this.bpm = event.detail.bpm
+  this.tick = () => this.step = (this.step + 1) % this.pattern.length
+  this.patternChange = event => this.pattern = event.detail.pattern
+  this.mix = event => this[event.detail.name] = event.detail.value
+  this.waveChange = event => this.wave = event.detail.wave
+
+  let decay
+  this.noteOn = event => {
+    this.note = event.detail.note
+    this.level = event.detail.velocity
+    clearTimeout(decay)
+    decay = setTimeout(() => this.level = 0, 180)
+  }
+  onCleanup(() => clearTimeout(decay))
+</script>
+
+<section class="studio">
+  <header class="mast">
+    <div><small>COMPOSITION / NATIVE CUSTOM ELEMENTS</small><h1>SKEIN STUDIO</h1></div>
+    <div class="readout"><span>{note}</span><b>{bpm} BPM</b></div>
+  </header>
+
+  <studio-transport
+    .playing={playing}
+    .bpm={bpm}
+    @transport-change={transport}
+    @tempo-change={tempo}
+    @tick={tick}>
+  </studio-transport>
+
+  <studio-sequencer
+    .pattern={pattern}
+    .step={step}
+    @pattern-change={patternChange}>
+  </studio-sequencer>
+
+  <div class="lower">
+    <pocket-synth
+      .wave={wave}
+      .volume={volume}
+      @wave-change={waveChange}
+      @note={noteOn}>
+    </pocket-synth>
+
+    <aside>
+      <studio-mixer
+        .wave={wave}
+        .volume={volume}
+        @mix-change={mix}>
+      </studio-mixer>
+      <studio-scope .level={level} .note={note}></studio-scope>
+    </aside>
+  </div>
+</section>
+
+<style>
+  :host { display:block; min-height:100%; background:#111; color:#f5f1e7; font-family:system-ui,sans-serif; }
+  .studio { min-height:100%; padding:18px; box-sizing:border-box; background:#111; }
+  .mast { display:flex; align-items:end; justify-content:space-between; gap:18px; padding:4px 4px 18px; }
+  small { font:700 8px ui-monospace,monospace; letter-spacing:.15em; color:#a48cff; }
+  h1 { margin:3px 0 0; font:900 clamp(34px,7vw,70px)/.82 Arial Black,sans-serif; letter-spacing:-.075em; }
+  .readout { text-align:right; display:grid; gap:4px; font:700 10px ui-monospace,monospace; }
+  .readout span { color:#d8ff58; font-size:22px; }
+  studio-transport, studio-sequencer, pocket-synth, studio-mixer, studio-scope { display:block; }
+  studio-transport, studio-sequencer { margin-bottom:10px; }
+  .lower { display:grid; grid-template-columns:minmax(0,2fr) minmax(190px,.75fr); gap:10px; }
+  aside { display:grid; grid-template-rows:auto 1fr; gap:10px; min-width:0; }
+  pocket-synth { min-height:330px; }
+  studio-scope { min-height:140px; }
+  @media(max-width:720px){.lower{grid-template-columns:1fr}.mast{align-items:start}.readout{padding-top:12px}pocket-synth{min-height:300px}}
+</style>

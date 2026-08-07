@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#f4f0e6" />
-  <meta name="description" content="Skein is a zero-dependency, HTML-first Web Components runtime for creative CSS, SVG and Canvas sites." />
+  <meta name="description" content="Skein is a tiny zero-dependency HTML-first Web Components runtime with fine-grained reactivity and native component composition." />
   <title>Skein — native web, tightly woven</title>
   <link rel="stylesheet" href="site/styles.css" />
   <script type="module" src="site/site.js"></script>
@@ -14,45 +14,45 @@
   <main>
     <section class="hero">
       <skein-threads></skein-threads>
-      <div class="badge-row"><span class="badge">0 dependencies</span><span class="badge">4.6 kB brotli</span><span class="badge">no build</span></div>
+      <div class="badge-row"><span class="badge">0 dependencies</span><span class="badge">4.8 kB brotli</span><span class="badge">no build</span></div>
       <div class="wrap hero-copy">
         <p class="eyebrow">HTML-first reactive web components</p>
         <h1 class="display">SKEIN</h1>
         <div class="subrow">
-          <p class="lede">A tiny reactive layer for the browser you already have. Built for people making expressive CSS, SVG and Canvas instead of rebuilding the DOM in JavaScript.</p>
-          <div class="actions"><a class="button" href="playground/">Open playground →</a><a class="button ghost" href="start/">Start in one file</a></div>
+          <p class="lede">Fine-grained reactive state over the browser you already have. HTML composes components; CSS, SVG, Canvas and Web Audio stay native.</p>
+          <div class="actions"><a class="button" href="examples/">See composition →</a><a class="button ghost" href="start/">Start in one file</a></div>
         </div>
       </div>
     </section>
 
     <div class="ticker" aria-hidden="true"><div class="ticker-track">
-      <span>custom elements</span><span>signals</span><span>shadow dom</span><span>keyed ranges</span><span>css</span><span>svg</span><span>canvas</span><span>no virtual dom</span>
-      <span>custom elements</span><span>signals</span><span>shadow dom</span><span>keyed ranges</span><span>css</span><span>svg</span><span>canvas</span><span>no virtual dom</span>
+      <span>custom elements</span><span>properties down</span><span>events up</span><span>keyed ranges</span><span>css</span><span>svg</span><span>canvas</span><span>web audio</span>
+      <span>custom elements</span><span>properties down</span><span>events up</span><span>keyed ranges</span><span>css</span><span>svg</span><span>canvas</span><span>web audio</span>
     </div></div>
 
     <section class="section">
       <div class="wrap">
-        <div class="section-head" data-reveal><p class="eyebrow">01 / the premise</p><h2>The browser is already a rendering engine.</h2></div>
-        <div class="grid-3" data-reveal>
-          <article class="feature"><span class="num">DOM</span><div><h3>Create once.</h3><p>Templates compile once per component. There is no virtual tree to recreate and diff on every state change.</p></div></article>
-          <article class="feature"><span class="num">SIGNALS</span><div><h3>Touch only what changed.</h3><p>Reactive reads wire state directly to text, attributes, properties, branches and keyed list ranges.</p></div></article>
-          <article class="feature"><span class="num">WEB APIs</span><div><h3>Keep the good parts native.</h3><p>CSS animates CSS. SVG stays SVG. Canvas keeps its imperative loop. Skein handles state, ownership and cleanup.</p></div></article>
+        <div class="section-head"><p class="eyebrow">01 / the premise</p><h2>The browser is already a rendering engine and a component model.</h2></div>
+        <div class="grid-3">
+          <article class="feature"><span class="num">DOM</span><div><h3>Create once.</h3><p>Templates compile once. State writes update exact DOM parts instead of rebuilding a virtual tree.</p></div></article>
+          <article class="feature"><span class="num">COMPONENTS</span><div><h3>Compose as HTML.</h3><p>Tag names load HTML files. Owners pass DOM properties down; children dispatch native events up.</p></div></article>
+          <article class="feature"><span class="num">WEB APIs</span><div><h3>Keep the medium native.</h3><p>CSS animates, SVG draws, Canvas loops, Web Audio sounds. Skein handles state, identity and lifecycle.</p></div></article>
         </div>
       </div>
     </section>
 
     <section class="section">
       <div class="wrap split">
-        <div data-reveal>
+        <div>
           <p class="eyebrow">02 / start</p>
           <h2 style="font-size:clamp(48px,7vw,96px);letter-spacing:-.065em;line-height:.9;margin:20px 0 24px">One HTML file is enough.</h2>
-          <p class="lede" style="font-size:19px">Put an inert component template next to the element, load one module from the CDN, and you are running. No npm. No CLI. No config.</p>
-          <p style="margin-top:18px;font:600 12px ui-monospace,monospace;letter-spacing:.04em">skein.min.js · 14.0 kB raw · 5.1 kB gzip · 4.6 kB brotli</p>
-          <div class="actions" style="margin-top:28px"><a class="button" href="start/">See the 60-second start</a></div>
+          <p class="lede" style="font-size:19px">No npm, CLI or config. Prototype inline, then move components into files when the project actually needs boundaries.</p>
+          <p style="margin-top:18px;font:600 12px ui-monospace,monospace;letter-spacing:.04em">skein.min.js · 14.5 kB raw · 5.3 kB gzip · 4.8 kB brotli</p>
+          <p style="margin-top:28px"><a class="button" href="start/">See the 60-second start</a></p>
         </div>
-        <div class="code-card" data-reveal>
-          <div class="code-top"><span>index.html</span><button data-copy="#quick-code">Copy</button></div>
-          <pre><code id="quick-code" data-highlight>&lt;click-count&gt;&lt;/click-count&gt;
+        <div class="code-card">
+          <div class="code-top"><span>index.html</span></div>
+          <pre><code data-highlight>&lt;click-count&gt;&lt;/click-count&gt;
 
 &lt;template skein="click-count"&gt;
   &lt;script&gt;
@@ -60,9 +60,7 @@
     this.up = () =&gt; this.count++
   &lt;/script&gt;
 
-  &lt;button @click={up}&gt;
-    clicked {count}
-  &lt;/button&gt;
+  &lt;button @click={up}&gt;clicked {count}&lt;/button&gt;
 &lt;/template&gt;
 
 &lt;script type="module"
@@ -72,33 +70,31 @@
       </div>
     </section>
 
-    <section class="statement">
-      <div class="wrap" data-reveal><blockquote>Design in the medium.<br />Bind only the data.</blockquote><small>CSS / SVG / Canvas / Web Components</small></div>
-    </section>
+    <section class="statement"><div class="wrap"><blockquote>Properties down.<br />Events up.<br />HTML composes.</blockquote><small>native custom element contracts</small></div></section>
 
     <section class="section">
       <div class="wrap">
-        <div class="section-head" data-reveal><p class="eyebrow">03 / model</p><h2>Fine-grained without turning HTML into a programming language.</h2></div>
+        <div class="section-head"><p class="eyebrow">03 / composition</p><h2>No framework-specific channel between components.</h2></div>
         <div class="split">
-          <div class="code-card" data-reveal>
-            <div class="code-top"><span>poster/card.html</span><a href="playground/?example=kinetic" style="color:inherit">run ↗</a></div>
-            <pre><code data-highlight>&lt;script&gt;
-  this.x = 50
-  this.move = e =&gt; this.x = e.offsetX
-&lt;/script&gt;
+          <div class="code-card">
+            <div class="code-top"><span>studio/app.html</span><a href="examples/" style="color:inherit">run Studio ↗</a></div>
+            <pre><code data-highlight>&lt;studio-mixer
+  .wave={wave}
+  .volume={volume}
+  @mix-change={mix}&gt;
+&lt;/studio-mixer&gt;
 
-&lt;article style="--x:{x}px" @pointermove={move}&gt;
-  &lt;h1&gt;Skein&lt;/h1&gt;
-&lt;/article&gt;
-
-&lt;style&gt;
-  h1 { transform: translateX(var(--x)); }
-&lt;/style&gt;</code></pre>
+&lt;pocket-synth
+  .wave={wave}
+  .volume={volume}
+  @note={noteOn}&gt;
+&lt;/pocket-synth&gt;</code></pre>
           </div>
-          <div data-reveal>
-            <div class="big-number">1→1</div>
-            <h3 style="font-size:32px;letter-spacing:-.04em;margin:28px 0 12px">State write → exact DOM part.</h3>
-            <p class="lede" style="font-size:18px">A signal invalidates only the parts that read it. Synchronous writes collapse into one microtask. Render effects settle before user effects. Keyed rows move instead of being recreated.</p>
+          <div>
+            <div class="big-number">↓↑</div>
+            <h3 style="font-size:32px;letter-spacing:-.04em;margin:28px 0 12px">DOM properties + CustomEvent.</h3>
+            <p class="lede" style="font-size:18px">A child declares <code>this.volume = input('volume', .18)</code>. The owner writes the host property through <code>.volume={volume}</code>. Requests travel back as bubbling, composed native events.</p>
+            <p><a class="button ghost" href="docs/#composition">Read the contract →</a></p>
           </div>
         </div>
       </div>
@@ -106,50 +102,34 @@
 
     <section class="section">
       <div class="wrap">
-        <div class="section-head" data-reveal><p class="eyebrow">04 / playground</p><h2>One editor, because a component is one file.</h2></div>
-        <div class="split">
-          <div data-reveal><p class="lede">No HTML/CSS/JS panel ceremony. Edit the component source as it exists in a real project and see a fresh isolated preview. Syntax highlighting is written in a few dozen lines with no editor dependency.</p><p style="margin-top:28px"><a class="button" href="playground/">Make something weird →</a></p></div>
-          <div class="feature" style="min-height:330px;background:#0c0c0b;color:#f4f0e6;border:0" data-reveal><span class="num" style="color:var(--acid)">PLAYGROUND</span><div><h3 style="font-size:46px;margin-bottom:16px">source.html<br />→ live DOM</h3><p style="color:#aaa">Auto-run · share URL · sandboxed preview · runtime errors · no account · no backend</p></div></div>
+        <div class="section-head"><p class="eyebrow">04 / rendering</p><h2>Fine-grained without turning HTML into a programming language.</h2></div>
+        <div class="grid-3">
+          <article class="feature"><span class="num">PATHS</span><div><h3>Bindings stay small.</h3><p><code>{...}</code> contains property paths. Derived logic belongs in lazy cached <code>computed()</code>.</p></div></article>
+          <article class="feature"><span class="num">KEYS</span><div><h3>Identity survives.</h3><p>Keyed rows move as real DOM ranges, preserving browser-local input and focus state.</p></div></article>
+          <article class="feature"><span class="num">SCOPE</span><div><h3>Cleanup has an owner.</h3><p>Branches and lists dispose effects, listeners and nested components with their DOM.</p></div></article>
         </div>
       </div>
     </section>
 
     <section class="section">
-      <div class="wrap">
-        <div class="section-head" data-reveal><p class="eyebrow">05 / content</p><h2>Your content doesn't need a renderer. It's already HTML.</h2></div>
-        <div class="split">
-          <div data-reveal>
-            <p class="lede" style="font-size:19px">Skein does not have SSR today. If search engines, link unfurlers or people without JavaScript need to read something, put it in the document. Let Skein own only the interactive parts.</p>
-            <p style="margin-top:22px;color:var(--muted)">If the server genuinely needs to compute HTML per request, use a server or static generator for that job and let Skein enhance the result. No fake SSR ceremony is required for a heading that could have been HTML all along.</p>
-          </div>
-          <div class="code-card" data-reveal>
-            <div class="code-top"><span>index.html / meaningful before JS</span></div>
-            <pre><code data-highlight>&lt;main&gt;
+      <div class="wrap split">
+        <div><p class="eyebrow">05 / content</p><h2 style="font-size:clamp(42px,6vw,80px);letter-spacing:-.06em;line-height:.92">Static content can just be HTML.</h2><p class="lede" style="font-size:18px">Skein has no SSR today. If a heading, article or navigation matters before JavaScript, put it directly in the document and use Skein for the interactive regions.</p></div>
+        <div class="code-card"><pre><code data-highlight>&lt;main&gt;
   &lt;h1&gt;Native creative web experiences.&lt;/h1&gt;
-  &lt;p&gt;
-    Fine-grained bindings without a virtual DOM,
-    build step or framework-owned rendering.
-  &lt;/p&gt;
-  &lt;a href="/work/"&gt;See the work&lt;/a&gt;
+  &lt;p&gt;Already present in the HTML response.&lt;/p&gt;
 
-  &lt;price-calculator&gt;&lt;/price-calculator&gt;
-&lt;/main&gt;</code></pre>
-          </div>
-        </div>
+  &lt;interactive-art&gt;&lt;/interactive-art&gt;
+&lt;/main&gt;</code></pre></div>
       </div>
-    </section>
-
-    <section class="statement">
-      <div class="wrap" data-reveal><blockquote>If it matters before JavaScript,<br />write it before JavaScript.</blockquote><small>semantic HTML / progressive enhancement / interactive islands</small></div>
     </section>
 
     <section class="section">
       <div class="wrap">
-        <div class="section-head" data-reveal><p class="eyebrow">06 / agents</p><h2>Humans get docs. Agents get a contract.</h2></div>
-        <div class="grid-3" data-reveal>
-          <article class="feature"><span class="num">LLMS</span><div><h3>/llms.txt</h3><p>A concise machine-readable map to the framework, examples, full context and source.</p><p style="margin-top:18px"><a href="llms.txt">read it →</a></p></div></article>
-          <article class="feature"><span class="num">SKILL</span><div><h3>Agent Skill</h3><p>Portable instructions teach coding agents Skein's actual conventions, lifecycle and SEO strategy instead of making them guess.</p><p style="margin-top:18px"><a href="ai/">agent resources →</a></p></div></article>
-          <article class="feature"><span class="num">RULES</span><div><h3>Progressive disclosure.</h3><p>Application syntax stays separate from runtime internals, so agents load renderer details only when they are modifying Skein itself.</p></div></article>
+        <div class="section-head"><p class="eyebrow">06 / agents</p><h2>Humans get docs. Agents get the same contract.</h2></div>
+        <div class="grid-3">
+          <article class="feature"><span class="num">LLMS</span><div><h3>/llms.txt</h3><p>Concise machine-readable framework rules, including component composition semantics.</p><p style="margin-top:18px"><a href="llms.txt">read it →</a></p></div></article>
+          <article class="feature"><span class="num">SKILL</span><div><h3>Agent Skill</h3><p>Portable instructions cover inputs, events, lifecycle, HTML files and native APIs.</p><p style="margin-top:18px"><a href="ai/">agent resources →</a></p></div></article>
+          <article class="feature"><span class="num">TESTS</span><div><h3>Real Chrome.</h3><p>The generated minified runtime and multi-file Studio composition are exercised directly in Chromium.</p></div></article>
         </div>
       </div>
     </section>

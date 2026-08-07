@@ -2,14 +2,15 @@
 
 **Native web, tightly woven.**
 
-
 A tiny HTML-first Web Components runtime with fine-grained reactivity.
 
 No dependencies. No virtual DOM. No build step. Components are normal HTML files; state is normal JavaScript; only bindings that depend on changed state are updated.
 
+The single-file production runtime is **21.4 kB raw, 6.1 kB gzip, 5.6 kB Brotli**.
+
 ## Why
 
-The browser already has components, DOM, Shadow DOM, events, fetch and lifecycle. This project adds the missing thin layer:
+The browser already has components, DOM, Shadow DOM, events, fetch and lifecycle. Skein adds the missing thin layer:
 
 - reactive state with plain assignments such as `this.count++`
 - fine-grained text, attribute, property and boolean bindings
@@ -41,15 +42,15 @@ The smallest Skein project is one HTML file. `template[skein]` is inert browser 
 </template>
 
 <script type="module"
-  src="https://cdn.jsdelivr.net/gh/Pom4H/web-component@main/skein.js">
+  src="https://cdn.jsdelivr.net/gh/Pom4H/web-component@main/skein.min.js">
 </script>
 ```
 
-No npm, CLI, config, bundler or dev dependency is required. During the public-GitHub phase `skein.js` is the canonical CDN entry. Pin a commit SHA instead of `@main` for reproducible production sites.
+No npm, CLI, config, bundler or dev dependency is required. Pin a commit SHA instead of `@main` for reproducible production sites.
 
 You can also register source from JavaScript with `Skein.define('my-element', source)`. This is what the zero-dependency playground uses.
 
-For larger projects, keep component source in separate files. A tag maps to an HTML file by replacing `-` with `/`:
+For larger projects, keep component source in separate files. A tag maps to a path by replacing hyphens with slashes:
 
 ```text
 <counter-app> -> counter/app.html
@@ -244,7 +245,7 @@ state write
 
 Parts cache their last committed value and skip identical DOM writes.
 
-The runtime itself is split into native ES modules with no bundler: `runtime/reactive.js`, `runtime/template.js`, `runtime/component.js`, and the canonical `skein.js` entry point. `web-component.js` remains a compatibility alias.
+The readable source is split into native ES modules with no bundler: `runtime/reactive.js`, `runtime/template.js`, `runtime/component.js`, and `skein.js`. `skein.min.js` is the single-file production/CDN build.
 
 ## Keyed reconciliation
 
@@ -315,6 +316,14 @@ Dependency tracking is property-level. Object iteration has a separate structura
 
 Arrays additionally track structural length changes so `push()` and other native mutations invalidate list consumers correctly.
 
+## Static HTML and SEO
+
+Skein does not provide SSR today. Static content does not need to be client-rendered in the first place.
+
+Keep headings, value propositions, links, metadata, structured data and other meaningful content in ordinary document HTML when it matters before JavaScript. Use Skein for interactive regions.
+
+If a server genuinely needs to compute HTML per request, use a server/SSG layer and let Skein enhance the delivered HTML.
+
 ## Tests
 
 The project intentionally has no test framework and no package dependencies.
@@ -368,15 +377,21 @@ Skein.flush()
 
 Application code normally should not need either.
 
-## CDN and browser requirements
+## CDN
 
-Canonical GitHub-backed CDN entry:
+Production entry:
+
+```text
+https://cdn.jsdelivr.net/gh/Pom4H/web-component@main/skein.min.js
+```
+
+Readable modular entry:
 
 ```text
 https://cdn.jsdelivr.net/gh/Pom4H/web-component@main/skein.js
 ```
 
-`web-component.js` is kept as a compatibility alias while the project moves to the Skein brand.
+For production, pin a commit SHA instead of `@main`.
 
 ## Browser requirements
 

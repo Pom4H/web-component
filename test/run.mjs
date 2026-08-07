@@ -127,6 +127,15 @@ const modules = {
   entry: await readFile(join(root, 'skein.js'), 'utf8'),
 };
 const minRuntime = await readFile(join(root, 'skein.min.js'), 'utf8');
+const studioFixtures = Object.fromEntries(await Promise.all([
+  'studio/app.html',
+  'studio/transport.html',
+  'studio/sequencer.html',
+  'studio/mixer.html',
+  'studio/scope.html',
+  'pocket/synth.html',
+].map(async path => [path, await readFile(join(root, 'examples', path), 'utf8')])));
+
 async function loadReadable(send) {
   const expression = `(async () => {
     const reactiveURL = URL.createObjectURL(new Blob([${JSON.stringify(modules.reactive)}], { type: 'text/javascript' }));
@@ -223,6 +232,31 @@ try {
   contract = await evaluate(send, `(() => { const parent=document.querySelector('prod-input-parent');const child=parent.shadowRoot.querySelector('#child');return {parent:parent.shadowRoot.querySelector('#parent').textContent,child:child.shadowRoot.querySelector('#raise').textContent};})()`);
   if (contract.parent !== '8' || contract.child !== '8') throw new Error(`Production input/event update failed: ${JSON.stringify(contract)}`);
   console.log('min-composition: passed');
+
+  // Actual Studio example: nested file-loaded components compose only through properties and CustomEvents.
+  await newDocument(send, '<studio-app></studio-app>');
+  await evaluate(send, `window.fetch=async url=>{const path=new URL(String(url)).pathname.slice(1);const source=${JSON.stringify(studioFixtures)}[path];return source===undefined?new Response('',{status:404}):new Response(source,{status:200})};`);
+  await loadMin(send);
+  let studio;
+  for (let attempt = 0; attempt < 150; attempt++) {
+    await sleep(20);
+    studio = await evaluate(send, `(() => {const app=document.querySelector('studio-app');const root=app?.shadowRoot;const synth=root?.querySelector('pocket-synth');const mixer=root?.querySelector('studio-mixer');return {ready:!!mixer?.shadowRoot?.querySelector('input'),wave:synth?.wave,volume:synth?.volume,children:root?.querySelectorAll(':scope>*, .lower>*').length||0};})()`);
+    if (studio.ready) break;
+  }
+  if (!studio.ready || studio.wave !== 'sawtooth' || studio.volume !== .18) throw new Error(`Studio mount failed: ${JSON.stringify(studio)}`);
+  await evaluate(send, `(() => {const app=document.querySelector('studio-app');const mixer=app.shadowRoot.querySelector('studio-mixer');const input=mixer.shadowRoot.querySelector('input');input.value='.31';input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+  await sleep(30);
+  studio = await evaluate(send, `(() => {const app=document.querySelector('studio-app');const root=app.shadowRoot;return {app:app.state.volume,synth:root.querySelector('pocket-synth').volume,mixer:root.querySelector('studio-mixer').volume};})()`);
+  if (studio.app !== .31 || studio.synth !== .31 || studio.mixer !== .31) throw new Error(`Studio mixer propagation failed: ${JSON.stringify(studio)}`);
+  await evaluate(send, `(() => {const app=document.querySelector('studio-app');const transport=app.shadowRoot.querySelector('studio-transport');transport.shadowRoot.querySelector('button').click();})()`);
+  await sleep(40);
+  studio = await evaluate(send, `(() => {const app=document.querySelector('studio-app');const transport=app.shadowRoot.querySelector('studio-transport');return {app:app.state.playing,child:transport.playing};})()`);
+  if (studio.app !== true || studio.child !== true) throw new Error(`Studio transport propagation failed: ${JSON.stringify(studio)}`);
+  await evaluate(send, `(() => {const app=document.querySelector('studio-app');const synth=app.shadowRoot.querySelector('pocket-synth');synth.dispatchEvent(new CustomEvent('note',{detail:{note:'C',velocity:.2},bubbles:true,composed:true}));})()`);
+  await sleep(20);
+  studio = await evaluate(send, `(() => {const app=document.querySelector('studio-app');const scope=app.shadowRoot.querySelector('studio-scope');return {note:app.state.note,level:app.state.level,scopeNote:scope.note,scopeLevel:scope.level};})()`);
+  if (studio.note !== 'C' || studio.scopeNote !== 'C' || studio.level !== .2 || studio.scopeLevel !== .2) throw new Error(`Studio event propagation failed: ${JSON.stringify(studio)}`);
+  console.log('studio-composition: passed');
 
   // Minifier regression: strings such as template[skein] must never be mangled.
   await newDocument(send, '<min-inline></min-inline><template skein="min-inline"><script>this.word="small"<\/script><b id="word">{word}</b></template>');

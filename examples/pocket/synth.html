@@ -1,5 +1,6 @@
 <script>
-  this.wave = 'sawtooth'
+  this.wave = input('wave', 'sawtooth')
+  this.volume = input('volume', .18)
   this.notes = [
     { id:'c4', label:'C', key:'A', freq:261.63, active:false },
     { id:'d4', label:'D', key:'S', freq:293.66, active:false },
@@ -14,20 +15,23 @@
   let audio
   const voices = new Map()
 
+  const emit = (type, detail) => host.dispatchEvent(new CustomEvent(type, { detail, bubbles:true, composed:true }))
   const context = () => audio ||= new AudioContext()
   const start = note => {
     if (!note || voices.has(note.id)) return
     const ctx = context()
     const osc = ctx.createOscillator()
     const gain = ctx.createGain()
+    const level = Math.max(.001, Math.min(.6, Number(this.volume) || 0))
     osc.type = this.wave
     osc.frequency.value = note.freq
     gain.gain.setValueAtTime(.0001, ctx.currentTime)
-    gain.gain.exponentialRampToValueAtTime(.18, ctx.currentTime + .018)
+    gain.gain.exponentialRampToValueAtTime(level, ctx.currentTime + .018)
     osc.connect(gain).connect(ctx.destination)
     osc.start()
     voices.set(note.id, { osc, gain })
     note.active = true
+    emit('note', { note:note.label, id:note.id, frequency:note.freq, velocity:level })
   }
   const stop = note => {
     const voice = note && voices.get(note.id)
@@ -43,7 +47,10 @@
   const byId = event => this.notes.find(note => note.id === event.currentTarget.dataset.id)
   this.down = event => { event.currentTarget.setPointerCapture?.(event.pointerId); start(byId(event)) }
   this.up = event => stop(byId(event))
-  this.changeWave = event => this.wave = event.currentTarget.value
+  this.changeWave = event => {
+    this.wave = event.currentTarget.value
+    emit('wave-change', { wave:this.wave })
+  }
 
   window.addEventListener('keydown', event => {
     if (event.repeat) return

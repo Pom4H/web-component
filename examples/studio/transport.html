@@ -1,0 +1,41 @@
+<script>
+  this.playing = input('playing', false)
+  this.bpm = input('bpm', 112)
+  const emit = (type, detail={}) => host.dispatchEvent(new CustomEvent(type, { detail, bubbles:true, composed:true }))
+  this.toggle = () => emit('transport-change', { playing:!this.playing })
+  this.changeTempo = event => emit('tempo-change', { bpm:Number(event.currentTarget.value) })
+
+  let last = performance.now(), elapsed = 0
+  const timer = setInterval(() => {
+    const now = performance.now()
+    if (!this.playing) { last = now; elapsed = 0; return }
+    elapsed += now - last
+    last = now
+    const beat = 60000 / Math.max(40, Number(this.bpm) || 112) / 2
+    if (elapsed >= beat) {
+      elapsed %= beat
+      emit('tick')
+    }
+  }, 24)
+  onCleanup(() => clearInterval(timer))
+</script>
+
+<section>
+  <button data-playing={playing} @click={toggle}><i></i><b>{playing}</b></button>
+  <div class="rail"><span>TRANSPORT</span><strong>{bpm}</strong></div>
+  <label>BPM <input type="range" min="70" max="160" .value={bpm} @input={changeTempo}></label>
+</section>
+
+<style>
+  :host { display:block; background:#efebe0; color:#111; font-family:system-ui,sans-serif; }
+  section { min-height:58px; display:grid; grid-template-columns:100px 1fr minmax(150px,240px); align-items:center; border:1px solid #403d38; }
+  button { align-self:stretch; display:flex; gap:9px; align-items:center; justify-content:center; border:0; border-right:1px solid #777168; background:#d8ff58; cursor:pointer; text-transform:uppercase; font:800 9px ui-monospace,monospace; }
+  button i { width:9px; aspect-ratio:1; background:#111; clip-path:polygon(0 0,100% 50%,0 100%); }
+  button[data-playing="true"] i { clip-path:inset(0); background:#ff5d49; }
+  .rail { display:flex; align-items:center; justify-content:space-between; padding:0 16px; }
+  .rail span,label { font:700 8px ui-monospace,monospace; letter-spacing:.1em; }
+  .rail strong { font:900 24px/1 Arial Black,sans-serif; }
+  label { display:grid; grid-template-columns:auto 1fr; align-items:center; gap:9px; padding:0 14px; }
+  input { width:100%; accent-color:#7158ff; }
+  @media(max-width:560px){section{grid-template-columns:82px 1fr}.rail{display:none}label{padding:0 10px}}
+</style>

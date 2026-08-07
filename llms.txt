@@ -1,0 +1,33 @@
+# Skein
+
+> Skein is a zero-dependency, HTML-first Web Components runtime with fine-grained reactivity. It is designed for creative CSS, SVG, Canvas and native-DOM sites where HTML remains the document and Skein binds only dynamic data.
+
+Skein has no virtual DOM, build step, CLI, npm dependency, or required server runtime. The canonical browser entry is `skein.js`. State is ordinary JavaScript through a reactive Proxy, templates are real HTML, and updates target exact DOM parts.
+
+Important guidance for code generation: keep static, semantic, and SEO-critical content in ordinary HTML whenever possible. Use Skein for interactive regions. Binding expressions inside `{...}` are property paths, not arbitrary JavaScript; put derived logic in `computed()`. Prefer stable `key={id}` for lists. Clean up resources with `onCleanup()` or the provided `abortSignal`.
+
+## Start
+
+- [60-second start](https://pom4h.github.io/web-component/start/): The smallest one-file Skein app using `<template skein>` and the GitHub-backed CDN entry.
+- [README](https://github.com/Pom4H/web-component/blob/main/README.md): Project overview, API, rendering model, lifecycle, tests, limitations, and CDN usage.
+
+## Reference
+
+- [Documentation](https://pom4h.github.io/web-component/docs/): Human-readable reference for state, bindings, lists, conditions, computed values, effects, lifecycle and CDN usage.
+- [Full LLM context](https://pom4h.github.io/web-component/llms-full.txt): Compact machine-oriented Skein reference including syntax, architectural invariants, SEO guidance, creative rendering patterns and agent rules.
+- [AI and agents](https://pom4h.github.io/web-component/ai/): Entry point for AI coding tools and agents.
+
+## Examples
+
+- [Creative examples](https://pom4h.github.io/web-component/examples/): Live CSS, SVG, Canvas and keyed-DOM examples.
+- [Playground](https://pom4h.github.io/web-component/playground/): Zero-dependency one-file component editor with live preview.
+
+## Agent resources
+
+- [Agent Skill](https://raw.githubusercontent.com/Pom4H/web-component/main/.agents/skills/skein/SKILL.md): Portable Agent Skills instructions for building and modifying Skein applications.
+- [Repository agent instructions](https://github.com/Pom4H/web-component/blob/main/AGENTS.md): Project-level instructions for coding agents working inside the Skein repository.
+
+## Optional
+
+- [Runtime source](https://github.com/Pom4H/web-component/tree/main/runtime): Fine-grained signals, template compiler, DOM parts, keyed reconciliation and component lifecycle implementation.
+- [Tests](https://github.com/Pom4H/web-component/tree/main/test): Zero-dependency Node and real-Chrome test suite.

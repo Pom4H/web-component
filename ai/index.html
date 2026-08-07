@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Machine-readable Skein documentation, llms.txt, Agent Skill and coding-agent instructions." />
+  <title>AI & agents — Skein</title>
+  <link rel="stylesheet" href="../site/styles.css" />
+  <script type="module" src="../site/site.js"></script>
+</head>
+<body>
+  <skein-nav></skein-nav>
+  <main>
+    <section class="page-hero">
+      <div class="wrap">
+        <p class="eyebrow">AI / agent interface</p>
+        <h1 class="display">READ<br>THIS.</h1>
+        <p class="lede">Skein is small enough to learn from source, but agents should not have to reverse-engineer the framework before writing one component.</p>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="wrap grid-3">
+        <article class="feature">
+          <span class="num">01</span>
+          <div><h3>llms.txt</h3><p>A concise discovery file for inference-time tools: what Skein is, what matters, and where the useful context lives.</p><p style="margin-top:18px"><a href="../llms.txt">open /llms.txt →</a></p></div>
+        </article>
+        <article class="feature">
+          <span class="num">02</span>
+          <div><h3>Full context</h3><p>A compact machine-oriented reference for syntax, SEO strategy, lifecycle, creative CSS/SVG/Canvas patterns and runtime invariants.</p><p style="margin-top:18px"><a href="../llms-full.txt">open /llms-full.txt →</a></p></div>
+        </article>
+        <article class="feature">
+          <span class="num">03</span>
+          <div><h3>Agent Skill</h3><p>A portable Agent Skills package that teaches coding agents when and how to use Skein without turning it into another framework.</p><p style="margin-top:18px"><a href="https://github.com/Pom4H/web-component/tree/main/.agents/skills/skein">open skill →</a></p></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="statement">
+      <div class="wrap"><blockquote>Don’t infer the framework.<br>Load the contract.</blockquote><small>llms.txt / SKILL.md / AGENTS.md</small></div>
+    </section>
+
+    <section class="section">
+      <div class="wrap split">
+        <div>
+          <p class="eyebrow">For coding agents</p>
+          <h2 style="font-size:clamp(44px,6vw,88px);letter-spacing:-.06em;line-height:.92;margin:18px 0 24px">One prompt is enough.</h2>
+          <p class="lede" style="font-size:19px">Point an agent at the machine index before asking it to build. The context explicitly tells it to keep SEO content in HTML, use native media directly, preserve keyed DOM identity and avoid unnecessary dependencies.</p>
+        </div>
+        <div class="code-card">
+          <div class="code-top"><span>prompt.txt</span><button data-copy="#agent-prompt">Copy</button></div>
+          <pre><code id="agent-prompt">Read https://pom4h.github.io/web-component/llms.txt
+then build an interactive SVG landing page in Skein.
+Keep SEO-critical copy in static HTML.
+Use no libraries and no build step.</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="wrap split">
+        <div class="code-card">
+          <div class="code-top"><span>repository</span></div>
+          <pre><code data-highlight>.agents/
+  skills/
+    skein/
+      SKILL.md
+      references/
+        syntax.md
+        architecture.md
+      evals/
+        evals.json
+
+AGENTS.md
+llms.txt
+llms-full.txt</code></pre>
+        </div>
+        <div>
+          <p class="eyebrow">Progressive disclosure</p>
+          <h2 style="font-size:clamp(40px,5vw,72px);letter-spacing:-.055em;line-height:.95;margin:18px 0 24px">Small context first. Details only when needed.</h2>
+          <p class="lede" style="font-size:18px">The skill description is cheap to discover. The core instructions load only when a Skein task activates it. Syntax and runtime internals live in separate references so an agent building a poster does not waste context on reconciler internals.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+  <skein-footer></skein-footer>
+</body>
+</html>

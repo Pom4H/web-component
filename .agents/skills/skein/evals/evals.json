@@ -1,0 +1,35 @@
+{
+  "skill_name": "skein-web",
+  "evals": [
+    {
+      "id": "one-file-counter",
+      "prompt": "Build the smallest Skein counter example I can paste into one HTML file.",
+      "expected": "Uses <template skein>, skein.js, ordinary this.count state, an event binding, and no npm/build tooling."
+    },
+    {
+      "id": "seo-landing",
+      "prompt": "Build a Skein marketing page where SEO matters and add an interactive calculator.",
+      "expected": "Keeps heading, value proposition, links and core copy as ordinary HTML; uses Skein only for the interactive calculator; does not falsely claim SSR."
+    },
+    {
+      "id": "keyed-reorder",
+      "prompt": "Render an editable project list that can be reordered without losing typed input values.",
+      "expected": "Uses for={projects} with stable key={id}; relies on keyed identity rather than rebuilding innerHTML."
+    },
+    {
+      "id": "creative-svg",
+      "prompt": "Make an interactive generative SVG poster in Skein controlled by pointer position.",
+      "expected": "Keeps actual SVG markup, binds only dynamic attributes/CSS variables, uses native CSS/SVG features, and avoids a graphics framework."
+    },
+    {
+      "id": "canvas-cleanup",
+      "prompt": "Create a Canvas animation component in Skein that stops cleanly when disposed.",
+      "expected": "Keeps Canvas imperative, uses Skein for reactive controls/state, and cancels animation/timers via onCleanup or abortSignal where applicable."
+    },
+    {
+      "id": "runtime-change",
+      "prompt": "Optimize Skein list rendering after Array.reverse().",
+      "expected": "Preserves keyed DOM identity, reads architecture guidance/tests first, does not introduce VDOM or dependencies, and adds a regression/performance correctness test."
+    }
+  ]
+}

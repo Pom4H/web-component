@@ -112,6 +112,46 @@
         </div>
       </div>
     </section>
+
+    <section class="section">
+      <div class="wrap">
+        <div class="section-head" data-reveal><p class="eyebrow">05 / content</p><h2>Your content doesn't need a renderer. It's already HTML.</h2></div>
+        <div class="split">
+          <div data-reveal>
+            <p class="lede" style="font-size:19px">Skein does not have SSR today. If search engines, link unfurlers or people without JavaScript need to read something, put it in the document. Let Skein own only the interactive parts.</p>
+            <p style="margin-top:22px;color:var(--muted)">If the server genuinely needs to compute HTML per request, use a server or static generator for that job and let Skein enhance the result. No fake SSR ceremony is required for a heading that could have been HTML all along.</p>
+          </div>
+          <div class="code-card" data-reveal>
+            <div class="code-top"><span>index.html / meaningful before JS</span></div>
+            <pre><code data-highlight>&lt;main&gt;
+  &lt;h1&gt;Native creative web experiences.&lt;/h1&gt;
+  &lt;p&gt;
+    Fine-grained bindings without a virtual DOM,
+    build step or framework-owned rendering.
+  &lt;/p&gt;
+  &lt;a href="/work/"&gt;See the work&lt;/a&gt;
+
+  &lt;price-calculator&gt;&lt;/price-calculator&gt;
+&lt;/main&gt;</code></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="statement">
+      <div class="wrap" data-reveal><blockquote>If it matters before JavaScript,<br />write it before JavaScript.</blockquote><small>semantic HTML / progressive enhancement / interactive islands</small></div>
+    </section>
+
+    <section class="section">
+      <div class="wrap">
+        <div class="section-head" data-reveal><p class="eyebrow">06 / agents</p><h2>Humans get docs. Agents get a contract.</h2></div>
+        <div class="grid-3" data-reveal>
+          <article class="feature"><span class="num">LLMS</span><div><h3>/llms.txt</h3><p>A concise machine-readable map to the framework, examples, full context and source.</p><p style="margin-top:18px"><a href="llms.txt">read it →</a></p></div></article>
+          <article class="feature"><span class="num">SKILL</span><div><h3>Agent Skill</h3><p>Portable instructions teach coding agents Skein's actual conventions, lifecycle and SEO strategy instead of making them guess.</p><p style="margin-top:18px"><a href="ai/">agent resources →</a></p></div></article>
+          <article class="feature"><span class="num">RULES</span><div><h3>Progressive disclosure.</h3><p>Application syntax stays separate from runtime internals, so agents load renderer details only when they are modifying Skein itself.</p></div></article>
+        </div>
+      </div>
+    </section>
   </main>
   <skein-footer></skein-footer>
 </body>

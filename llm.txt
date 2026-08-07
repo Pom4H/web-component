@@ -1,0 +1,14 @@
+# Skein
+
+> Skein is a zero-dependency, HTML-first Web Components runtime with fine-grained reactivity. It is designed for creative CSS, SVG, Canvas and native-DOM sites where HTML remains the document and Skein binds only dynamic data.
+
+Canonical machine-readable project index: https://pom4h.github.io/web-component/llms.txt
+
+This singular `/llm.txt` file is provided as a compatibility alias for tools or users that guess the filename. Prefer `/llms.txt`.
+
+## Reference
+
+- [Canonical llms.txt](https://pom4h.github.io/web-component/llms.txt): Curated LLM index following the llms.txt proposal.
+- [Full LLM context](https://pom4h.github.io/web-component/llms-full.txt): Compact machine-oriented Skein reference.
+- [Documentation](https://pom4h.github.io/web-component/docs/): Human-readable framework reference.
+- [Agent Skill](https://raw.githubusercontent.com/Pom4H/web-component/main/.agents/skills/skein/SKILL.md): Portable Agent Skills instructions for Skein coding tasks.

@@ -1,0 +1,419 @@
+# Skein — full LLM context
+
+Skein is a tiny HTML-first Web Components runtime for creative websites and interactive documents. It adds fine-grained reactivity, scoped lifecycle, keyed lists, conditions and ergonomic bindings while leaving rendering media native: HTML stays HTML, CSS stays CSS, SVG stays SVG, and Canvas stays imperative Canvas.
+
+Current public runtime version: 0.3.x.
+Canonical browser entry: `skein.js`.
+Repository: https://github.com/Pom4H/web-component
+Website: https://pom4h.github.io/web-component/
+Playground: https://pom4h.github.io/web-component/playground/
+
+## Core philosophy
+
+1. The browser is already the rendering engine. Do not introduce a virtual DOM.
+2. Static content should remain static HTML. Skein binds only dynamic data.
+3. SEO-critical content such as the value proposition, headings, links, product copy and structured information should normally be present in the original HTML response. Skein can enhance interactive regions around it.
+4. Skein currently has no SSR or hydration. Do not pretend otherwise. If server-computed HTML is required, generate that HTML outside Skein and let Skein enhance the resulting document.
+5. Templates should stay readable as HTML. Expressions inside `{...}` are property paths, not arbitrary JavaScript expressions.
+6. Put derived logic in `computed()` rather than embedding logic into markup.
+7. Prefer native browser APIs over framework abstractions when the platform already provides the capability.
+8. Keep the dependency count at zero in the core and examples unless a user explicitly chooses otherwise.
+
+## Smallest app
+
+```html
+<!doctype html>
+
+<click-count></click-count>
+
+<template skein="click-count">
+  <script>
+    this.count = 0
+    this.up = () => this.count++
+  </script>
+
+  <button @click={up}>clicked {count}</button>
+</template>
+
+<script type="module"
+  src="https://cdn.jsdelivr.net/gh/Pom4H/web-component@main/skein.js">
+</script>
+```
+
+No npm, CLI, bundler, config file or dev server is required.
+
+For reproducible production deployments, pin a commit SHA instead of `@main`.
+
+## Larger project convention
+
+A custom-element tag maps to an HTML component file by replacing hyphens with slashes:
+
+```text
+<counter-app> -> counter/app.html
+<user-card>   -> user/card.html
+```
+
+A component file may contain `<script>`, markup and `<style>` in one file.
+
+```html
+<script>
+  this.name = 'Ada'
+  this.greeting = computed(() => `Hello ${this.name}`)
+</script>
+
+<h2>{greeting}</h2>
+
+<style>
+  h2 { text-wrap: balance; }
+</style>
+```
+
+## State
+
+Component scripts execute with `this` bound to a deep reactive Proxy.
+
+```js
+this.count = 0
+this.count++
+this.user = { name: 'Ada' }
+this.user.name = 'Grace'
+this.items = []
+this.items.push({ id: 1, title: 'One' })
+```
+
+Application code should use normal JavaScript assignments. Do not expose `.get()` / `.set()` signal ceremony unless using low-level runtime primitives intentionally.
+
+## Bindings
+
+Text:
+
+```html
+<h1>Hello {user.name}</h1>
+```
+
+String attribute:
+
+```html
+<div title="User {user.name}"></div>
+```
+
+DOM property:
+
+```html
+<input .value={user.name}>
+```
+
+Boolean attribute:
+
+```html
+<button ?disabled={saving}>Save</button>
+```
+
+Event:
+
+```html
+<button @click={save}>Save</button>
+<button onclick={save}>Save</button>
+```
+
+Legacy inline browser handlers are supported when useful:
+
+```html
+<button onpointermove="$.move(event)">Move</button>
+```
+
+Every rendered element exposes component state as `$` for this compatibility style.
+
+Context:
+
+```html
+<address in={user.address}>
+  {city}, {street}
+</address>
+```
+
+`in={...}` creates a lexical binding context. Lookup walks outward through parent contexts and then component state. An existing local property with value `undefined` still shadows an outer property of the same name.
+
+## Lists
+
+```html
+<article for={projects} key={id}>
+  <b>{index}. {title}</b>
+  <input placeholder="DOM state survives reorder">
+</article>
+```
+
+Use a stable `key={id}` when records have application identity.
+
+Without an explicit key:
+- objects use object identity;
+- primitive duplicates are disambiguated by occurrence.
+
+List reconciliation is incremental:
+- append creates only new views;
+- removal disposes only removed views;
+- reorder moves existing DOM nodes instead of recreating them;
+- local DOM state such as input value can survive reorders;
+- `index` and `$index` are reactive list locals.
+
+Do not replace keyed lists with full `innerHTML` rerenders.
+
+## Conditions
+
+```html
+<section if={inspectorOpen}>
+  <canvas></canvas>
+</section>
+```
+
+A conditional branch owns a child reactive scope. When it becomes false, its effects, event listeners, nested scopes and DOM range are disposed together.
+
+## Computed values
+
+```html
+<script>
+  this.price = 100
+  this.quantity = 2
+  this.total = computed(() => this.price * this.quantity)
+</script>
+
+<strong>{total}</strong>
+```
+
+`computed()` values are lazy, cached and dependency-tracked.
+
+Use computed values for derived presentation state instead of putting arithmetic or arbitrary expressions in template braces.
+
+## Effects and scheduling
+
+```js
+effect(() => {
+  console.log(this.total)
+})
+```
+
+Synchronous state writes are batched into a microtask. Render effects settle before user effects.
+
+```js
+batch(() => {
+  this.x = 1
+  this.y = 2
+})
+```
+
+Use `untrack(fn)` when a reactive value must be read without creating a dependency.
+
+## Lifecycle and cleanup
+
+Every component owns a root `Scope`. Lists and conditional branches create child scopes.
+
+Prefer native `AbortSignal` integration:
+
+```html
+<script>
+  window.addEventListener('resize', this.measure, { signal: abortSignal })
+  fetch('/data.json', { signal: abortSignal })
+</script>
+```
+
+For resources without AbortSignal support:
+
+```js
+const timer = setInterval(this.tick, 1000)
+onCleanup(() => clearInterval(timer))
+```
+
+`disconnectedCallback()` pauses a component rather than permanently destroying it. Reconnection resumes dirty bindings. `connectedMoveCallback()` is supported for state-preserving custom-element moves.
+
+Permanent teardown is explicit:
+
+```js
+component.dispose()
+```
+
+## SEO and progressive enhancement
+
+Skein currently has no SSR. This does not mean all page content must be client-rendered.
+
+Recommended content-first page:
+
+```html
+<main>
+  <h1>Creative websites with native HTML, CSS, SVG and Canvas.</h1>
+  <p>Skein adds fine-grained reactive bindings without a virtual DOM or build step.</p>
+  <a href="/pricing/">See pricing</a>
+
+  <price-calculator></price-calculator>
+</main>
+```
+
+The heading, paragraph and link are already present in the HTML response. Skein owns the interactive calculator.
+
+When generating a Skein site, do not hide meaningful static content inside a component only because the framework exists. Use Web Components as interactive islands unless encapsulation is genuinely useful.
+
+If the server must compute personalized or request-dependent HTML before delivery, use an external server/static-generation layer. Skein can enhance that HTML after delivery.
+
+## Creative CSS pattern
+
+Bind state into attributes or CSS custom properties and let CSS animate/layout:
+
+```html
+<script>
+  this.x = 50
+  this.move = event => this.x = event.offsetX
+</script>
+
+<article style="--x:{x}px" @pointermove={move}>
+  <h1>Skein</h1>
+</article>
+
+<style>
+  h1 { transform: translateX(var(--x)); }
+</style>
+```
+
+Do not reproduce CSS interpolation, transitions, layout or keyframes in JavaScript unless necessary.
+
+## SVG pattern
+
+Keep the SVG tree native and bind only dynamic attributes:
+
+```html
+<svg viewBox="0 0 100 100">
+  <circle cx={x} cy={y} r="4" />
+</svg>
+```
+
+Use CSS and SVG features directly. Do not convert SVG into a framework-specific object tree.
+
+## Canvas pattern
+
+Canvas should normally retain an imperative render loop. Skein should manage state, controls, ownership and cleanup rather than trying to make each pixel declarative.
+
+```html
+<script>
+  this.speed = 1
+
+  const ctx = host.shadowRoot.querySelector('canvas')?.getContext('2d')
+  let frame
+
+  const draw = () => {
+    // ordinary canvas rendering using reactive state
+    frame = requestAnimationFrame(draw)
+  }
+
+  frame = requestAnimationFrame(draw)
+  onCleanup(() => cancelAnimationFrame(frame))
+</script>
+```
+
+When DOM availability timing matters, initialize the loop after the relevant node exists or bind setup to an appropriate lifecycle point.
+
+## Public helpers inside component scripts
+
+- `computed(fn)` — lazy cached derived value.
+- `effect(fn)` — user effect scheduled after render work.
+- `onCleanup(fn)` — register deterministic teardown.
+- `batch(fn)` — group synchronous writes.
+- `signal(value)` — explicit low-level signal ref.
+- `untrack(fn)` — non-reactive read.
+- `host` — current custom-element instance.
+- `abortSignal` — current scope-owned AbortSignal.
+
+## Public global/module API
+
+The canonical module exports `Skein`.
+
+Useful surface:
+
+```js
+Skein.name
+Skein.version
+Skein.define(tag, source)
+Skein.element(tag)
+Skein.stats
+Skein.flush()
+Skein.Signal
+Skein.Computed
+Skein.Effect
+Skein.ReactiveState
+Skein.Scope
+```
+
+`Skein.define(tag, source)` registers component source directly and is used by the playground.
+
+`window.Skein` is also exposed in the browser.
+
+`web-component.js` exists as a compatibility alias; new documentation and CDN usage should prefer `skein.js`.
+
+## Runtime architecture
+
+Core files:
+
+```text
+skein.js
+runtime/reactive.js
+runtime/template.js
+runtime/component.js
+```
+
+`runtime/reactive.js` contains signals, computed refs, effects, batching, ownership scopes, the reactive Proxy and lexical BindingScope.
+
+`runtime/template.js` compiles DOM templates once and creates specialized DOM parts including text, attributes, properties, booleans, events, lists and branches.
+
+`runtime/component.js` implements Custom Element loading, component source compilation, lifecycle, helpers, registration and runtime exports.
+
+Runtime invariants:
+- no virtual DOM;
+- no component-level rerender loop;
+- templates compile once per component source;
+- exact reactive reads drive exact parts;
+- DOM parts skip identical commits;
+- keyed list identity must be preserved;
+- scopes own effects and cleanup;
+- render work runs before user effects;
+- no core third-party dependency.
+
+## Testing
+
+Run the project test suite with:
+
+```bash
+node test/run.mjs
+```
+
+Requirements:
+- Node.js 22+;
+- Chrome or Chromium, or `CHROME_BIN=/path/to/chrome`.
+
+The runner uses Node built-ins and Chrome DevTools Protocol directly. Do not add Playwright, Puppeteer, jsdom, Jest, Vitest or another test dependency merely to test core runtime behavior.
+
+Tests cover reactive core behavior, browser bindings, keyed identity, reorder/disposal, scheduler batching, lifecycle/reconnect, creative examples, Skein bootstrap APIs, a 1000-row performance smoke test and legacy compatibility.
+
+## Current limitations
+
+- no SSR or hydration;
+- no built-in async resource/suspense primitive;
+- no built-in error-boundary component primitive;
+- `{...}` expressions are property paths rather than arbitrary JavaScript;
+- component scripts currently use `AsyncFunction`, so strict CSP requires an `unsafe-eval` allowance.
+
+Do not silently claim these features exist. Design around them explicitly.
+
+## Rules for AI agents
+
+When asked to create a Skein application:
+1. Start with the smallest native HTML solution that satisfies the request.
+2. Keep semantic and SEO-critical content outside dynamic components when it can be static.
+3. Add Skein components only where interactivity/state is useful.
+4. Prefer one-file `<template skein>` for tiny examples and prototypes.
+5. Prefer external `tag/name.html` component files for larger projects.
+6. Keep `{...}` bindings to paths; use `computed()` for derivation.
+7. Use `.property`, `?boolean`, and `@event` bindings with their intended DOM semantics.
+8. Use stable keys for persistent list identity.
+9. Use CSS for visual state and animation whenever possible.
+10. Use native SVG and Canvas APIs directly.
+11. Register cleanup with `abortSignal` or `onCleanup()`.
+12. Do not add a framework, state library, templating library or editor library unless the user explicitly requests one.
+
+When asked to modify the Skein runtime itself, read the repository `AGENTS.md`, `.agents/skills/skein/references/architecture.md`, relevant runtime source and tests before changing behavior.

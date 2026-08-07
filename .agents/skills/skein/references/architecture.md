@@ -5,12 +5,14 @@ Load this file only when modifying the framework runtime, renderer, reactivity, 
 ## File map
 
 ```text
-skein.js                 public entry and bootstrap
-web-component.js         compatibility alias
+skein.min.js             single-file production/CDN runtime
+skein.js                 readable public entry and bootstrap
 runtime/reactive.js      signals, computed, effects, scheduler, scopes, reactive Proxy, BindingScope
 runtime/template.js      compiler, DOM Parts, keyed lists, branches, View
-runtime/component.js     component loading, registration, Custom Element lifecycle, script helpers
+runtime/component.js     component loading, registration, SkeinElement lifecycle, script helpers
 ```
+
+There is no pre-Skein compatibility entry. The only public browser namespace is `window.Skein`.
 
 ## Runtime invariants
 
@@ -30,6 +32,7 @@ Preserve all of these unless the task explicitly changes the architecture:
 12. Disconnect pauses; reconnect resumes. Disconnect alone is not permanent disposal.
 13. Permanent resource cleanup belongs to scope disposal.
 14. Native browser APIs are preferred over framework substitutes.
+15. `skein.min.js` must remain behaviorally equivalent to the readable source runtime.
 
 ## Reactive graph
 
@@ -47,8 +50,6 @@ Arrays must notify both relevant index/property cells and structural consumers s
 
 There are separate render and user-effect queues.
 
-Expected order:
-
 ```text
 state writes
 -> invalidation
@@ -62,13 +63,7 @@ Do not create one microtask per DOM binding.
 
 ## Scope ownership
 
-`Scope` owns:
-
-- effects;
-- computed values where appropriate;
-- child scopes;
-- cleanup callbacks;
-- an AbortController/AbortSignal.
+`Scope` owns effects, computed values where appropriate, child scopes, cleanup callbacks and an AbortController/AbortSignal.
 
 Lists and conditional branches create child scopes. Removing one dynamic view must dispose exactly its subtree without touching siblings.
 
@@ -101,27 +96,23 @@ On update:
 - move existing node ranges into new order;
 - use `moveBefore()` where available, otherwise `insertBefore()`.
 
-Never clear the whole list range as the normal reconciliation strategy.
-
-The benchmark-relevant correctness property is not only speed: DOM identity and local browser state must survive reorder.
+Never clear the whole list range as the normal reconciliation strategy. DOM identity and local browser state must survive reorder.
 
 ## Component lifecycle
 
-A `WebComponent` mounts once per instance unless explicitly disposed/replaced.
+A `SkeinElement` mounts once per registered source generation.
 
-`connectedCallback()` mounts or resumes.
+`connectedCallback()` mounts or resumes. `disconnectedCallback()` pauses the root scope. `connectedMoveCallback()` resumes state-preserving moves when supported. `dispose()` is permanent teardown.
 
-`disconnectedCallback()` pauses the root scope; it must not permanently abort everything because DOM nodes can be temporarily disconnected or moved.
+`reload()` tears down the current reactive view without permanently disposing the custom element and mounts the latest registered source. `Skein.define(tag, source)` uses this to update already-existing Skein elements. This is important for playground/dynamic registration.
 
-`connectedMoveCallback()` resumes state-preserving moves when supported.
-
-`dispose()` is permanent teardown.
+Automatic document discovery is deferred by one task so a dynamic-import caller can run `Skein.define()` before an unknown custom tag falls back to file loading. Do not reintroduce a microtask bootstrap race.
 
 ## Component scripts
 
-Component scripts currently use `AsyncFunction` with injected helpers. This is why strict CSP still requires `unsafe-eval`.
+Component scripts currently use `AsyncFunction` with injected helpers, so strict CSP still requires `unsafe-eval`.
 
-Helpers currently include:
+Helpers:
 
 - computed
 - effect
@@ -134,13 +125,11 @@ Helpers currently include:
 
 If changing script evaluation, preserve these semantics or update tests/docs/llms context together.
 
-## Public compatibility
+## Production bundle
 
-`skein.js` is canonical.
+`skein.min.js` is the actual Pages/CDN runtime. Current size is 21.4 kB raw, 6.1 kB gzip, 5.6 kB Brotli.
 
-`web-component.js` is a compatibility alias.
-
-Browser globals currently include `window.Skein`, `window.WebComponent` and `window.WebComponentRuntime` for compatibility/diagnostics.
+Do not optimize only the readable modules and forget the production artifact. Any public runtime fix must be reflected in `skein.min.js` and verified in real Chrome.
 
 ## Tests
 
@@ -152,15 +141,6 @@ node test/run.mjs
 
 The suite intentionally uses no test packages. It drives real Chrome via Chrome DevTools Protocol and also tests the reactive core in Node.
 
-When changing rendering or reconciliation, add/adjust tests for:
-
-- DOM identity;
-- local form state preservation;
-- exact create/remove/move counts where meaningful;
-- nested scope disposal;
-- scheduler batching;
-- reconnect behavior;
-- legacy examples;
-- performance smoke correctness.
+When changing rendering or reconciliation, cover DOM identity, local form state preservation, nested scope disposal, scheduler batching, reconnect behavior, dynamic registration, the production minified bundle, creative examples and performance smoke correctness.
 
 Do not turn machine-dependent timing values into brittle pass/fail thresholds.

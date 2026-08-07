@@ -1,7 +1,7 @@
 import { examples } from '../site/examples.js';
 
 const gallery = document.querySelector('#gallery');
-const runtimeURL = new URL('../skein.js', location.href).href;
+const runtimeURL = new URL('../skein.min.js', location.href).href;
 
 const srcdoc = (source, index) => `<!doctype html><meta charset="utf-8"><style>html,body{margin:0;height:100%;overflow:hidden}body{min-height:100%}</style><div id="mount"></div><script type="module">import { Skein } from ${JSON.stringify(runtimeURL)};Skein.define('demo-${index}', ${JSON.stringify(source)});document.querySelector('#mount').append(document.createElement('demo-${index}'));const el=document.querySelector('demo-${index}');el.style.display='block';el.style.height='100vh';<\/script>`;
 

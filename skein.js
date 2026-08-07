@@ -1,17 +1,15 @@
-import { Runtime, WebComponent, defineElement, registerComponent } from './runtime/component.js';
+import { Runtime, SkeinElement, defineElement, registerComponent } from './runtime/component.js';
 
 export const Skein = Object.assign(Runtime, {
   name: 'Skein',
-  version: '0.3.0',
-  Element: WebComponent,
+  version: '0.4.0',
+  Element: SkeinElement,
   define: registerComponent,
   element: defineElement,
 });
 
-WebComponent.runtime = Skein;
+SkeinElement.runtime = Skein;
 window.Skein = Skein;
-window.WebComponent = WebComponent;
-window.WebComponentRuntime = Skein;
 
 const bootstrap = () => {
   if (typeof document?.querySelectorAll !== 'function') return;
@@ -28,6 +26,8 @@ const bootstrap = () => {
   }
 };
 
-queueMicrotask(bootstrap);
+// Defer automatic discovery by one task. This lets dynamic-import callers
+// register source with Skein.define() before unknown custom tags are auto-loaded.
+setTimeout(bootstrap, 0);
 
-export { WebComponent, defineElement, registerComponent };
+export { SkeinElement, defineElement, registerComponent };

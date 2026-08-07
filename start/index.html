@@ -2,11 +2,10 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Start — Skein</title>
 <meta name="description" content="Start a Skein component in one HTML file, without npm or a build step."><link rel="stylesheet" href="../site/styles.css"><script type="module" src="../site/site.js"></script>
 </head><body><skein-nav><nav class="fallback-nav" aria-label="Primary"><a class="fallback-brand" href="/web-component/"><span class="fallback-mark">S</span><b>Skein</b></a><div class="fallback-links"><a href="/web-component/start/">Start</a><a href="/web-component/examples/">Examples</a><a href="/web-component/docs/">Docs</a><a href="/web-component/ai/">AI</a><a class="fallback-play" href="/web-component/playground/">Play</a><a class="fallback-gh" href="https://github.com/Pom4H/web-component">GitHub ↗</a></div></nav></skein-nav><main>
-<section class="page-hero"><div class="wrap"><p class="eyebrow">Start / 60 seconds</p><h1 class="display">ONE FILE.</h1><p class="lede">The shortest path from an empty folder to reactive Web Components. You can split components into files later without changing their syntax.</p><p style="margin-top:18px;font:600 12px ui-monospace,monospace">skein.min.js · 21.4 kB raw · 6.1 kB gzip · 5.6 kB brotli · 0 dependencies</p></div></section>
-<section class="section"><div class="narrow">
-<div class="steps">
-<article class="step"><div><h2>Create <code>index.html</code>.</h2><p>No package manifest. No scaffold. Open it from any static server or GitHub Pages.</p></div></article>
-<article class="step"><div><h2>Write a native custom element and its inert template.</h2><div class="code-card"><div class="code-top"><span>index.html</span><button data-copy="#start-code">Copy</button></div><pre><code id="start-code" data-highlight>&lt;click-count&gt;&lt;/click-count&gt;
+<section class="page-hero"><div class="wrap"><p class="eyebrow">Start / 60 seconds</p><h1 class="display">ONE FILE.</h1><p class="lede">The shortest path from an empty folder to reactive Web Components. Split components into files later without changing their syntax.</p><p style="margin-top:18px;font:600 12px ui-monospace,monospace">skein.min.js · 14.0 kB raw · 5.1 kB gzip · 4.6 kB brotli · 0 dependencies</p></div></section>
+<section class="section"><div class="narrow"><div class="steps">
+<article class="step"><div><h2>Create <code>index.html</code>.</h2><p>No package manifest. No scaffold. Any static server or GitHub Pages is enough.</p></div></article>
+<article class="step"><div><h2>Write the element and its inert template.</h2><div class="code-card"><div class="code-top"><span>index.html</span><button data-copy="#start-code">Copy</button></div><pre><code id="start-code" data-highlight>&lt;click-count&gt;&lt;/click-count&gt;
 
 &lt;template skein="click-count"&gt;
   &lt;script&gt;
@@ -14,7 +13,7 @@
     this.up = () =&gt; this.count++
   &lt;/script&gt;
 
-  &lt;button onclick={up}&gt;
+  &lt;button @click={up}&gt;
     clicked {count} times
   &lt;/button&gt;
 
@@ -32,7 +31,7 @@
 &lt;script type="module"
   src="https://cdn.jsdelivr.net/gh/Pom4H/web-component@main/skein.min.js"&gt;
 &lt;/script&gt;</code></pre></div></div></article>
-<article class="step"><div><h2>That is the app.</h2><p>Skein finds <code>&lt;template skein="click-count"&gt;</code>, compiles it once, defines the custom element and connects <code>{count}</code> directly to the state property read by that text part.</p><p><a class="button" href="../playground/">Run it in the playground →</a></p></div></article>
+<article class="step"><div><h2>That is the app.</h2><p>Skein compiles the template once, defines the custom element and connects <code>{count}</code> directly to the state property read by that text binding.</p><p><a class="button" href="../playground/">Run it in the playground →</a></p></div></article>
 </div></div></section>
 <section class="section"><div class="wrap split"><div><p class="eyebrow">When it grows</p><h2 style="font-size:clamp(45px,6vw,80px);letter-spacing:-.06em;line-height:.92">Move the component out. Nothing else changes.</h2><p class="lede" style="font-size:18px">The tag name maps to a file path by replacing hyphens with slashes.</p></div><div class="code-card"><div class="code-top"><span>file convention</span></div><pre><code data-highlight>&lt;portfolio-card&gt;&lt;/portfolio-card&gt;
 

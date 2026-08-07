@@ -7,8 +7,9 @@ const scriptCache = new Map();
 
 export const defineElement = tag => {
   if (!isCustomTag(tag)) return false;
-  if (customElements.get(tag)) return true;
-  customElements.define(tag, class extends WebComponent {});
+  const existing = customElements.get(tag);
+  if (existing) return existing === SkeinElement || existing.prototype instanceof SkeinElement;
+  customElements.define(tag, class extends SkeinElement {});
   return true;
 };
 
@@ -50,7 +51,7 @@ class CodeLoader {
 
   static async #load(tag) {
     const path = `${tag.toLowerCase().split('-').join('/')}.html`;
-    const response = await fetch(new URL(path, WebComponent.baseURL));
+    const response = await fetch(new URL(path, SkeinElement.baseURL));
     if (!response.ok) throw new Error(`Cannot load <${tag}>: ${response.status} ${response.statusText}`);
     return this.#compile(await response.text());
   }
@@ -61,8 +62,11 @@ class CodeLoader {
   }
 }
 
-export class WebComponent extends HTMLElement {
-  static baseURL = new URL('.', document.baseURI);
+export class SkeinElement extends HTMLElement {
+  static baseURL = (() => {
+    try { return new URL('.', document.baseURI); }
+    catch { return new URL('.', import.meta.url); }
+  })();
 
   #scope = null;
   #view = null;
@@ -86,7 +90,18 @@ export class WebComponent extends HTMLElement {
       this.#scope?.resume();
       return;
     }
-    if (!this.#mounting) this.#mounting = this.#mount(++this.#generation).finally(() => { this.#mounting = null; });
+    if (this.#mounting) return;
+
+    const generation = ++this.#generation;
+    const mounting = this.#mount(generation);
+    this.#mounting = mounting;
+    mounting
+      .catch(error => {
+        if (generation === this.#generation) this.#reportError(error);
+      })
+      .finally(() => {
+        if (this.#mounting === mounting) this.#mounting = null;
+      });
   }
 
   disconnectedCallback() { this.#scope?.pause(); }
@@ -146,6 +161,19 @@ export class WebComponent extends HTMLElement {
     console.error(error);
   }
 
+  reload = () => {
+    if (this.#disposed) return false;
+    this.#generation++;
+    this.#scope?.dispose();
+    this.#scope = null;
+    this.#view = null;
+    this.#mounted = false;
+    this.#mounting = null;
+    this.shadowRoot.replaceChildren();
+    if (this.isConnected) this.connectedCallback();
+    return true;
+  };
+
   dispose = () => {
     if (this.#disposed) return;
     this.#disposed = true;
@@ -154,6 +182,7 @@ export class WebComponent extends HTMLElement {
     this.#scope = null;
     this.#view = null;
     this.#mounted = false;
+    this.#mounting = null;
     this.shadowRoot.replaceChildren();
   };
 
@@ -176,6 +205,16 @@ export class WebComponent extends HTMLElement {
 
 export const registerComponent = (tag, source) => {
   CodeLoader.register(tag, source);
+  const existing = customElements.get(tag);
+  if (existing) {
+    if (existing !== SkeinElement && !(existing.prototype instanceof SkeinElement)) {
+      throw new Error(`<${tag}> is already defined outside Skein`);
+    }
+    for (const element of document.querySelectorAll(tag)) {
+      if (element instanceof SkeinElement) element.reload();
+    }
+    return existing;
+  }
   defineElement(tag);
   return customElements.get(tag);
 };

@@ -1,6 +1,9 @@
-import { examples, exampleById } from '../site/examples.js';
+import { examples as baseExamples } from '../site/examples.js';
+import { labExamples } from '../site/examples-lab.js';
 import { highlight } from '../site/highlight.js';
 
+const examples = [...labExamples, ...baseExamples];
+const exampleById = id => examples.find(example => example.id === id) || examples[0];
 const $ = selector => document.querySelector(selector);
 const source = $('#source');
 const highlighted = $('#highlight code');
@@ -34,7 +37,7 @@ const decode = value => {
 const scriptValue = value => JSON.stringify(value).replaceAll('<', '\\u003c');
 const params = new URLSearchParams(location.search);
 const requestedExample = params.get('example');
-const selected = exampleById(requestedExample || 'kinetic');
+const selected = exampleById(requestedExample || 'signal-room');
 exampleSelect.value = selected.id;
 
 let sharedSource;

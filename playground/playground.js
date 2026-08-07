@@ -22,6 +22,7 @@ for (const example of examples) {
 
 const encode = value => btoa(unescape(encodeURIComponent(value)));
 const decode = value => decodeURIComponent(escape(atob(value)));
+const scriptValue = value => JSON.stringify(value).replaceAll('<', '\\u003c');
 const params = new URLSearchParams(location.search);
 const requestedExample = params.get('example');
 const selected = exampleById(requestedExample || 'kinetic');
@@ -43,8 +44,8 @@ function paint() {
 }
 
 function srcdoc(value, runtimeSource) {
-  const component = JSON.stringify(value);
-  const runtimeText = JSON.stringify(runtimeSource);
+  const component = scriptValue(value);
+  const runtimeText = scriptValue(runtimeSource);
   const base = location.href.replace(/"/g, '&quot;');
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${base}"><style>html,body{margin:0;min-height:100%;height:100%}body{display:grid}play-ground{display:block;min-height:100%;height:100%}</style></head><body><script>addEventListener('error',e=>parent.postMessage({type:'skein-error',message:e.error?.stack||e.message},'*'));addEventListener('unhandledrejection',e=>parent.postMessage({type:'skein-error',message:e.reason?.stack||String(e.reason)},'*'));<\/script><script type="module">try{const runtimeURL=URL.createObjectURL(new Blob([${runtimeText}],{type:'text/javascript'}));const {Skein}=await import(runtimeURL);Skein.define('play-ground',${component});const element=document.createElement('play-ground');document.body.append(element);await customElements.whenDefined('play-ground');await new Promise(resolve=>setTimeout(resolve,0));parent.postMessage({type:'skein-ready',stats:Skein.stats},'*')}catch(error){parent.postMessage({type:'skein-error',message:error.stack||String(error)},'*')}<\/script></body></html>`;
 }

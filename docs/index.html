@@ -1,7 +1,7 @@
 <!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Docs — Skein</title><meta name="description" content="Skein reference: bindings, lists, conditions, computed values, effects and lifecycle."><link rel="stylesheet" href="../site/styles.css"><script type="module" src="../site/site.js"></script>
 </head><body><skein-nav></skein-nav><main>
-<section class="page-hero"><div class="wrap"><p class="eyebrow">Reference / runtime v0.3</p><h1 class="display">DOCS.</h1><p class="lede">The public surface is deliberately small. Ordinary JavaScript owns state; HTML describes where it goes.</p></div></section>
+<section class="page-hero"><div class="wrap"><p class="eyebrow">Reference / runtime v0.4</p><h1 class="display">DOCS.</h1><p class="lede">The public surface is deliberately small. Ordinary JavaScript owns state; HTML describes where it goes.</p></div></section>
 <section class="section"><div class="wrap docs-layout">
 <nav class="docs-nav"><a href="#state">State</a><a href="#bindings">Bindings</a><a href="#lists">Lists</a><a href="#conditions">Conditions</a><a href="#computed">Computed</a><a href="#effects">Effects</a><a href="#lifecycle">Lifecycle</a><a href="#cdn">CDN</a></nav>
 <div class="docs-content">
@@ -51,6 +51,6 @@
     signal: abortSignal
   })
 &lt;/script&gt;</code></pre></div><p>Disconnect pauses reactive work. Reconnect resumes dirty bindings. Explicit <code>host.dispose()</code> permanently tears the component down.</p></section>
-<section id="cdn"><p class="eyebrow">CDN</p><h2>The canonical entry is <code>skein.js</code>.</h2><p>During the public-GitHub phase you can load it through jsDelivr's GitHub endpoint:</p><div class="code-card"><div class="code-top"><span>GitHub-backed CDN</span><button data-copy="#cdn-code">Copy</button></div><pre><code id="cdn-code">https://cdn.jsdelivr.net/gh/Pom4H/web-component@main/skein.js</code></pre></div><p>For reproducible production sites, pin a commit SHA instead of <code>@main</code>. The old <code>web-component.js</code> file remains as a compatibility alias.</p></section>
+<section id="cdn"><p class="eyebrow">CDN</p><h2>The production entry is <code>skein.min.js</code>.</h2><p>The single-file runtime is 21.4 kB raw, 6.1 kB gzip and 5.6 kB Brotli, with zero dependencies. The readable modular source remains in <code>skein.js</code> and <code>runtime/</code>.</p><div class="code-card"><div class="code-top"><span>GitHub-backed CDN</span><button data-copy="#cdn-code">Copy</button></div><pre><code id="cdn-code">https://cdn.jsdelivr.net/gh/Pom4H/web-component@main/skein.min.js</code></pre></div><p>For reproducible production sites, pin a commit SHA instead of <code>@main</code>.</p></section>
 </div></div></section>
 </main><skein-footer></skein-footer></body></html>

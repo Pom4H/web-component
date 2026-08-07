@@ -30,8 +30,10 @@ The component script runs with `this` bound to the component's reactive state.
   ...component source...
 </template>
 
-<script type="module" src="https://cdn.jsdelivr.net/gh/Pom4H/web-component@main/skein.js"></script>
+<script type="module" src="https://cdn.jsdelivr.net/gh/Pom4H/web-component@main/skein.min.js"></script>
 ```
+
+Production entry: `skein.min.js` — 21.4 kB raw, 6.1 kB gzip, 5.6 kB Brotli. `skein.js` is the readable modular source entry.
 
 ## Programmatic registration
 
@@ -123,12 +125,7 @@ Contexts are lexical. Lookup walks outward through parent contexts and finally r
 </li>
 ```
 
-Available list locals:
-
-- `index`
-- `$index`
-
-Use stable keys for durable identity.
+Available list locals: `index` and `$index`. Use stable keys for durable identity.
 
 A normal HTML attribute such as `<label for="email">` is not a list binding. Only a full `for={...}` expression is structural.
 
@@ -154,41 +151,28 @@ Then bind normally:
 <strong>{fullName}</strong>
 ```
 
-## Effects
+## Effects and batch
 
 ```js
-effect(() => {
-  console.log(this.count)
-})
-```
+effect(() => console.log(this.count))
 
-User effects run after render work.
-
-## Batch
-
-```js
 batch(() => {
   this.x = 1
   this.y = 2
 })
 ```
 
-## Signal
+User effects run after render work.
 
-Explicit low-level signal refs are available for advanced cases:
+## Signal and untrack
 
 ```js
 const selected = signal(null)
 selected.value = 42
+const snapshot = untrack(() => this.largeObject)
 ```
 
 Application state usually should remain normal `this.property` assignments.
-
-## Untrack
-
-```js
-const snapshot = untrack(() => this.largeObject)
-```
 
 ## Cleanup
 
@@ -206,15 +190,11 @@ fetch(url, { signal: abortSignal })
 
 ## Host
 
-`host` is the current custom element instance.
-
-Use it when access to the custom element or its shadow root is genuinely needed.
+`host` is the current custom element instance. Use it when access to the custom element or its shadow root is genuinely needed.
 
 ## Static page content
 
 Do not wrap static page copy in a Skein component just for consistency.
-
-Good:
 
 ```html
 <h1>Native creative web experiences.</h1>

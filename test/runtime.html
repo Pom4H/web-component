@@ -1,0 +1,40 @@
+<script>
+  this.count = 1;
+  this.name = 'ROOT';
+  this.user = { name: 'John', address: { city: 'Amsterdam' } };
+  this.items = [
+    { id: 1, name: 'A' },
+    { id: 2, name: 'B' },
+    { id: 3, name: undefined },
+  ];
+  this.statuses = [{ id: 'ready', title: 'Ready' }];
+  this.show = true;
+  this.enabled = true;
+  this.total = computed(() => this.count * 2);
+  this.increment = () => this.count++;
+  this.cleanupRuns = 0;
+  effect(() => { window.__effectCount = this.count; });
+  onCleanup(() => { window.__cleanupRuns = (window.__cleanupRuns || 0) + 1; });
+  window.__state = this;
+  window.__host = host;
+  window.__batch = batch;
+</script>
+
+<h1 id="title">Hello {count}</h1>
+<p id="computed">{total}</p>
+<p id="nested" data-name="user-{name}" in={user}>{name}</p>
+<p id="city" in={user} data-city="{address.city}">{address.city}</p>
+<label id="native-for" for="real-input">Name</label>
+<input id="real-input" .value={count} ?disabled={enabled}>
+<button id="event" onclick={increment}>increment</button>
+
+<ul id="items">
+  <li for={items} key={id} data-id={id}>
+    <input class="item-input" .value={name}>
+    <span class="item-name">{name}</span>
+    <span class="item-index">{index}</span>
+    <select><option for={statuses} key={id} value={id}>{title}</option></select>
+  </li>
+</ul>
+
+<section id="branch" if={show}>Visible {count}</section>

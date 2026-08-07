@@ -1,79 +1,226 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8" />
-  <title>WebComponent tests</title>
-  <script type="module" src="../web-component.js"></script>
+  <meta charset="utf-8">
+  <base href="../">
+  <title>WebComponent Runtime v2 tests</title>
+  <script type="module" src="web-component.js"></script>
 </head>
 <body>
-  <test-signals></test-signals>
+  <test-runtime></test-runtime>
   <pre id="results">Running…</pre>
   <script>
     const tests = [];
     const test = (name, callback) => tests.push([name, callback]);
-    const equal = (actual, expected) => {
-      if (actual !== expected) throw new Error(`expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+    const equal = (actual, expected, message = '') => {
+      if (!Object.is(actual, expected)) throw new Error(`${message ? message + ': ' : ''}expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
     };
-    const tick = () => new Promise(resolve => queueMicrotask(resolve));
+    const ok = (value, message = 'expected truthy value') => { if (!value) throw new Error(message); };
+    const tick = async () => { await Promise.resolve(); await Promise.resolve(); };
 
-    test('text binding', async ({ root, state }) => {
+    test('initial text and computed bindings', ({ root }) => {
       equal(root.querySelector('#title').textContent, 'Hello 1');
-      state.count++;
-      await tick();
-      equal(root.querySelector('#title').textContent, 'Hello 2');
+      equal(root.querySelector('#computed').textContent, '2');
     });
 
-    test('nested state and attribute binding', async ({ root, state }) => {
+    test('fine-grained text update', async ({ root, state }) => {
+      const title = root.querySelector('#title');
+      state.count = 2;
+      await tick();
+      equal(title.textContent, 'Hello 2');
+      equal(root.querySelector('#computed').textContent, '4');
+      equal(root.querySelector('#real-input').value, '2');
+    });
+
+    test('nested context and attributes', async ({ root, state }) => {
       state.user.name = 'Jane';
+      state.user.address.city = 'Rotterdam';
       await tick();
-      equal(root.querySelector('#user').textContent, 'Jane');
-      equal(root.querySelector('#user').getAttribute('data-name'), 'user-Jane');
+      equal(root.querySelector('#nested').textContent, 'Jane');
+      equal(root.querySelector('#nested').getAttribute('data-name'), 'user-Jane');
+      equal(root.querySelector('#city').textContent, 'Rotterdam');
+      equal(root.querySelector('#city').getAttribute('data-city'), 'Rotterdam');
     });
 
-    test('list push', async ({ root, state }) => {
-      state.items.push({ name: 'C' });
-      await tick();
-      equal([...root.querySelectorAll('#items li')].map(node => node.textContent).join(','), 'A,B,C');
+    test('undefined local value shadows root state', ({ root }) => {
+      const rows = root.querySelectorAll('#items > li');
+      equal(rows[2].querySelector('.item-name').textContent, '');
     });
 
-    test('list splice', async ({ root, state }) => {
-      state.items.splice(1, 1);
-      await tick();
-      equal([...root.querySelectorAll('#items li')].map(node => node.textContent).join(','), 'A,C');
+    test('native for attribute is not structural binding', ({ root }) => {
+      equal(root.querySelector('#native-for').getAttribute('for'), 'real-input');
     });
 
-    test('root state inside nested list', async ({ root, state }) => {
-      state.statuses[0].title = 'Ready';
+    test('boolean and property parts', async ({ root, state }) => {
+      ok(root.querySelector('#real-input').disabled);
+      state.enabled = false;
       await tick();
-      equal(root.querySelector('option').textContent, 'Ready');
+      equal(root.querySelector('#real-input').disabled, false);
     });
 
-    test('normal for attribute stays normal', ({ root }) => {
-      equal(root.querySelector('#label').getAttribute('for'), 'real-input');
+    test('event part resolves handler without rebinding', async ({ root, state }) => {
+      const before = state.count;
+      root.querySelector('#event').click();
+      await tick();
+      equal(state.count, before + 1);
+    });
+
+    test('keyed push creates one row and preserves existing rows', async ({ root, state }) => {
+      const existing = [...root.querySelectorAll('#items > li')];
+      state.items.push({ id: 4, name: 'D' });
+      await tick();
+      const rows = [...root.querySelectorAll('#items > li')];
+      equal(rows.length, 4);
+      equal(rows[0], existing[0]);
+      equal(rows[1], existing[1]);
+      equal(rows[2], existing[2]);
+      equal(rows[3].getAttribute('data-id'), '4');
+    });
+
+    test('keyed reorder preserves DOM identity and local input state', async ({ root, state }) => {
+      const first = root.querySelector('[data-id="1"]');
+      const input = first.querySelector('.item-input');
+      input.value = 'typed locally';
+      state.items.reverse();
+      await tick();
+      equal(root.querySelectorAll('#items > li')[root.querySelectorAll('#items > li').length - 1], first);
+      equal(first.querySelector('.item-input'), input);
+      equal(input.value, 'typed locally');
+    });
+
+    test('index is reactive without recreating rows', async ({ root, state }) => {
+      state.items.reverse();
+      await tick();
+      const indices = [...root.querySelectorAll('.item-index')].map(node => node.textContent).join(',');
+      equal(indices, '0,1,2,3');
+    });
+
+    test('keyed splice disposes only removed row', async ({ root, state, runtime }) => {
+      const keep = root.querySelector('[data-id="2"]');
+      const removes = runtime.stats.listRemoves;
+      const index = state.items.findIndex(item => item.id === 3);
+      state.items.splice(index, 1);
+      await tick();
+      equal(root.querySelector('[data-id="3"]'), null);
+      equal(root.querySelector('[data-id="2"]'), keep);
+      equal(runtime.stats.listRemoves - removes, 1);
+    });
+
+    test('nested list can resolve component root state', async ({ root, state }) => {
+      state.statuses[0].title = 'Running';
+      await tick();
+      for (const option of root.querySelectorAll('option')) equal(option.textContent, 'Running');
+    });
+
+    test('branch mounts and disposes a range', async ({ root, state }) => {
+      const branch = root.querySelector('#branch');
+      state.show = false;
+      await tick();
+      equal(root.querySelector('#branch'), null);
+      state.show = true;
+      await tick();
+      ok(root.querySelector('#branch'));
+      ok(root.querySelector('#branch') !== branch, 'branch should create a new view after disposal');
+    });
+
+    test('scheduler batches synchronous writes', async ({ root, state, runtime }) => {
+      const flushes = runtime.stats.flushes;
+      state.count = 10;
+      state.count = 11;
+      state.count = 12;
+      await tick();
+      equal(root.querySelector('#title').textContent, 'Hello 12');
+      equal(runtime.stats.flushes - flushes, 1);
+    });
+
+    test('explicit batch produces one consistent commit wave', async ({ root, state, batch }) => {
+      batch(() => {
+        state.count = 20;
+        state.user.name = 'Batch';
+      });
+      await tick();
+      equal(root.querySelector('#title').textContent, 'Hello 20');
+      equal(root.querySelector('#nested').textContent, 'Batch');
+      equal(root.querySelector('#computed').textContent, '40');
+    });
+
+    test('performance smoke: 1000 keyed rows stay incremental', async ({ root, state, batch }) => {
+      const metrics = {};
+      let start = performance.now();
+      state.items = Array.from({ length: 1000 }, (_, index) => ({ id: index, name: `Row ${index}` }));
+      await tick();
+      metrics.create1000 = performance.now() - start;
+      equal(root.querySelectorAll('#items > li').length, 1000);
+
+      const row0 = root.querySelector('[data-id="0"]');
+      const row999 = root.querySelector('[data-id="999"]');
+      start = performance.now();
+      batch(() => {
+        for (let index = 0; index < state.items.length; index += 10) state.items[index].name = `Updated ${index}`;
+      });
+      await tick();
+      metrics.update100 = performance.now() - start;
+      equal(root.querySelector('[data-id="0"]'), row0);
+      equal(root.querySelector('[data-id="0"] .item-name').textContent, 'Updated 0');
+
+      start = performance.now();
+      state.items.reverse();
+      await tick();
+      metrics.reverse1000 = performance.now() - start;
+      equal(root.querySelectorAll('#items > li')[0], row999);
+      equal(root.querySelectorAll('#items > li')[999], row0);
+
+      start = performance.now();
+      state.items.length = 0;
+      await tick();
+      metrics.clear1000 = performance.now() - start;
+      equal(root.querySelectorAll('#items > li').length, 0);
+      window.__benchmark = metrics;
+    });
+
+    test('disconnect pauses and reconnect resumes dirty bindings', async ({ host, state }) => {
+      const parent = host.parentNode;
+      const title = host.shadowRoot.querySelector('#title');
+      host.remove();
+      state.count = 30;
+      await tick();
+      equal(title.textContent, 'Hello 20');
+      parent.prepend(host);
+      await tick();
+      equal(title.textContent, 'Hello 30');
+    });
+
+    test('dispose runs cleanup and tears down DOM', async ({ host }) => {
+      host.dispose();
+      await tick();
+      equal(window.__cleanupRuns, 1);
+      equal(host.shadowRoot.childNodes.length, 0);
     });
 
     (async () => {
-      const host = document.querySelector('test-signals');
-      while (!host.shadowRoot?.querySelector('#title') || !window.testState) {
-        await new Promise(resolve => setTimeout(resolve, 0));
-      }
-
-      const context = { root: host.shadowRoot, state: window.testState };
+      const host = document.querySelector('test-runtime');
+      while (!host.shadowRoot?.querySelector('#title') || !window.__state) await new Promise(resolve => setTimeout(resolve, 0));
+      const context = {
+        host,
+        root: host.shadowRoot,
+        state: window.__state,
+        runtime: window.WebComponentRuntime,
+        batch: window.__batch,
+      };
       const lines = [];
       let failed = 0;
-
       for (const [name, callback] of tests) {
         try {
           await callback(context);
           lines.push(`✓ ${name}`);
         } catch (error) {
           failed++;
-          lines.push(`✗ ${name}\n  ${error.message}`);
+          lines.push(`✗ ${name}\n  ${error.stack || error.message}`);
         }
       }
-
       document.querySelector('#results').textContent = lines.join('\n');
       document.body.dataset.tests = failed ? 'failed' : 'passed';
+      document.body.dataset.failed = String(failed);
       console.log(`${tests.length - failed}/${tests.length} tests passed`);
     })();
   </script>

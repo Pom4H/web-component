@@ -1,4 +1,4 @@
-import { Skein } from '../skein.js';
+import { Skein } from '../skein.min.js';
 import { highlight } from './highlight.js';
 
 Skein.define('skein-nav', `

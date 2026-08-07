@@ -1,0 +1,63 @@
+<script>
+  this.channels = [
+    { id:'temp', label:'CORE TEMP', value:62.4, unit:'°C', limit:78, drift:.17 },
+    { id:'flow', label:'FLOW', value:41.8, unit:'L/s', limit:57, drift:.11 },
+    { id:'load', label:'LOAD', value:73.1, unit:'%', limit:88, drift:.23 },
+    { id:'vibe', label:'VIBRATION', value:2.8, unit:'mm/s', limit:4.5, drift:.06 }
+  ]
+  this.selected = 'temp'
+  this.inspecting = computed(() => this.channels.find(channel => channel.id === this.selected))
+  this.alerts = computed(() => this.channels.filter(channel => channel.value > channel.limit).length)
+  this.pick = event => this.selected = event.currentTarget.dataset.id
+  this.shuffle = () => this.channels.sort(() => Math.random() - .5)
+
+  const timer = setInterval(() => {
+    for (const channel of this.channels) {
+      channel.value += (Math.random() - .48) * channel.drift
+      channel.value = Math.max(0, channel.value)
+    }
+  }, 180)
+  onCleanup(() => clearInterval(timer))
+</script>
+
+<section class="room">
+  <header>
+    <div><small>REACTOR / 07</small><h1>Signal room</h1></div>
+    <div class="status"><i></i><span>{alerts} alerts</span></div>
+  </header>
+
+  <div class="channels">
+    <button for={channels} key={id} data-id={id} @click={pick}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <em>{unit}</em>
+      <meter min="0" max={limit} .value={value}></meter>
+    </button>
+  </div>
+
+  <footer in={inspecting}>
+    <div><small>INSPECTING</small><b>{label}</b></div>
+    <div><strong>{value}</strong><span>{unit}</span></div>
+    <button @click={shuffle}>reorder channels ↝</button>
+  </footer>
+</section>
+
+<style>
+  :host { display:block; height:100%; background:#0b0e0d; color:#d6ff72; font-family:ui-monospace,monospace; }
+  .room { min-height:100%; padding:22px; box-sizing:border-box; background:radial-gradient(circle at 75% 15%,#26371c 0,transparent 36%),#0b0e0d; }
+  header, footer { display:flex; align-items:end; justify-content:space-between; gap:18px; }
+  h1 { margin:3px 0 0; color:#f3f5ea; font:800 clamp(28px,5vw,54px)/.9 system-ui; letter-spacing:-.06em; }
+  small { font-size:9px; letter-spacing:.16em; opacity:.55; }
+  .status { display:flex; gap:8px; align-items:center; font-size:10px; text-transform:uppercase; }
+  .status i { width:8px; aspect-ratio:1; border-radius:50%; background:currentColor; box-shadow:0 0 18px currentColor; }
+  .channels { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:28px 0 20px; }
+  .channels button { min-width:0; padding:14px; text-align:left; color:inherit; background:#d6ff7208; border:1px solid #d6ff7230; cursor:pointer; }
+  .channels span { display:block; font-size:9px; opacity:.55; letter-spacing:.08em; }
+  .channels strong { display:inline-block; margin-top:30px; color:#f3f5ea; font:750 clamp(22px,4vw,44px)/1 system-ui; letter-spacing:-.05em; }
+  .channels em { margin-left:4px; font-size:9px; font-style:normal; opacity:.6; }
+  meter { display:block; width:100%; height:3px; margin-top:12px; }
+  footer { border-top:1px solid #d6ff7230; padding-top:16px; color:#f3f5ea; }
+  footer div { display:grid; gap:3px; } footer b { font-size:12px; } footer strong { font-size:22px; }
+  footer button { border:1px solid #d6ff7260; color:#d6ff72; background:transparent; padding:8px 10px; cursor:pointer; font:10px ui-monospace,monospace; }
+  @media(max-width:600px){.channels{grid-template-columns:1fr 1fr}.channels strong{margin-top:15px}footer{align-items:center}}
+</style>

@@ -29,7 +29,7 @@ Skein.define('skein-nav', `
 Skein.define('skein-footer', `
 <footer>
   <div><strong>Skein</strong><span>native web, tightly woven.</span></div>
-  <div class="right"><a href="https://github.com/Pom4H/web-component">source</a><span>5.6 kB brotli</span><span>zero dependencies</span><span>2026</span></div>
+  <div class="right"><a href="https://github.com/Pom4H/web-component">source</a><span>4.6 kB brotli</span><span>zero dependencies</span><span>2026</span></div>
 </footer>
 <style>
   :host{display:block;border-top:1px solid var(--line,#d4d0c6);margin-top:80px}
@@ -80,20 +80,13 @@ for (const nav of document.querySelectorAll('skein-nav')) {
       if (attempts++ < 20) setTimeout(patch, 0);
       return;
     }
-    const rootLink = root.querySelector('[data-root]');
-    if (rootLink) rootLink.href = base.href;
+    root.querySelector('[data-root]').href = base.href;
     for (const link of root.querySelectorAll('[data-path]')) link.href = new URL(`${link.dataset.path}/`, base).href;
-    const gh = root.querySelector('.gh');
-    if (gh) gh.href = 'https://github.com/Pom4H/web-component';
   };
   patch();
 }
 
 for (const code of document.querySelectorAll('code[data-highlight]')) code.innerHTML = highlight(code.textContent);
-
-const copy = async value => {
-  await navigator.clipboard.writeText(value);
-};
 
 document.addEventListener('click', async event => {
   const button = event.target.closest('[data-copy]');
@@ -102,14 +95,9 @@ document.addEventListener('click', async event => {
   const target = selector ? document.querySelector(selector) : null;
   const value = target?.textContent || button.dataset.value || '';
   try {
-    await copy(value.trim());
+    await navigator.clipboard.writeText(value.trim());
     const before = button.textContent;
     button.textContent = 'Copied';
     setTimeout(() => button.textContent = before, 1200);
   } catch {}
 });
-
-const observer = new IntersectionObserver(entries => {
-  for (const entry of entries) if (entry.isIntersecting) entry.target.dataset.visible = 'true';
-}, { threshold: .12 });
-for (const node of document.querySelectorAll('[data-reveal]')) observer.observe(node);

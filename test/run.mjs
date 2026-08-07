@@ -36,7 +36,7 @@ const port = await new Promise((resolvePort, reject) => {
   });
 });
 
-const profile = await mkdtemp(join(tmpdir(), 'web-component-chrome-'));
+const profile = await mkdtemp(join(tmpdir(), 'skein-chrome-'));
 const browser = spawn(browserPath, [
   '--headless=new',
   '--no-sandbox',
@@ -121,6 +121,7 @@ const modules = {
   component: await readFile(join(root, 'runtime/component.js'), 'utf8'),
   entry: await readFile(join(root, 'skein.js'), 'utf8'),
 };
+const minRuntime = await readFile(join(root, 'skein.min.js'), 'utf8');
 
 async function loadRuntime(send) {
   const expression = `(async () => {
@@ -137,6 +138,20 @@ async function loadRuntime(send) {
   })()`;
   await evaluate(send, expression, { awaitPromise: true });
 }
+
+async function loadMinRuntime(send) {
+  await evaluate(send, `(async () => {
+    const url = URL.createObjectURL(new Blob([${JSON.stringify(minRuntime)}], { type: 'text/javascript' }));
+    await import(url);
+  })()`, { awaitPromise: true });
+}
+
+const safeScriptValue = value => JSON.stringify(value).replaceAll('<', '\\u003c');
+const playgroundSrcdoc = (componentSource, runtimeSource) => {
+  const component = safeScriptValue(componentSource);
+  const runtimeText = safeScriptValue(runtimeSource);
+  return `<!doctype html><html><head><meta charset="utf-8"><base href="https://example.test/playground/"></head><body><script>addEventListener('error',e=>parent.postMessage({type:'skein-error',message:e.error?.stack||e.message},'*'));addEventListener('unhandledrejection',e=>parent.postMessage({type:'skein-error',message:e.reason?.stack||String(e.reason)},'*'));<\/script><script type="module">try{const runtimeURL=URL.createObjectURL(new Blob([${runtimeText}],{type:'text/javascript'}));const {Skein}=await import(runtimeURL);Skein.define('play-ground',${component});const element=document.createElement('play-ground');document.body.append(element);await customElements.whenDefined('play-ground');await new Promise(resolve=>setTimeout(resolve,0));parent.postMessage({type:'skein-ready',text:element.shadowRoot?.textContent?.trim(),origin:location.origin},'*')}catch(error){parent.postMessage({type:'skein-error',message:error.stack||String(error)},'*')}<\/script></body></html>`;
+};
 
 const { examples: siteExamples } = await import(new URL('../site/examples.js', import.meta.url));
 const runtimeFixture = await readFile(join(root, 'test/runtime.html'), 'utf8');
@@ -170,16 +185,49 @@ try {
   }
   if (result.status !== 'passed') throw new Error(`${result.failed || '?'} browser tests failed`);
 
+  // Production bundle: tag exists before dynamic import, then source registration wins.
+  await newDocument(send, '<min-preexisting></min-preexisting>');
+  await loadMinRuntime(send);
+  await evaluate(send, `Skein.define('min-preexisting', '<script>this.value=7<\\/script><b id="min-value">{value}</b>')`);
+  let minResult;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    await sleep(20);
+    minResult = await evaluate(send, `({ text: document.querySelector('min-preexisting')?.shadowRoot?.querySelector('#min-value')?.textContent, legacyElement: typeof window.WebComponent, legacyRuntime: typeof window.WebComponentRuntime, skein: typeof window.Skein })`);
+    if (minResult.text) break;
+  }
+  if (minResult.text !== '7' || minResult.legacyElement !== 'undefined' || minResult.legacyRuntime !== 'undefined' || minResult.skein !== 'object') {
+    throw new Error(`Minified runtime smoke failed: ${JSON.stringify(minResult)}`);
+  }
+  console.log('min-runtime: passed');
+
+  // Playground regression: component source contains </script> and runs in an opaque-origin iframe.
+  await newDocument(send, '<iframe id="preview" sandbox="allow-scripts"></iframe>');
+  await evaluate(send, `window.__playgroundResult = null; addEventListener('message', event => { if (event.source === document.querySelector('#preview').contentWindow) window.__playgroundResult = event.data; });`);
+  const sandboxSource = '<script>this.count=0;this.up=()=>this.count++<\\/script><button @click={up}>clicked {count}</button>';
+  const srcdoc = playgroundSrcdoc(sandboxSource, minRuntime);
+  await evaluate(send, `document.querySelector('#preview').srcdoc = ${JSON.stringify(srcdoc)}`);
+  let playgroundResult;
+  for (let attempt = 0; attempt < 150; attempt++) {
+    await sleep(20);
+    playgroundResult = await evaluate(send, 'window.__playgroundResult');
+    if (playgroundResult) break;
+  }
+  if (playgroundResult?.type !== 'skein-ready' || playgroundResult.text !== 'clicked 0' || playgroundResult.origin !== 'null') {
+    throw new Error(`Playground sandbox failed: ${JSON.stringify(playgroundResult)}`);
+  }
+  console.log('playground-sandbox: passed');
+
   await newDocument(send, '<page-test></page-test>');
   await evaluate(send, `window.__files = ${JSON.stringify(legacyFiles)}; window.fetch = async url => { const path = new URL(String(url)).pathname.slice(1); return path in window.__files ? new Response(window.__files[path], { status: 200 }) : new Response('', { status: 404 }); };`);
   await loadRuntime(send);
   await sleep(300);
   const legacy = await evaluate(send, `(() => { const page = document.querySelector('page-test'); const root = page.shadowRoot; const fn = root?.querySelector('test-function'); const binding = root?.querySelector('test-binding'); const canvas = root?.querySelector('test-canvas'); return { page: !!root, buttons: fn?.shadowRoot?.querySelectorAll('button').length, binding: binding?.shadowRoot?.querySelector('h1')?.textContent, canvas: canvas?.shadowRoot?.querySelector('canvas')?.getAttribute('width') }; })()`);
   if (!legacy.page || legacy.buttons !== 99 || legacy.binding !== 'John Doe, 30' || legacy.canvas !== '500') {
-    throw new Error(`Legacy smoke failed: ${JSON.stringify(legacy)}`);
+    throw new Error(`Legacy example smoke failed: ${JSON.stringify(legacy)}`);
   }
+  console.log('legacy-examples: passed');
+
   if (exceptions.length) throw new Error(`Browser exceptions:\n${exceptions.join('\n')}`);
-  console.log('legacy-browser: passed');
 } finally {
   socket.close();
   browser.kill('SIGTERM');

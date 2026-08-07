@@ -1,146 +1,158 @@
 # Skein runtime architecture
 
-Load this file only when modifying the framework runtime, renderer, reactivity, lifecycle, compiler, tests or performance characteristics.
+Read this only when modifying Skein's renderer, reactivity, lifecycle, compiler, build or performance behavior.
 
 ## File map
 
 ```text
-skein.min.js             single-file production/CDN runtime
-skein.js                 readable public entry and bootstrap
-runtime/reactive.js      signals, computed, effects, scheduler, scopes, reactive Proxy, BindingScope
-runtime/template.js      compiler, DOM Parts, keyed lists, branches, View
-runtime/component.js     component loading, registration, SkeinElement lifecycle, script helpers
+skein.js                 readable public entry/bootstrap
+skein.min.js             generated single-file production entry
+runtime/reactive.js      dependency graph, scheduler, scopes, Proxy state, lexical lookup
+runtime/template.js      compiler, bindings, keyed lists, branches, View
+runtime/component.js     loading, registration, Custom Element lifecycle, script helpers
+tools/build.mjs          zero-dependency production bundler/minifier
+test/                    Node + real-Chrome tests
 ```
 
-There is no pre-Skein compatibility entry. The only public browser namespace is `window.Skein`.
+## Invariants
 
-## Runtime invariants
-
-Preserve all of these unless the task explicitly changes the architecture:
-
-1. Zero core dependencies.
+1. Zero runtime dependencies.
 2. No virtual DOM.
-3. No component-wide rerender after state changes.
-4. Component source is parsed/compiled once and cached.
-5. Reactive dependencies are discovered from actual reads.
-6. A state write invalidates only dependent observers.
-7. DOM Parts cache committed values and skip equal writes.
-8. Synchronous writes batch through the scheduler.
-9. Render effects settle before user effects.
-10. Dynamic DOM belongs to explicit reactive scopes.
-11. Keyed list operations preserve DOM identity when keys persist.
-12. Disconnect pauses; reconnect resumes. Disconnect alone is not permanent disposal.
-13. Permanent resource cleanup belongs to scope disposal.
-14. Native browser APIs are preferred over framework substitutes.
-15. `skein.min.js` must remain behaviorally equivalent to the readable source runtime.
+3. No component-wide rerender after state writes.
+4. Component source compiles once and is cached.
+5. Binding paths compile once, not on every reactive update.
+6. Dependencies come from actual property reads.
+7. Missing properties are trackable.
+8. Existing-property writes do not invalidate object iteration unnecessarily.
+9. Array structural changes, including direct length truncation, invalidate the required dependencies.
+10. Synchronous writes share one scheduler microtask.
+11. Render effects settle before user effects.
+12. Keyed lists preserve DOM identity when keys persist.
+13. Dynamic DOM belongs to explicit child scopes.
+14. Nested Skein elements are disposed when their owning view disappears.
+15. Disconnect pauses; explicit `dispose()` destroys.
+16. Native CSS, SVG, Canvas and browser lifecycle remain first-class.
 
 ## Reactive graph
 
-`ReactiveState` exposes deep Proxy objects for application ergonomics. Internally, state is tracked per target/property through cells.
+`ReactiveState` returns a deep Proxy directly. Per-object/property `Dep` nodes track observers; iteration has a separate dependency.
 
-Iteration is a separate dependency from property value reads. Adding/deleting properties should invalidate iteration; changing an existing property should not invalidate object-key consumers unnecessarily.
+Internal `Ref` values exist only where a mutable binding context/value is required, such as list `index` and replaced keyed records. They are not part of the public API.
 
-Arrays must notify both relevant index/property cells and structural consumers such as `length`/iteration when structure changes.
-
-`ComputedRef` is lazy and cached. It becomes dirty when a dependency invalidates it and propagates invalidation to its subscribers.
-
-`ReactiveEffect` tracks dynamic dependencies each run. Old dependencies are removed before rerun.
+`ComputedRef` is lazy and cached. `ReactiveEffect` removes old dynamic dependencies before each run.
 
 ## Scheduler
 
-There are separate render and user-effect queues.
+Two Sets preserve phase ordering:
 
 ```text
 state writes
--> invalidation
--> one queued microtask
--> exhaust render queue
--> run user effects
--> if a user effect dirties render work, return to render queue before continuing effects
+→ invalidation
+→ one queued microtask
+→ exhaust render queue
+→ run one user effect
+→ return to render queue if dirtied
+→ continue user effects
 ```
 
-Do not create one microtask per DOM binding.
+There is no public `batch()` because a JavaScript call stack already completes before the scheduled microtask can flush.
 
 ## Scope ownership
 
-`Scope` owns effects, computed values where appropriate, child scopes, cleanup callbacks and an AbortController/AbortSignal.
+A `Scope` owns child scopes and a single resource list containing effects/computed values and cleanup callbacks. Resource arrays and child Sets are allocated lazily.
 
-Lists and conditional branches create child scopes. Removing one dynamic view must dispose exactly its subtree without touching siblings.
+The `AbortController` is also lazy. Declarative `@event` listeners use deterministic scope cleanup with `removeEventListener` so list rows do not allocate one AbortController per event-bearing item. Component scripts receive a real `abortSignal` only if their source references that helper.
 
 ## Template compilation
 
-`CompiledTemplate` analyzes real DOM once and stores instructions that point to dynamic nodes by stable DOM path in the cloned template.
+The compiler operates on real DOM and emits compact numeric instruction tuples for:
 
-Current specialized Parts:
+- text
+- attribute
+- boolean attribute
+- property
+- event
+- list
+- branch
 
-- TextPart
-- AttributePart
-- PropertyPart
-- BooleanPart
-- EventPart
-- ListPart
-- BranchPart
+Expressions are precompiled to path arrays. `<style>` contents are deliberately opaque to the binding parser so CSS braces remain CSS.
 
-Do not collapse these into one generic string renderer. Their DOM semantics are intentionally different.
+Structural list/branch nodes use one comment anchor each. Instructions instantiate in reverse order so synchronous structural insertion cannot invalidate paths needed by later instructions.
+
+## Binding lookup
+
+`BindingScope` performs direct lexical lookup rather than allocating a `frames()` array per read. Context chains are resolved only when `in={...}` is present.
+
+A present property with value `undefined` counts as found and shadows outer scopes.
 
 ## Keyed reconciliation
 
-`ListPart` stores records by identity/key and an ordered list of records.
+`ListPart` maintains both `Map<key, record>` and ordered records.
 
-On update:
+On structural update:
 
-- reuse records whose keys still exist;
-- update their item context and reactive index;
-- instantiate only unseen keys;
-- dispose only removed keys;
-- move existing node ranges into new order;
-- use `moveBefore()` where available, otherwise `insertBefore()`.
+- existing keys reuse views;
+- record context and reactive index update;
+- unseen keys instantiate new scoped views;
+- removed records dispose exactly their view;
+- surviving node ranges move into final order;
+- `moveBefore()` is used when available, otherwise `insertBefore()`.
 
-Never clear the whole list range as the normal reconciliation strategy. DOM identity and local browser state must survive reorder.
+Key expressions resolve directly against the item rather than allocating a temporary binding scope.
 
 ## Component lifecycle
 
-A `SkeinElement` mounts once per registered source generation.
+`SkeinElement` owns state, current root Scope/View and mount generation.
 
-`connectedCallback()` mounts or resumes. `disconnectedCallback()` pauses the root scope. `connectedMoveCallback()` resumes state-preserving moves when supported. `dispose()` is permanent teardown.
+- `connectedCallback()` mounts or resumes;
+- `disconnectedCallback()` pauses and removes the element from the connected-instance registry;
+- `connectedMoveCallback()` resumes state-preserving moves;
+- `dispose()` is permanent teardown.
 
-`reload()` tears down the current reactive view without permanently disposing the custom element and mounts the latest registered source. `Skein.define(tag, source)` uses this to update already-existing Skein elements. This is important for playground/dynamic registration.
+The connected-instance registry lets `Skein.define()` recover already-created elements, including nested elements in Shadow DOM, without permanently retaining disconnected elements.
 
-Automatic document discovery is deferred by one task so a dynamic-import caller can run `Skein.define()` before an unknown custom tag falls back to file loading. Do not reintroduce a microtask bootstrap race.
+## Script execution
 
-## Component scripts
+Component scripts currently use `AsyncFunction` with these fixed injected names:
 
-Component scripts currently use `AsyncFunction` with injected helpers, so strict CSP still requires `unsafe-eval`.
+```text
+computed
+effect
+onCleanup
+host
+abortSignal
+```
 
-Helpers:
+`AsyncFunction` is the current strict-CSP limitation. If changing evaluation, update docs/tests/LLM context together.
 
-- computed
-- effect
-- onCleanup
-- batch
-- signal
-- untrack
-- host
-- abortSignal
+## Production build
 
-If changing script evaluation, preserve these semantics or update tests/docs/llms context together.
+`tools/build.mjs` concatenates the four readable modules, removes module-only syntax, lexically minifies, and mangles known internal identifiers. It must never replace text inside string or regex literals.
 
-## Production bundle
-
-`skein.min.js` is the actual Pages/CDN runtime. Current size is 21.4 kB raw, 6.1 kB gzip, 5.6 kB Brotli.
-
-Do not optimize only the readable modules and forget the production artifact. Any public runtime fix must be reflected in `skein.min.js` and verified in real Chrome.
-
-## Tests
+The generated file exports `Skein` and is also exposed as `window.Skein` by the entry source.
 
 Run:
 
 ```bash
-node test/run.mjs
+node tools/build.mjs
+node tools/build.mjs --check
 ```
 
-The suite intentionally uses no test packages. It drives real Chrome via Chrome DevTools Protocol and also tests the reactive core in Node.
+The test suite imports `skein.min.js` directly and exercises bootstrap strings, SVG/Canvas/style behavior, late nested registration and the Playground sandbox. Do not accept a build optimization that only passes readable-module tests.
 
-When changing rendering or reconciliation, cover DOM identity, local form state preservation, nested scope disposal, scheduler batching, reconnect behavior, dynamic registration, the production minified bundle, creative examples and performance smoke correctness.
+## Performance discipline
 
-Do not turn machine-dependent timing values into brittle pass/fail thresholds.
+Measure correctness and allocations before chasing a bundle-size milestone. Current intentional optimizations include:
+
+- lazy Scope resources;
+- lazy AbortController;
+- no production diagnostics counters;
+- no public low-level signal wrapper API;
+- compiled property paths;
+- compact instruction tuples;
+- direct keyed-item key resolution;
+- no path-frame allocation on ordinary reads;
+- no renderer-wide DOM traversal at update time;
+- no legacy helper properties attached to every rendered node.
+
+Do not remove keyed reconciliation, computed values, scoped cleanup or lifecycle correctness just to cross an arbitrary byte threshold.

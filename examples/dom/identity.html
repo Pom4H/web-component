@@ -1,0 +1,30 @@
+<script>
+  this.people = [
+    { id: 1, name: 'Mina', role: 'type' },
+    { id: 2, name: 'Noah', role: 'motion' },
+    { id: 3, name: 'Iris', role: 'canvas' },
+    { id: 4, name: 'Lio', role: 'svg' }
+  ]
+  this.flip = () => this.people.reverse()
+</script>
+
+<section>
+  <header><strong>identity / preserved</strong><button @click={flip}>reverse</button></header>
+  <label for={people} key={id}>
+    <b>{name}</b><span>{role}</span><input placeholder="type here, then reverse" />
+  </label>
+</section>
+
+<style>
+  :host { display:block; height:100%; background:#f5f1e7; color:#111; font:14px system-ui; }
+  section { padding:22px; }
+  header, label { display:grid; grid-template-columns:1fr auto; gap:12px; align-items:center; }
+  header { margin-bottom:18px; }
+  header strong { font:700 11px ui-monospace, monospace; letter-spacing:.12em; text-transform:uppercase; }
+  button { border:1px solid #111; background:#111; color:#fff; border-radius:999px; padding:8px 14px; cursor:pointer; }
+  label { grid-template-columns:70px 70px 1fr; border-top:1px solid #111; padding:12px 0; }
+  b { font-size:20px; }
+  span { color:#7257ff; font:11px ui-monospace, monospace; }
+  input { min-width:0; border:0; border-bottom:1px solid #aaa; background:transparent; padding:8px 2px; outline:none; }
+  input:focus { border-color:#7257ff; }
+</style>

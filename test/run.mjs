@@ -127,7 +127,6 @@ const modules = {
   entry: await readFile(join(root, 'skein.js'), 'utf8'),
 };
 const minRuntime = await readFile(join(root, 'skein.min.js'), 'utf8');
-
 async function loadReadable(send) {
   const expression = `(async () => {
     const reactiveURL = URL.createObjectURL(new Blob([${JSON.stringify(modules.reactive)}], { type: 'text/javascript' }));
@@ -203,6 +202,27 @@ try {
   prod = await evaluate(send, `({ text:document.querySelector('prod-test').shadowRoot.querySelector('#up').textContent, cx:document.querySelector('prod-test').shadowRoot.querySelector('#dot').getAttribute('cx') })`);
   if (prod.text !== '2/4' || prod.cx !== '2') throw new Error(`Production update failed: ${JSON.stringify(prod)}`);
   console.log('min-runtime: passed');
+
+  // Production bundle composition contract: property input down, CustomEvent up.
+  await newDocument(send, '');
+  await evaluate(send, `window.fetch=async()=>new Response('',{status:404});`);
+  await loadMin(send, `
+    Skein.define('prod-input-child','<script>this.value=input("value",0);this.raise=()=>host.dispatchEvent(new CustomEvent("value-change",{detail:{value:Number(this.value)+1},bubbles:true,composed:true}))<\\/script><button id="raise" @click={raise}>{value}</button>');
+    Skein.define('prod-input-parent','<script>this.value=7;this.changed=e=>this.value=e.detail.value<\\/script><prod-input-child id="child" .value={value} @value-change={changed}></prod-input-child><b id="parent">{value}</b>');
+    document.body.append(document.createElement('prod-input-parent'));
+  `);
+  let contract;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    await sleep(20);
+    contract = await evaluate(send, `(() => { const parent=document.querySelector('prod-input-parent');const child=parent?.shadowRoot?.querySelector('#child');return {parent:parent?.shadowRoot?.querySelector('#parent')?.textContent,child:child?.shadowRoot?.querySelector('#raise')?.textContent};})()`);
+    if (contract.child) break;
+  }
+  if (contract.parent !== '7' || contract.child !== '7') throw new Error(`Production input mount failed: ${JSON.stringify(contract)}`);
+  await evaluate(send, `document.querySelector('prod-input-parent').shadowRoot.querySelector('#child').shadowRoot.querySelector('#raise').click()`);
+  await sleep(20);
+  contract = await evaluate(send, `(() => { const parent=document.querySelector('prod-input-parent');const child=parent.shadowRoot.querySelector('#child');return {parent:parent.shadowRoot.querySelector('#parent').textContent,child:child.shadowRoot.querySelector('#raise').textContent};})()`);
+  if (contract.parent !== '8' || contract.child !== '8') throw new Error(`Production input/event update failed: ${JSON.stringify(contract)}`);
+  console.log('min-composition: passed');
 
   // Minifier regression: strings such as template[skein] must never be mangled.
   await newDocument(send, '<min-inline></min-inline><template skein="min-inline"><script>this.word="small"<\/script><b id="word">{word}</b></template>');

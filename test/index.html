@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <base href="../">
-  <title>WebComponent Runtime v2 tests</title>
-  <script type="module" src="web-component.js"></script>
+  <title>Skein runtime tests</title>
+  <script type="module" src="skein.js"></script>
 </head>
 <body>
   <test-runtime></test-runtime>
@@ -241,7 +241,7 @@
         host,
         root: host.shadowRoot,
         state: window.__state,
-        runtime: window.WebComponentRuntime,
+        runtime: window.Skein,
         batch: window.__batch,
       };
       const lines = [];

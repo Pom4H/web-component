@@ -1,0 +1,44 @@
+<script>
+  this.label = 'move'
+  let frame
+  let mouse = { x: 160, y: 110 }
+  const dots = Array.from({ length: 52 }, (_, i) => ({
+    x: (i * 83) % 620, y: (i * 47) % 360, vx: Math.sin(i) * .35, vy: Math.cos(i * 2) * .35
+  }))
+  this.point = event => {
+    const box = event.currentTarget.getBoundingClientRect()
+    mouse = { x:(event.clientX-box.left)*620/box.width, y:(event.clientY-box.top)*360/box.height }
+    this.label = Math.round(mouse.x) + ' × ' + Math.round(mouse.y)
+  }
+  queueMicrotask(() => {
+    const canvas = host.shadowRoot.querySelector('canvas')
+    const ctx = canvas.getContext('2d')
+    const draw = () => {
+      ctx.fillStyle = '#090909'; ctx.fillRect(0,0,620,360)
+      for (const p of dots) {
+        const dx = mouse.x-p.x, dy = mouse.y-p.y, d = Math.hypot(dx,dy) || 1
+        if (d < 130) { p.vx -= dx/d*.012; p.vy -= dy/d*.012 }
+        p.vx *= .99; p.vy *= .99; p.x += p.vx; p.y += p.vy
+        if (p.x < 0 || p.x > 620) p.vx *= -1
+        if (p.y < 0 || p.y > 360) p.vy *= -1
+        ctx.beginPath(); ctx.arc(p.x,p.y,2.2,0,Math.PI*2)
+        ctx.fillStyle = d < 130 ? '#ff684d' : '#f7f2e8'; ctx.fill()
+      }
+      frame = requestAnimationFrame(draw)
+    }
+    draw()
+  })
+  onCleanup(() => cancelAnimationFrame(frame))
+</script>
+
+<div class="frame">
+  <canvas width="620" height="360" @pointermove={point}></canvas>
+  <span>{label}</span>
+</div>
+
+<style>
+  :host { display:grid; place-items:center; height:100%; background:#090909; }
+  .frame { position:relative; width:100%; height:100%; min-height:340px; }
+  canvas { width:100%; height:100%; display:block; }
+  span { position:absolute; top:14px; left:16px; color:#ff684d; font:12px ui-monospace, monospace; }
+</style>

@@ -1,34 +1,36 @@
 # Skein
 
-> Skein is a zero-dependency, HTML-first Web Components runtime with fine-grained reactivity. It is designed for creative CSS, SVG, Canvas and native-DOM sites where HTML remains the document and Skein binds only dynamic data.
+> Skein is a tiny zero-dependency, HTML-first Web Components runtime with fine-grained reactivity for creative CSS, SVG, Canvas and native-DOM sites.
 
-Skein has no virtual DOM, build step, CLI, npm dependency, or required server runtime. The production browser entry is `skein.min.js`: 21.4 kB raw, 6.1 kB gzip, 5.6 kB Brotli. State is ordinary JavaScript through a reactive Proxy, templates are real HTML, and updates target exact DOM parts.
+Current runtime: Skein 0.5. Production entry: `skein.min.js` — 14.0 kB raw, 5.1 kB gzip, 4.6 kB Brotli. No virtual DOM, npm dependency or required build step.
 
-Important guidance for code generation: keep static, semantic, and SEO-critical content in ordinary HTML whenever possible. Use Skein for interactive regions. Binding expressions inside `{...}` are property paths, not arbitrary JavaScript; put derived logic in `computed()`. Prefer stable `key={id}` for lists. Clean up resources with `onCleanup()` or the provided `abortSignal`.
+Important code-generation rules: keep static/semantic/SEO-critical content in ordinary HTML; use Skein for interactive regions. Bindings inside `{...}` are property paths. Use `computed()` for derived state, stable `key={id}` for application lists, `@event={handler}` for events, and `onCleanup()` / `abortSignal` for owned resources.
+
+Public API: `Skein.version` and `Skein.define(tag, source)`. Component-script helpers: `computed`, `effect`, `onCleanup`, `host`, `abortSignal`. Do not use removed v0.4-era low-level APIs such as `batch`, `signal`, `untrack`, `Skein.stats` or `Skein.flush`.
 
 ## Start
 
-- [60-second start](https://pom4h.github.io/web-component/start/): The smallest one-file Skein app using `<template skein>` and the GitHub-backed CDN entry.
-- [README](https://github.com/Pom4H/web-component/blob/main/README.md): Project overview, API, rendering model, lifecycle, tests, limitations, and CDN usage.
+- [60-second start](https://pom4h.github.io/web-component/start/): one-file `<template skein>` app with no npm or build step.
+- [README](https://github.com/Pom4H/web-component/blob/main/README.md): framework overview, API, rendering model, lifecycle, build and tests.
 
 ## Reference
 
-- [Documentation](https://pom4h.github.io/web-component/docs/): Human-readable reference for state, bindings, lists, conditions, computed values, effects, lifecycle and CDN usage.
-- [Full LLM context](https://pom4h.github.io/web-component/llms-full.txt): Compact machine-oriented Skein reference including syntax, architectural invariants, SEO guidance, creative rendering patterns and agent rules.
-- [AI and agents](https://pom4h.github.io/web-component/ai/): Entry point for AI coding tools and agents.
+- [Documentation](https://pom4h.github.io/web-component/docs/): human-readable Skein 0.5 reference.
+- [Full LLM context](https://pom4h.github.io/web-component/llms-full.txt): complete compact machine-oriented syntax and architecture model.
+- [AI and agents](https://pom4h.github.io/web-component/ai/): agent entry point.
 
 ## Examples
 
-- [Creative examples](https://pom4h.github.io/web-component/examples/): Live CSS, SVG, Canvas and keyed-DOM examples.
-- [Playground](https://pom4h.github.io/web-component/playground/): Sandboxed one-file component editor with live preview.
+- [Creative examples](https://pom4h.github.io/web-component/examples/): live CSS, SVG, Canvas and keyed-DOM examples.
+- [Playground](https://pom4h.github.io/web-component/playground/): zero-dependency one-file component editor with sandboxed live preview.
 
 ## Agent resources
 
-- [Agent Skill](https://raw.githubusercontent.com/Pom4H/web-component/main/.agents/skills/skein/SKILL.md): Portable Agent Skills instructions for building and modifying Skein applications.
-- [Repository agent instructions](https://github.com/Pom4H/web-component/blob/main/AGENTS.md): Project-level instructions for coding agents working inside the Skein repository.
+- [Agent Skill](https://raw.githubusercontent.com/Pom4H/web-component/main/.agents/skills/skein/SKILL.md): portable instructions for Skein coding tasks.
+- [Repository agent instructions](https://github.com/Pom4H/web-component/blob/main/AGENTS.md): rules for modifying the framework itself.
 
-## Optional
+## Source
 
-- [Minified runtime](https://cdn.jsdelivr.net/gh/Pom4H/web-component@main/skein.min.js): Single-file production/CDN runtime.
-- [Readable runtime source](https://github.com/Pom4H/web-component/tree/main/runtime): Fine-grained signals, template compiler, DOM parts, keyed reconciliation and component lifecycle implementation.
-- [Tests](https://github.com/Pom4H/web-component/tree/main/test): Zero-dependency Node and real-Chrome test suite.
+- [Runtime source](https://github.com/Pom4H/web-component/tree/main/runtime): fine-grained reactivity, compiler, keyed reconciliation and lifecycle.
+- [Production build](https://github.com/Pom4H/web-component/blob/main/tools/build.mjs): zero-dependency bundler/minifier for `skein.min.js`.
+- [Tests](https://github.com/Pom4H/web-component/tree/main/test): Node + real-Chrome zero-dependency test suite.

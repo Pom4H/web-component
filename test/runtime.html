@@ -9,24 +9,28 @@
   ];
   this.statuses = [{ id: 'ready', title: 'Ready' }];
   this.show = true;
+  this.lifeItems = [{ id: 1 }];
+  this.lifeBranch = true;
   this.enabled = true;
   this.total = computed(() => this.count * 2);
   this.increment = () => this.count++;
-  this.cleanupRuns = 0;
-  effect(() => { window.__effectCount = this.count; });
+  effect(() => {
+    this.count;
+    window.__effectRuns = (window.__effectRuns || 0) + 1;
+  });
   onCleanup(() => { window.__cleanupRuns = (window.__cleanupRuns || 0) + 1; });
   window.__state = this;
   window.__host = host;
-  window.__batch = batch;
 </script>
 
 <h1 id="title">Hello {count}</h1>
 <p id="computed">{total}</p>
+<p id="later">{later}</p>
 <p id="nested" data-name="user-{name}" in={user}>{name}</p>
-<p id="city" in={user} data-city="{address.city}">{address.city}</p>
+<div in={user}><p id="city" in={address} data-city="{city}">{city}</p></div>
 <label id="native-for" for="real-input">Name</label>
 <input id="real-input" .value={count} ?disabled={enabled}>
-<button id="event" onclick={increment}>increment</button>
+<button id="event" @click={increment}>increment</button>
 
 <ul id="items">
   <li for={items} key={id} data-id={id}>
@@ -38,3 +42,11 @@
 </ul>
 
 <section id="branch" if={show}>Visible {count}</section>
+<div id="life-list"><row-life for={lifeItems} key={id}></row-life></div>
+<section id="life-branch" if={lifeBranch}><row-life></row-life></section>
+<row-life id="root-life"></row-life>
+
+<style id="style-test">
+  #title { color: rgb(1 2 3); }
+  @supports (display: grid) { #title { display: block; } }
+</style>

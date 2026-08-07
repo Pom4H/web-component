@@ -1,26 +1,61 @@
-export const SIGNAL_REF = Symbol('Skein.signal');
-export const RAW = Symbol('Skein.raw');
+const ITERATE = Symbol();
+const MISS = Symbol();
 
-export const isObject = value => typeof value === 'object' && value !== null;
-export const hasOwnOrInherited = (value, key) => value != null && (typeof value === 'object' || typeof value === 'function') && key in value;
-export const toText = value => value == null ? '' : String(value);
+let activeObserver = null;
+
+const clearDependencies = observer => {
+  for (const source of observer.dependencies) source.subscribers.delete(observer);
+  observer.dependencies.clear();
+};
+
+class Dep {
+  subscribers = new Set();
+
+  track() {
+    if (!activeObserver || activeObserver === this) return;
+    this.subscribers.add(activeObserver);
+    activeObserver.dependencies.add(this);
+  }
+
+  notify() {
+    for (const subscriber of this.subscribers) subscriber.invalidate();
+  }
+}
+
+export class Ref extends Dep {
+  constructor(value) {
+    super();
+    this.current = value;
+  }
+
+  get() {
+    this.track();
+    return this.current;
+  }
+
+  set(value) {
+    if (Object.is(this.current, value)) return false;
+    this.current = value;
+    this.notify();
+  }
+}
+
+export const unwrap = value => value instanceof Dep ? value.get() : value;
 
 export class Scheduler {
   static renderQueue = new Set();
   static effectQueue = new Set();
   static pending = false;
-  static batchDepth = 0;
   static flushing = false;
-  static stats = { flushes: 0, effectRuns: 0, commits: 0, listCreates: 0, listMoves: 0, listRemoves: 0 };
 
   static enqueue(effect) {
     if (!effect.active || effect.scope?.paused) return;
-    (effect.phase === 'render' ? this.renderQueue : this.effectQueue).add(effect);
-    this.#request();
+    (effect.render ? this.renderQueue : this.effectQueue).add(effect);
+    this.request();
   }
 
-  static #request() {
-    if (this.pending || this.batchDepth || this.flushing) return;
+  static request() {
+    if (this.pending || this.flushing) return;
     this.pending = true;
     queueMicrotask(() => this.flush());
   }
@@ -29,98 +64,46 @@ export class Scheduler {
     if (this.flushing) return;
     this.pending = false;
     this.flushing = true;
-    this.stats.flushes++;
     try {
       while (this.renderQueue.size || this.effectQueue.size) {
-        while (this.renderQueue.size) {
-          const queue = [...this.renderQueue];
-          this.renderQueue.clear();
-          for (const effect of queue) effect.run();
+        for (const effect of this.renderQueue) {
+          this.renderQueue.delete(effect);
+          effect.run();
         }
-        if (this.effectQueue.size) {
-          const [effect] = this.effectQueue;
+        for (const effect of this.effectQueue) {
           this.effectQueue.delete(effect);
           effect.run();
+          break;
         }
       }
     } finally {
       this.flushing = false;
-      if (this.renderQueue.size || this.effectQueue.size) this.#request();
+      if (this.renderQueue.size || this.effectQueue.size) this.request();
     }
   }
-
-  static batch(callback) {
-    this.batchDepth++;
-    try {
-      return callback();
-    } finally {
-      this.batchDepth--;
-      if (!this.batchDepth && (this.renderQueue.size || this.effectQueue.size)) this.#request();
-    }
-  }
-
-  static commit() { this.stats.commits++; }
 }
 
-let activeObserver = null;
-
-const track = source => {
-  if (!activeObserver || activeObserver === source) return;
-  source.subscribers.add(activeObserver);
-  activeObserver.dependencies.add(source);
-};
-
-const cleanupDependencies = observer => {
-  for (const source of observer.dependencies) source.subscribers.delete(observer);
-  observer.dependencies.clear();
-};
-
-class Cell {
-  subscribers = new Set();
-  constructor(value) { this.value = value; }
-  get() { track(this); return this.value; }
-  set(value) {
-    if (Object.is(this.value, value)) return false;
-    this.value = value;
-    for (const subscriber of [...this.subscribers]) subscriber.invalidate();
-    return true;
-  }
-}
-
-export class SignalRef {
-  [SIGNAL_REF] = true;
-  constructor(value) { this.cell = new Cell(value); }
-  get value() { return this.cell.get(); }
-  set value(value) { this.cell.set(value); }
-  get() { return this.cell.get(); }
-  set(value) { this.cell.set(value); }
-  valueOf() { return this.get(); }
-  toString() { return toText(this.get()); }
-}
-
-export class ComputedRef {
-  [SIGNAL_REF] = true;
-  subscribers = new Set();
+export class ComputedRef extends Dep {
   dependencies = new Set();
   dirty = true;
   disposed = false;
 
   constructor(callback, scope) {
+    super();
     this.callback = callback;
     this.scope = scope;
     scope?.own(this);
   }
 
-  get value() { return this.get(); }
   get() {
-    track(this);
-    if (this.dirty) this.#compute();
+    this.track();
+    if (this.dirty) this.compute();
     return this.cached;
   }
 
-  #compute() {
+  compute() {
     if (this.disposed) return;
-    cleanupDependencies(this);
+    clearDependencies(this);
     const previous = activeObserver;
     activeObserver = this;
     try {
@@ -134,19 +117,15 @@ export class ComputedRef {
   invalidate() {
     if (this.dirty || this.disposed) return;
     this.dirty = true;
-    for (const subscriber of [...this.subscribers]) subscriber.invalidate();
+    this.notify();
   }
 
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
-    cleanupDependencies(this);
+    clearDependencies(this);
     this.subscribers.clear();
-    this.scope?.owned.delete(this);
   }
-
-  valueOf() { return this.get(); }
-  toString() { return toText(this.get()); }
 }
 
 export class ReactiveEffect {
@@ -154,10 +133,10 @@ export class ReactiveEffect {
   active = true;
   dirty = false;
 
-  constructor(callback, scope, phase = 'effect') {
+  constructor(callback, scope, render = false) {
     this.callback = callback;
     this.scope = scope;
-    this.phase = phase;
+    this.render = render;
     scope?.own(this);
     if (scope?.paused) this.dirty = true;
     else this.run();
@@ -172,10 +151,9 @@ export class ReactiveEffect {
   run() {
     if (!this.active || this.scope?.paused) return;
     this.dirty = false;
-    cleanupDependencies(this);
+    clearDependencies(this);
     const previous = activeObserver;
     activeObserver = this;
-    Scheduler.stats.effectRuns++;
     try {
       this.callback();
     } finally {
@@ -186,52 +164,48 @@ export class ReactiveEffect {
   dispose() {
     if (!this.active) return;
     this.active = false;
-    cleanupDependencies(this);
+    clearDependencies(this);
     Scheduler.renderQueue.delete(this);
     Scheduler.effectQueue.delete(this);
-    this.scope?.owned.delete(this);
   }
 }
 
 export class Scope {
-  children = new Set();
-  owned = new Set();
-  cleanups = new Set();
+  children = null;
+  owned = null;
   paused = false;
   disposed = false;
 
   constructor(parent = null) {
     this.parent = parent;
-    this.controller = new AbortController();
-    parent?.children.add(this);
+    this.controller = null;
+    if (parent) (parent.children ||= new Set()).add(this);
   }
 
-  get signal() { return this.controller.signal; }
+  get signal() { return (this.controller ||= new AbortController())['signal']; }
   child() { return new Scope(this); }
 
   own(value) {
     if (this.disposed) value.dispose?.();
-    else this.owned.add(value);
-    return value;
+    else (this.owned ||= []).push(value);
   }
 
   cleanup(callback) {
     if (this.disposed) callback();
-    else this.cleanups.add(callback);
-    return callback;
+    else (this.owned ||= []).push(callback);
   }
 
   pause() {
     if (this.disposed || this.paused) return;
     this.paused = true;
-    for (const child of this.children) child.pause();
+    if (this.children) for (const child of this.children) child.pause();
   }
 
   resume() {
     if (this.disposed || !this.paused) return;
     this.paused = false;
-    for (const child of this.children) child.resume();
-    for (const owned of this.owned) {
+    if (this.children) for (const child of this.children) child.resume();
+    if (this.owned) for (const owned of this.owned) {
       if (owned instanceof ReactiveEffect && owned.dirty) Scheduler.enqueue(owned);
     }
   }
@@ -239,142 +213,154 @@ export class Scope {
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
-    this.controller.abort();
-    for (const child of [...this.children]) child.dispose();
-    for (const owned of [...this.owned]) owned.dispose?.();
-    for (const cleanup of [...this.cleanups]) {
-      try { cleanup(); } catch (error) { queueMicrotask(() => { throw error; }); }
+    this.controller?.abort();
+    if (this.children) for (const child of this.children) child.dispose();
+    if (this.owned) {
+      for (const owned of this.owned) if (typeof owned !== 'function') owned.dispose?.();
+      for (const cleanup of this.owned) if (typeof cleanup === 'function') {
+        try { cleanup(); }
+        catch (error) { queueMicrotask(() => { throw error; }); }
+      }
     }
-    this.children.clear();
-    this.owned.clear();
-    this.cleanups.clear();
-    this.parent?.children.delete(this);
+    this.children?.clear();
+    this.children = this.owned = null;
+    this.parent?.children?.delete(this);
   }
 }
 
-export const unwrap = value => value?.[SIGNAL_REF] ? value.get() : value;
+const owns = Object.hasOwn;
 
 export class ReactiveState {
-  #cells = new WeakMap();
+  #deps = new WeakMap();
   #proxies = new WeakMap();
-  #rawByProxy = new WeakMap();
-  #iterate = Symbol('iterate');
+  #raw = new WeakMap();
 
-  constructor(value = {}) { this.value = this.#reactive(value); }
-  raw(value) { return this.#rawByProxy.get(value) || value; }
-
-  #cell(target, property) {
-    let map = this.#cells.get(target);
-    if (!map) this.#cells.set(target, map = new Map());
-    if (!map.has(property)) map.set(property, new Cell(target[property]));
-    return map.get(property);
+  constructor(value = {}) {
+    return this.reactive(value);
   }
 
-  #reactive(target) {
-    if (!isObject(target)) return target;
-    if (this.#rawByProxy.has(target)) return target;
-    if (this.#proxies.has(target)) return this.#proxies.get(target);
+  raw(value) {
+    return this.#raw.get(value) || value;
+  }
+
+  dep(target, property) {
+    let map = this.#deps.get(target);
+    if (!map) this.#deps.set(target, map = new Map());
+    let dep = map.get(property);
+    if (!dep) map.set(property, dep = new Dep());
+    return dep;
+  }
+
+  reactive(target) {
+    if (target === null || typeof target !== 'object') return target;
+    if (this.#raw.has(target)) return target;
+    const cached = this.#proxies.get(target);
+    if (cached) return cached;
 
     const proxy = new Proxy(target, {
       get: (target, property, receiver) => {
-        if (property === RAW) return target;
         const value = Reflect.get(target, property, receiver);
-        if (typeof property !== 'symbol') this.#cell(target, property).get();
-        return this.#reactive(unwrap(value));
+        if (typeof property !== 'symbol') this.dep(target, property).track();
+        return this.reactive(unwrap(value));
       },
       set: (target, property, value, receiver) => {
-        const had = Reflect.has(target, property);
+        const had = owns(target, property);
         const previous = Reflect.get(target, property, receiver);
-        const previousLength = Array.isArray(target) ? target.length : null;
+        const previousLength = Array.isArray(target) ? target.length : -1;
         const raw = this.raw(value);
         const result = Reflect.set(target, property, raw, receiver);
-        if (!Object.is(previous, raw)) {
-          this.#cell(target, property).set(raw);
-          if (!had) this.#cell(target, this.#iterate).set({});
+        if (Object.is(previous, raw)) return result;
+
+        this.dep(target, property).notify();
+        let structural = !had;
+        if (Array.isArray(target) && target.length !== previousLength) {
+          if (property !== 'length') this.dep(target, 'length').notify();
+          else if (raw < previousLength) {
+            const deps = this.#deps.get(target);
+            if (deps) for (const [key, dep] of deps) if (typeof key !== 'symbol' && +key >= raw) dep.notify();
+          }
+          structural = true;
         }
-        if (Array.isArray(target) && target.length !== previousLength) this.#cell(target, 'length').set(target.length);
+        if (structural) this.dep(target, ITERATE).notify();
         return result;
       },
       deleteProperty: (target, property) => {
-        if (!Reflect.has(target, property)) return true;
+        if (!owns(target, property)) return true;
         const result = Reflect.deleteProperty(target, property);
-        this.#cell(target, property).set(undefined);
-        this.#cell(target, this.#iterate).set({});
+        this.dep(target, property).notify();
+        this.dep(target, ITERATE).notify();
         return result;
       },
       ownKeys: target => {
-        this.#cell(target, this.#iterate).get();
+        this.dep(target, ITERATE).track();
         return Reflect.ownKeys(target);
-      },
-      has: (target, property) => {
-        if (typeof property !== 'symbol') this.#cell(target, property).get();
-        return Reflect.has(target, property);
       },
     });
 
     this.#proxies.set(target, proxy);
-    this.#rawByProxy.set(proxy, target);
+    this.#raw.set(proxy, target);
     return proxy;
   }
 }
 
+export const compilePath = expression => expression.match(/[^.\s]+/g) || [];
+
+const read = (value, key) => {
+  if (value == null) return MISS;
+  const type = typeof value;
+  if (type !== 'object' && type !== 'function') return MISS;
+  const result = value[key];
+  return key in value ? result : MISS;
+};
+
+const follow = (value, path, start = 1) => {
+  value = unwrap(value);
+  for (let index = start; index < path.length; index++) {
+    if (value == null) return undefined;
+    value = unwrap(value[path[index]]);
+  }
+  return value;
+};
+
 export class BindingScope {
-  constructor(rootState, context = rootState, parent = null, locals = null) {
+  constructor(rootState, context = rootState, parent = null, locals = null, mutable = false) {
     this.rootState = rootState;
-    this.contextCell = new Cell(context);
+    this.contextValue = mutable ? new Ref(context) : context;
     this.parent = parent;
-    this.locals = locals || Object.create(null);
+    this.locals = locals;
   }
 
-  setContext(value) { this.contextCell.set(value); }
-  context() { return this.contextCell.get(); }
+  setContext(value) { this.contextValue.set(value); }
+  context() { return unwrap(this.contextValue); }
 
-  frames() {
-    const frames = [];
-    for (let scope = this; scope; scope = scope.parent) frames.push({ context: scope.context(), locals: scope.locals });
-    return frames;
-  }
-
-  resolve(expression, contextChain = []) {
-    let frames = this.frames();
-    for (const item of contextChain) {
-      const context = this.#resolveFromFrames(item, frames);
-      frames = [{ context, locals: null }, ...frames];
+  lookup(path, contextChain = null) {
+    let contexts = null;
+    if (contextChain?.length) {
+      contexts = [];
+      for (const contextPath of contextChain) contexts.unshift(this.find(contextPath, contexts));
     }
-    return this.#resolveFromFrames(expression, frames);
+    return this.find(path, contexts);
   }
 
-  #resolveFromFrames(expression, frames) {
-    if (expression === '') return unwrap(frames[0]?.context);
-    const parts = expression.split('.').map(part => part.trim()).filter(Boolean);
-    if (!parts.length) return unwrap(frames[0]?.context);
-    const [head, ...tail] = parts;
-    let value;
-    let found = false;
-    for (const frame of frames) {
-      if (frame.locals && hasOwnOrInherited(frame.locals, head)) {
-        value = frame.locals[head];
-        found = true;
-        break;
-      }
-      if (hasOwnOrInherited(frame.context, head)) {
-        value = frame.context[head];
-        found = true;
-        break;
+  find(path, contexts = null) {
+    if (!path.length) return unwrap(contexts?.[0] ?? this.context());
+    const head = path[0];
+
+    if (contexts) {
+      for (const context of contexts) {
+        const value = read(context, head);
+        if (value !== MISS) return follow(value, path);
       }
     }
-    if (!found) return undefined;
-    value = unwrap(value);
-    for (const key of tail) {
-      if (value == null) return undefined;
-      value = unwrap(value[key]);
+
+    for (let scope = this; scope; scope = scope.parent) {
+      if (scope.locals) {
+        const value = read(scope.locals, head);
+        if (value !== MISS) return follow(value, path);
+      }
+      const value = read(scope.context(), head);
+      if (value !== MISS) return follow(value, path);
     }
-    return value;
+    return undefined;
   }
 }
-
-export const untrack = callback => {
-  const previous = activeObserver;
-  activeObserver = null;
-  try { return callback(); } finally { activeObserver = previous; }
-};

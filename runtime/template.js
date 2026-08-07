@@ -1,185 +1,180 @@
-import { BindingScope, ReactiveEffect, Scheduler, SignalRef, isObject, toText } from './reactive.js';
+import { BindingScope, ReactiveEffect, Ref, compilePath, unwrap } from './reactive.js';
 
 const DYNAMIC = /{([^{}]*)}/g;
-const isCustomTag = name => name?.includes('-');
+const INITIAL = Symbol();
+const TEXT = 0, ATTR = 1, BOOL = 2, PROP = 3, EVENT = 4, LIST = 5, BRANCH = 6;
+const toText = value => value == null ? '' : String(value);
 
 const parseTokens = value => {
-  const tokens = [];
-  let lastIndex = 0;
+  const result = [];
+  let last = 0;
   DYNAMIC.lastIndex = 0;
-  for (const match of value.matchAll(DYNAMIC)) {
-    if (match.index > lastIndex) tokens.push({ type: 'text', value: value.slice(lastIndex, match.index) });
-    tokens.push({ type: 'expression', value: match[1].trim() });
-    lastIndex = match.index + match[0].length;
+  for (const hit of value.matchAll(DYNAMIC)) {
+    if (hit['index'] > last) result.push(value.slice(last, hit['index']));
+    result.push(compilePath(hit[1]));
+    last = hit['index'] + hit[0].length;
   }
-  if (lastIndex < value.length) tokens.push({ type: 'text', value: value.slice(lastIndex) });
-  return tokens;
+  if (last < value.length) result.push(value.slice(last));
+  return result;
 };
 
-const exactExpression = value => {
+const exact = value => {
   if (typeof value !== 'string') return null;
-  const tokens = parseTokens(value);
-  return tokens.length === 1 && tokens[0].type === 'expression' ? tokens[0].value : null;
+  const parts = parseTokens(value);
+  return parts.length === 1 && Array.isArray(parts[0]) ? parts[0] : null;
 };
 
-const renderTokens = (tokens, scope, contextChain) => tokens.map(token =>
-  token.type === 'text' ? token.value : toText(scope.resolve(token.value, contextChain))
-).join('');
+const render = (tokens, scope, contexts) => {
+  let value = '';
+  for (const token of tokens) value += typeof token === 'string' ? token : toText(scope.lookup(token, contexts));
+  return value;
+};
 
-const getNodeByPath = (root, path) => {
+const byPath = (root, path) => {
   let node = root;
   for (const index of path) node = node.childNodes[index];
   return node;
 };
 
-class TextPart {
-  constructor(node, instruction, bindingScope, ownerScope) {
-    Object.assign(this, { node, bindingScope, ...instruction });
-    this.value = node.data;
-    new ReactiveEffect(() => this.update(), ownerScope, 'render');
-  }
-  update() {
-    const value = renderTokens(this.tokens, this.bindingScope, this.contextChain);
-    if (value === this.value) return;
-    this.value = value;
-    this.node.data = value;
-    Scheduler.commit();
-  }
-}
+const watch = (scope, callback) => new ReactiveEffect(callback, scope, true);
 
-class AttributePart {
-  constructor(node, instruction, bindingScope, ownerScope) {
-    Object.assign(this, { node, bindingScope, ...instruction });
-    this.value = Symbol('initial');
-    new ReactiveEffect(() => this.update(), ownerScope, 'render');
-  }
-  update() {
-    const raw = this.exact != null ? this.bindingScope.resolve(this.exact, this.contextChain) : null;
-    const remove = this.exact != null && (raw == null || raw === false);
-    const value = remove ? null : (this.exact != null ? toText(raw) : renderTokens(this.tokens, this.bindingScope, this.contextChain));
-    if (Object.is(value, this.value)) return;
-    this.value = value;
-    if (value == null) this.node.removeAttribute(this.name);
-    else this.node.setAttribute(this.name, value);
-    Scheduler.commit();
-  }
-}
+const bindText = (node, tokens, contexts, bindingScope, owner) => {
+  let previous = node.data;
+  watch(owner, () => {
+    const value = render(tokens, bindingScope, contexts);
+    if (value === previous) return;
+    previous = node.data = value;
+  });
+};
 
-class BooleanPart {
-  constructor(node, instruction, bindingScope, ownerScope) {
-    Object.assign(this, { node, bindingScope, ...instruction });
-    this.value = Symbol('initial');
-    new ReactiveEffect(() => this.update(), ownerScope, 'render');
-  }
-  update() {
-    const value = Boolean(this.bindingScope.resolve(this.expression, this.contextChain));
-    if (value === this.value) return;
-    this.value = value;
-    this.node.toggleAttribute(this.name, value);
-    Scheduler.commit();
-  }
-}
+const bindAttribute = (node, name, tokens, contexts, bindingScope, owner) => {
+  const exactPath = tokens.length === 1 && Array.isArray(tokens[0]) ? tokens[0] : null;
+  let previous = INITIAL;
+  watch(owner, () => {
+    const raw = exactPath ? bindingScope.lookup(exactPath, contexts) : null;
+    const value = exactPath && (raw == null || raw === false) ? null : exactPath ? toText(raw) : render(tokens, bindingScope, contexts);
+    if (Object.is(value, previous)) return;
+    previous = value;
+    if (value == null) node.removeAttribute(name);
+    else node.setAttribute(name, value);
+  });
+};
 
-class PropertyPart {
-  constructor(node, instruction, bindingScope, ownerScope) {
-    Object.assign(this, { node, bindingScope, ...instruction });
-    this.value = Symbol('initial');
-    new ReactiveEffect(() => this.update(), ownerScope, 'render');
-  }
-  update() {
-    const value = this.bindingScope.resolve(this.expression, this.contextChain);
-    if (Object.is(value, this.value)) return;
-    this.value = value;
-    this.node[this.name] = value;
-    Scheduler.commit();
-  }
-}
+const bindBoolean = (node, name, path, contexts, bindingScope, owner) => {
+  let previous = INITIAL;
+  watch(owner, () => {
+    const value = Boolean(bindingScope.lookup(path, contexts));
+    if (value === previous) return;
+    previous = value;
+    node.toggleAttribute(name, value);
+  });
+};
 
-class EventPart {
-  constructor(node, instruction, bindingScope, ownerScope) {
-    node.addEventListener(instruction.name, event => {
-      const handler = bindingScope.resolve(instruction.expression, instruction.contextChain);
-      if (typeof handler === 'function') return handler.call(node, event);
-    }, { signal: ownerScope.signal });
-  }
-}
+const bindProperty = (node, name, path, contexts, bindingScope, owner) => {
+  let previous = INITIAL;
+  watch(owner, () => {
+    const value = bindingScope.lookup(path, contexts);
+    if (Object.is(value, previous)) return;
+    previous = value;
+    node[name] = value;
+  });
+};
 
-const moveNodesBefore = (nodes, parent, before) => {
-  if (!nodes.length) return false;
-  if (nodes[nodes.length - 1].nextSibling === before && nodes.every(node => node.parentNode === parent)) return false;
+const bindEvent = (node, name, path, contexts, bindingScope, owner) => {
+  const listener = event => {
+    const handler = bindingScope.lookup(path, contexts);
+    if (typeof handler === 'function') return handler.call(node, event);
+  };
+  node.addEventListener(name, listener);
+  owner.cleanup(() => node.removeEventListener(name, listener));
+};
+
+const moveNodesBefore = (nodes, parent, anchor) => {
+  if (!nodes.length || nodes[nodes.length - 1].nextSibling === anchor) return false;
   for (const node of nodes) {
-    if (node.parentNode === parent && typeof parent.moveBefore === 'function') parent.moveBefore(node, before);
-    else parent.insertBefore(node, before);
+    if (node.parentNode === parent && parent.moveBefore) parent.moveBefore(node, anchor);
+    else parent.insertBefore(node, anchor);
   }
   return true;
 };
 
-const primitiveKey = (value, occurrence) => `${typeof value}:${String(value)}:${occurrence}`;
+const keyFromItem = (item, path) => {
+  let value = item;
+  for (const key of path) {
+    if (value == null) return undefined;
+    value = unwrap(value[key]);
+  }
+  return value;
+};
 
 class ListPart {
   records = new Map();
   order = [];
 
-  constructor(start, end, instruction, bindingScope, ownerScope, host) {
-    Object.assign(this, { start, end, instruction, bindingScope, host });
-    this.scope = ownerScope.child();
-    new ReactiveEffect(() => this.update(), this.scope, 'render');
+  constructor(end, instruction, bindingScope, owner) {
+    this.end = end;
+    this.expression = instruction[2];
+    this.keyPath = instruction[3];
+    this.template = instruction[4];
+    this.contexts = instruction[5];
+    this.bindingScope = bindingScope;
+    this.scope = owner.child();
+    this.scope.cleanup(() => {
+      for (const record of this.order) record.view.dispose(false);
+      this.records.clear();
+      this.order.length = 0;
+    });
+    watch(this.scope, () => this.update());
   }
 
   update() {
-    const collection = this.bindingScope.resolve(this.instruction.expression, this.instruction.contextChain);
-    const items = collection == null ? [] : Array.isArray(collection) ? Array.from(collection) : [...collection];
-    const nextRecords = new Map();
-    const nextOrder = [];
-    const primitiveOccurrences = new Map();
+    const collection = this.bindingScope.lookup(this.expression, this.contexts);
+    const items = collection == null ? [] : Array.isArray(collection) ? collection : [...collection];
+    const next = new Map();
+    const order = [];
+    let occurrences;
 
     for (let index = 0; index < items.length; index++) {
       const item = items[index];
       let key;
-      if (this.instruction.keyExpression != null) {
-        key = new BindingScope(this.bindingScope.rootState, item, this.bindingScope).resolve(this.instruction.keyExpression);
-      } else if (isObject(item)) {
+      if (this.keyPath) {
+        key = keyFromItem(item, this.keyPath);
+      } else if (item !== null && typeof item === 'object') {
         key = item;
       } else {
-        const base = `${typeof item}:${String(item)}`;
-        const occurrence = primitiveOccurrences.get(base) || 0;
-        primitiveOccurrences.set(base, occurrence + 1);
-        key = primitiveKey(item, occurrence);
+        occurrences ||= new Map();
+        const occurrence = occurrences.get(item) || 0;
+        occurrences.set(item, occurrence + 1);
+        key = typeof item + ':' + String(item) + ':' + occurrence;
       }
 
       let record = this.records.get(key);
       if (record) {
         record.bindingScope.setContext(item);
-        record.index.value = index;
+        record.index.set(index);
       } else {
         const scope = this.scope.child();
-        const indexRef = new SignalRef(index);
-        const locals = Object.assign(Object.create(null), { index: indexRef, $index: indexRef });
-        const itemScope = new BindingScope(this.bindingScope.rootState, item, this.bindingScope, locals);
-        const view = this.instruction.template.instantiate(itemScope, scope, this.host);
-        record = { key, bindingScope: itemScope, index: indexRef, view };
-        Scheduler.stats.listCreates++;
+        const indexRef = new Ref(index);
+        const locals = { index: indexRef, $index: indexRef };
+        const itemScope = new BindingScope(this.bindingScope.rootState, item, this.bindingScope, locals, true);
+        record = { key, bindingScope: itemScope, index: indexRef, view: this.template.instantiate(itemScope, scope) };
       }
-      nextRecords.set(key, record);
-      nextOrder.push(record);
+      next.set(key, record);
+      order.push(record);
     }
 
-    for (const record of this.order) {
-      if (nextRecords.has(record.key)) continue;
-      record.view.dispose();
-      Scheduler.stats.listRemoves++;
-    }
+    for (const record of this.order) if (!next.has(record.key)) record.view.dispose();
 
     const parent = this.end.parentNode;
-    let before = this.end;
-    for (let index = nextOrder.length - 1; index >= 0; index--) {
-      const record = nextOrder[index];
-      if (moveNodesBefore(record.view.nodes, parent, before)) Scheduler.stats.listMoves++;
-      before = record.view.nodes[0] || before;
+    let anchor = this.end;
+    for (let index = order.length - 1; index >= 0; index--) {
+      const nodes = order[index].view.nodes;
+      moveNodesBefore(nodes, parent, anchor);
+      anchor = nodes[0] || anchor;
     }
 
-    this.records = nextRecords;
-    this.order = nextOrder;
+    this.records = next;
+    this.order = order;
   }
 }
 
@@ -187,35 +182,43 @@ class BranchPart {
   view = null;
   visible = false;
 
-  constructor(start, end, instruction, bindingScope, ownerScope, host) {
-    Object.assign(this, { start, end, instruction, bindingScope, host });
-    this.scope = ownerScope.child();
-    new ReactiveEffect(() => this.update(), this.scope, 'render');
+  constructor(end, instruction, bindingScope, owner) {
+    this.end = end;
+    this.expression = instruction[2];
+    this.template = instruction[3];
+    this.contexts = instruction[4];
+    this.bindingScope = bindingScope;
+    this.scope = owner.child();
+    this.scope.cleanup(() => this.view?.dispose(false));
+    watch(this.scope, () => this.update());
   }
 
   update() {
-    const visible = Boolean(this.bindingScope.resolve(this.instruction.expression, this.instruction.contextChain));
+    const visible = Boolean(this.bindingScope.lookup(this.expression, this.contexts));
     if (visible === this.visible) return;
     this.visible = visible;
     if (visible) {
-      const childScope = this.scope.child();
-      this.view = this.instruction.template.instantiate(this.bindingScope, childScope, this.host);
+      const scope = this.scope.child();
+      this.view = this.template.instantiate(this.bindingScope, scope);
       for (const node of this.view.nodes) this.end.before(node);
     } else if (this.view) {
       this.view.dispose();
       this.view = null;
     }
-    Scheduler.commit();
   }
 }
 
 export class View {
-  constructor(fragment, nodes, scope, customElements = []) {
-    Object.assign(this, { fragment, nodes, scope, customElements });
+  constructor(fragment, nodes, scope, elements) {
+    this.fragment = fragment;
+    this.nodes = nodes;
+    this.scope = scope;
+    this.elements = elements;
   }
+
   dispose(remove = true) {
     this.scope.dispose();
-    for (const element of this.customElements) element.dispose?.();
+    if (this.elements) for (const element of this.elements) element.dispose?.();
     if (remove) for (const node of this.nodes) node.remove();
   }
 }
@@ -225,7 +228,8 @@ export class CompiledTemplate {
     this.fragment = fragment;
     this.defineElement = defineElement;
     this.instructions = [];
-    this.#compileChildren(fragment, [], []);
+    this.customPaths = [];
+    this.compileChildren(fragment, [], []);
   }
 
   static fromNode(node, defineElement) {
@@ -234,119 +238,119 @@ export class CompiledTemplate {
     return new CompiledTemplate(fragment, defineElement);
   }
 
-  #compileChildren(parent, parentPath, contextChain) {
+  compileChildren(parent, parentPath, contexts) {
     let index = 0;
     while (index < parent.childNodes.length) {
       const node = parent.childNodes[index];
       const path = [...parentPath, index];
 
       if (node.nodeType === Node.TEXT_NODE) {
-        const tokens = parseTokens(node.data);
-        if (tokens.some(token => token.type === 'expression')) this.instructions.push({ type: 'text', path, tokens, contextChain });
+        const tokenList = parseTokens(node.data);
+        if (tokenList.some(Array.isArray)) this.instructions.push([TEXT, path, tokenList, contexts]);
         index++;
         continue;
       }
-
       if (node.nodeType !== Node.ELEMENT_NODE) {
         index++;
         continue;
       }
 
-      if (isCustomTag(node.localName)) this.defineElement(node.localName);
-
-      const forExpression = exactExpression(node.getAttribute('for'));
-      if (forExpression != null) {
-        const keyExpression = exactExpression(node.getAttribute('key'));
+      const forPath = exact(node.getAttribute('for'));
+      if (forPath) {
+        const keyPath = exact(node.getAttribute('key'));
         const templateNode = node.cloneNode(true);
         templateNode.removeAttribute('for');
         templateNode.removeAttribute('key');
         const template = CompiledTemplate.fromNode(templateNode, this.defineElement);
-        const start = document.createComment(`for:${forExpression}`);
-        const end = document.createComment(`/for:${forExpression}`);
-        parent.replaceChild(start, node);
-        parent.insertBefore(end, start.nextSibling);
-        this.instructions.push({ type: 'list', startPath: path, endPath: [...parentPath, index + 1], expression: forExpression, keyExpression, template, contextChain });
-        index += 2;
+        const end = document.createComment('for');
+        parent.replaceChild(end, node);
+        this.instructions.push([LIST, path, forPath, keyPath, template, contexts]);
+        index++;
         continue;
       }
 
-      const ifExpression = exactExpression(node.getAttribute('if'));
-      if (ifExpression != null) {
+      const ifPath = exact(node.getAttribute('if'));
+      if (ifPath) {
         const templateNode = node.cloneNode(true);
         templateNode.removeAttribute('if');
         const template = CompiledTemplate.fromNode(templateNode, this.defineElement);
-        const start = document.createComment(`if:${ifExpression}`);
-        const end = document.createComment(`/if:${ifExpression}`);
-        parent.replaceChild(start, node);
-        parent.insertBefore(end, start.nextSibling);
-        this.instructions.push({ type: 'branch', startPath: path, endPath: [...parentPath, index + 1], expression: ifExpression, template, contextChain });
-        index += 2;
+        const end = document.createComment('if');
+        parent.replaceChild(end, node);
+        this.instructions.push([BRANCH, path, ifPath, template, contexts]);
+        index++;
         continue;
       }
 
-      let childContext = contextChain;
-      const inExpression = exactExpression(node.getAttribute('in'));
-      if (inExpression != null) {
+      if (node.localName === 'style') {
+        index++;
+        continue;
+      }
+
+      if (node.localName.includes('-')) {
+        this.defineElement(node.localName);
+        this.customPaths.push(path);
+      }
+
+      let childContexts = contexts;
+      const inPath = exact(node.getAttribute('in'));
+      if (inPath) {
         node.removeAttribute('in');
-        childContext = [...contextChain, inExpression];
+        childContexts = [...contexts, inPath];
       }
 
       for (const name of node.getAttributeNames()) {
-        const value = node.getAttribute(name);
-        const tokens = parseTokens(value);
-        if (!tokens.some(token => token.type === 'expression')) continue;
-        const exact = tokens.length === 1 && tokens[0].type === 'expression' ? tokens[0].value : null;
-        const base = { path, contextChain: childContext };
-        if (name.startsWith('.') && exact != null) {
+        const tokenList = parseTokens(node.getAttribute(name));
+        if (!tokenList.some(Array.isArray)) continue;
+        const pathExpression = tokenList.length === 1 && Array.isArray(tokenList[0]) ? tokenList[0] : null;
+        if (name[0] === '.' && pathExpression) {
           node.removeAttribute(name);
-          this.instructions.push({ ...base, type: 'property', name: name.slice(1), expression: exact });
-        } else if (name.startsWith('?') && exact != null) {
+          this.instructions.push([PROP, path, name.slice(1), pathExpression, childContexts]);
+        } else if (name[0] === '?' && pathExpression) {
           node.removeAttribute(name);
-          this.instructions.push({ ...base, type: 'boolean', name: name.slice(1), expression: exact });
-        } else if (name.startsWith('@') && exact != null) {
+          this.instructions.push([BOOL, path, name.slice(1), pathExpression, childContexts]);
+        } else if (name[0] === '@' && pathExpression) {
           node.removeAttribute(name);
-          this.instructions.push({ ...base, type: 'event', name: name.slice(1), expression: exact });
-        } else if (name.startsWith('on') && exact != null) {
-          node.removeAttribute(name);
-          this.instructions.push({ ...base, type: 'event', name: name.slice(2), expression: exact });
+          this.instructions.push([EVENT, path, name.slice(1), pathExpression, childContexts]);
         } else {
-          this.instructions.push({ ...base, type: 'attribute', name, tokens, exact });
+          this.instructions.push([ATTR, path, name, tokenList, childContexts]);
         }
       }
 
-      this.#compileChildren(node, path, childContext);
+      this.compileChildren(node, path, childContexts);
       index++;
     }
   }
 
-  instantiate(bindingScope, ownerScope, host) {
+  instantiate(bindingScope, owner) {
     const fragment = this.fragment.cloneNode(true);
     const nodes = [...fragment.childNodes];
-    const customElements = [];
-    for (const element of fragment.querySelectorAll('*')) {
-      element.$ = bindingScope.rootState;
-      element.open = host.open;
-      element.replace = host.replace;
-      if (isCustomTag(element.localName) && typeof element.dispose === 'function') customElements.push(element);
-    }
-
-    const resolved = this.instructions.map(instruction => instruction.type === 'list' || instruction.type === 'branch'
-      ? { instruction, start: getNodeByPath(fragment, instruction.startPath), end: getNodeByPath(fragment, instruction.endPath) }
-      : { instruction, node: getNodeByPath(fragment, instruction.path) });
-
-    for (const entry of resolved) {
-      const instruction = entry.instruction;
-      switch (instruction.type) {
-        case 'text': new TextPart(entry.node, instruction, bindingScope, ownerScope); break;
-        case 'attribute': new AttributePart(entry.node, instruction, bindingScope, ownerScope); break;
-        case 'boolean': new BooleanPart(entry.node, instruction, bindingScope, ownerScope); break;
-        case 'property': new PropertyPart(entry.node, instruction, bindingScope, ownerScope); break;
-        case 'event': new EventPart(entry.node, instruction, bindingScope, ownerScope); break;
-        case 'list': new ListPart(entry.start, entry.end, instruction, bindingScope, ownerScope, host); break;
-        case 'branch': new BranchPart(entry.start, entry.end, instruction, bindingScope, ownerScope, host); break;
+    let elements = null;
+    if (this.customPaths.length) {
+      elements = [];
+      for (const path of this.customPaths) {
+        const element = byPath(fragment, path);
+        if (typeof element.dispose === 'function') elements.push(element);
       }
     }
 
-    return new View(fragment, nodes, ownerScope, customElements);
+    for (let index = this.instructions.length - 1; index >= 0; index--) {
+      const instruction = this.instructions[index];
+      const type = instruction[0];
+      if (type === LIST || type === BRANCH) {
+        const end = byPath(fragment, instruction[1]);
+        if (type === LIST) new ListPart(end, instruction, bindingScope, owner);
+        else new BranchPart(end, instruction, bindingScope, owner);
+        continue;
+      }
+
+      const node = byPath(fragment, instruction[1]);
+      if (type === TEXT) bindText(node, instruction[2], instruction[3], bindingScope, owner);
+      else if (type === ATTR) bindAttribute(node, instruction[2], instruction[3], instruction[4], bindingScope, owner);
+      else if (type === BOOL) bindBoolean(node, instruction[2], instruction[3], instruction[4], bindingScope, owner);
+      else if (type === PROP) bindProperty(node, instruction[2], instruction[3], instruction[4], bindingScope, owner);
+      else bindEvent(node, instruction[2], instruction[3], instruction[4], bindingScope, owner);
+    }
+
+    return new View(fragment, nodes, owner, elements);
   }
 }

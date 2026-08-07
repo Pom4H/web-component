@@ -2,7 +2,7 @@
 name: skein-web
 description: Build, modify, review, or debug websites and Web Components using the Skein HTML-first reactive runtime. Use for Skein bindings, component files, creative CSS/SVG/Canvas work, keyed lists, lifecycle/cleanup, SEO/progressive enhancement, playground examples, or changes to the Skein runtime itself.
 license: MIT
-compatibility: Browser projects using Skein 0.4+ or the Skein repository. Core work should remain zero-dependency and runnable without a build step.
+compatibility: Browser projects using Skein 0.5+ or the Skein repository. Core work should remain zero-dependency and runnable without a build step.
 metadata:
   author: Pom4H
   version: "0.2.0"
@@ -10,11 +10,11 @@ metadata:
 
 # Skein Web
 
-Use Skein as a thin reactive layer over the native web platform. Preserve normal HTML, CSS, SVG, Canvas, Custom Elements and browser lifecycle instead of replacing them with framework abstractions.
+Use Skein as a thin reactive layer over native HTML, CSS, SVG, Canvas and Web Components.
 
-## Decide the shape first
+## Choose the smallest shape
 
-For a tiny demo, prototype, embed, or single-page experiment, prefer one HTML file:
+For a tiny demo or prototype, prefer one file:
 
 ```html
 <hello-card></hello-card>
@@ -32,37 +32,32 @@ For a tiny demo, prototype, embed, or single-page experiment, prefer one HTML fi
 </script>
 ```
 
-The production runtime is `skein.min.js`: 21.4 kB raw, 6.1 kB gzip, 5.6 kB Brotli, zero dependencies. For reproducible production output, pin a commit SHA rather than `@main`.
-
-For a larger project, use external component files. A tag maps to a path by replacing hyphens with slashes:
+For larger projects, external component files map from tag names:
 
 ```text
 <user-card> -> user/card.html
 ```
 
-Read `references/syntax.md` when you need the binding/API reference.
+Read `references/syntax.md` for the application API.
 
 ## Keep content as HTML
 
-Skein has no SSR today. Do not respond by moving the entire page into client-rendered components.
+Skein has no SSR today. Do not move the whole page into client-only components as a workaround.
 
-If content is static, semantic, linkable, accessibility-critical, or important for SEO, prefer writing it directly in the document:
+If content is static, semantic, linkable or important for SEO/accessibility, write it directly in the document:
 
 ```html
 <main>
   <h1>Creative sites with native HTML, CSS, SVG and Canvas.</h1>
-  <p>Skein adds fine-grained reactive bindings without a virtual DOM.</p>
+  <p>Fine-grained reactivity without a virtual DOM.</p>
   <a href="/work/">See the work</a>
-
   <interactive-demo></interactive-demo>
 </main>
 ```
 
-Use Skein for the interactive region. If a server must compute HTML per request, use an external server/static-generation layer and let Skein enhance the delivered HTML. Never claim Skein itself currently provides SSR or hydration.
+Use Skein for the interactive region. If a server must compute HTML, do that outside Skein and enhance the result.
 
 ## Write ordinary state
-
-A component `<script>` runs with `this` bound to reactive state:
 
 ```html
 <script>
@@ -72,17 +67,15 @@ A component `<script>` runs with `this` bound to reactive state:
 </script>
 ```
 
-Prefer ordinary property assignment. Do not introduce `.get()` / `.set()` ceremony into application code.
-
 Use `computed()` for derived values:
 
 ```js
 this.total = computed(() => this.price * this.quantity)
 ```
 
-Template braces contain paths, not arbitrary JavaScript expressions.
+Braces contain paths, not arbitrary JavaScript expressions.
 
-## Bind to the correct DOM primitive
+## Bind to native DOM semantics
 
 ```html
 <h1>{title}</h1>
@@ -92,11 +85,9 @@ Template braces contain paths, not arbitrary JavaScript expressions.
 <button @click={save}>Save</button>
 ```
 
-Do not stringify a DOM property when a property binding is appropriate. Do not create reactive event-listener rebindings when one event binding is sufficient.
+Use `@event={handler}` for reactive event binding. Do not generate the removed `onclick={handler}` alias.
 
 ## Preserve list identity
-
-For application records, use a stable key:
 
 ```html
 <article for={projects} key={id}>
@@ -105,83 +96,100 @@ For application records, use a stable key:
 </article>
 ```
 
-Do not replace keyed reconciliation with `innerHTML`, full-list cloning, or index-only identity. Skein intentionally preserves DOM nodes and local form state across reorder.
+Do not replace keyed reconciliation with `innerHTML`, full-list cloning or index identity. Persistent rows should keep their DOM nodes and browser-local form state across reorder.
 
-## Let CSS, SVG, and Canvas do their own jobs
+## Let CSS, SVG and Canvas do their jobs
 
-Bind state into the native medium rather than recreating the medium in JavaScript.
+CSS:
 
 ```html
 <article style="--x:{x}px"></article>
+```
+
+SVG:
+
+```html
 <circle cx={x} cy={y} r="6" />
 ```
 
-Let CSS animate/layout. Keep the SVG tree native. Canvas should normally keep an imperative render loop; use Skein for state, controls and lifecycle.
+Canvas should normally keep an imperative render loop. Use Skein for state, controls and lifecycle.
 
-## Own resources correctly
+## Own resources
 
-Prefer browser APIs that accept the scope-owned `abortSignal`:
+Prefer native `abortSignal` support:
 
 ```js
 window.addEventListener('resize', this.measure, { signal: abortSignal })
 fetch(url, { signal: abortSignal })
 ```
 
-For anything else:
+For other resources:
 
 ```js
 const id = setInterval(this.tick, 1000)
 onCleanup(() => clearInterval(id))
 ```
 
+The component-script helpers are only:
+
+```text
+computed
+effect
+onCleanup
+host
+abortSignal
+```
+
+Synchronous state writes are already scheduled into one microtask wave. Do not invent or use `batch()`.
+
 ## When modifying Skein itself
 
-Read `references/architecture.md` before changing runtime behavior.
+Read `references/architecture.md` first.
 
-Preserve these invariants:
+Preserve:
 
 - zero core dependencies;
 - no virtual DOM;
-- no component-level rerender loop;
-- templates compile once per source;
-- exact signal dependencies drive exact DOM parts;
-- parts skip equal DOM commits;
-- keyed list identity survives reorder;
-- scopes own effects and cleanup;
-- render work settles before user effects;
-- reconnect pauses/resumes rather than destroying state;
-- `skein.min.js` remains behaviorally equivalent to the readable runtime.
+- no component-level rerender;
+- compiled binding paths;
+- exact dependency tracking;
+- keyed DOM identity;
+- scoped cleanup;
+- render-before-user-effect scheduling;
+- reconnect pause/resume semantics;
+- production runtime correctness.
 
 Run:
 
 ```bash
+node tools/build.mjs
 node test/run.mjs
 ```
 
-Do not add Playwright, Puppeteer, jsdom, Jest, Vitest, a bundler, or a test framework just to implement a runtime change. The repository deliberately tests with Node built-ins and real Chrome through CDP.
+The repository deliberately tests the generated `skein.min.js` in real Chrome. Do not add a test framework or bundler just to implement runtime work.
 
-## Avoid these patterns
+## Avoid
 
 Do not:
 
-- move static SEO copy into a client-only component without a reason;
-- invent JSX or a second template language;
-- put arithmetic or arbitrary expressions inside `{...}`;
-- rerender whole components after state writes;
-- rebuild an entire list after `push`, `splice`, `sort`, or reverse;
-- use JavaScript for CSS transitions/layout that CSS already handles;
+- hide static SEO copy inside client-only components without a reason;
+- invent JSX or another template language;
+- put arbitrary expressions inside `{...}`;
+- rerender whole components after a state write;
+- rebuild whole keyed lists after native array mutations;
+- use JS for CSS animation/layout that CSS already handles;
 - wrap SVG in a framework-specific object model;
 - make Canvas declarative pixel-by-pixel;
-- silently add third-party dependencies;
-- resurrect removed pre-Skein globals or entry files;
-- claim SSR, hydration, suspense, or error boundaries already exist.
+- add dependencies silently;
+- expose low-level signal/scheduler APIs just because they exist internally;
+- claim SSR, hydration, suspense or error boundaries already exist.
 
-## Useful project context
+## Repository context
 
-If working inside the Skein repository, also read:
+When working inside the Skein repository also read:
 
-- `AGENTS.md` for repository-wide agent rules.
-- `llms-full.txt` for the compact complete public model.
-- `references/syntax.md` for application syntax.
-- `references/architecture.md` for runtime internals.
-- `README.md` for human-facing project documentation.
+- `AGENTS.md`
+- `llms-full.txt`
+- `references/syntax.md`
+- `references/architecture.md`
+- `README.md`

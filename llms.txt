@@ -1,17 +1,19 @@
 # Skein
 
-> Skein is a tiny zero-dependency, HTML-first Web Components runtime with fine-grained reactivity for creative CSS, SVG, Canvas and native-DOM sites.
+> Skein is a tiny zero-dependency, HTML-first Web Components runtime with fine-grained reactivity and native component composition.
 
-Current runtime: Skein 0.5. Production entry: `skein.min.js` — 14.0 kB raw, 5.1 kB gzip, 4.6 kB Brotli. No virtual DOM, npm dependency or required build step.
+Current runtime: Skein 0.5. Production entry: `skein.min.js` — 14.5 kB raw, 5.3 kB gzip, 4.8 kB Brotli. No virtual DOM, npm dependency or required build step.
 
 Important code-generation rules: keep static/semantic/SEO-critical content in ordinary HTML; use Skein for interactive regions. Bindings inside `{...}` are property paths. Use `computed()` for derived state, stable `key={id}` for application lists, `@event={handler}` for events, and `onCleanup()` / `abortSignal` for owned resources.
 
-Public API: `Skein.version` and `Skein.define(tag, source)`. Component-script helpers: `computed`, `effect`, `onCleanup`, `host`, `abortSignal`. Do not use removed v0.4-era low-level APIs such as `batch`, `signal`, `untrack`, `Skein.stats` or `Skein.flush`.
+Component composition uses browser semantics: owner-to-child data goes through DOM properties such as `.volume={volume}`; the child declares a reactive property with `this.volume = input('volume', fallback)`; child-to-owner communication uses native bubbling/composed `CustomEvent`. Do not invent framework stores or an event bus merely for component communication.
+
+Public module API: `Skein.version` and `Skein.define(tag, source)`. Component-script helpers: `input`, `computed`, `effect`, `onCleanup`, `host`, `abortSignal`. Do not use removed v0.4-era low-level APIs such as `batch`, `signal`, `untrack`, `Skein.stats` or `Skein.flush`.
 
 ## Start
 
 - [60-second start](https://pom4h.github.io/web-component/start/): one-file `<template skein>` app with no npm or build step.
-- [README](https://github.com/Pom4H/web-component/blob/main/README.md): framework overview, API, rendering model, lifecycle, build and tests.
+- [README](https://github.com/Pom4H/web-component/blob/main/README.md): framework overview, composition contract, rendering model, lifecycle, build and tests.
 
 ## Reference
 
@@ -21,16 +23,17 @@ Public API: `Skein.version` and `Skein.define(tag, source)`. Component-script he
 
 ## Examples
 
-- [Creative examples](https://pom4h.github.io/web-component/examples/): live CSS, SVG, Canvas and keyed-DOM examples.
-- [Playground](https://pom4h.github.io/web-component/playground/): zero-dependency one-file component editor with sandboxed live preview.
+- [Examples](https://pom4h.github.io/web-component/examples/): live applications plus Skein Studio, a multi-file composition of transport, sequencer, synth, mixer and Canvas scope.
+- [Playground](https://pom4h.github.io/web-component/playground/): zero-dependency editor for single component files with sandboxed live preview.
 
 ## Agent resources
 
-- [Agent Skill](https://raw.githubusercontent.com/Pom4H/web-component/main/.agents/skills/skein/SKILL.md): portable instructions for Skein coding tasks.
-- [Repository agent instructions](https://github.com/Pom4H/web-component/blob/main/AGENTS.md): rules for modifying the framework itself.
+- [Agent Skill](https://raw.githubusercontent.com/Pom4H/web-component/main/.agents/skills/skein/SKILL.md): portable Skein coding instructions.
+- [Repository instructions](https://github.com/Pom4H/web-component/blob/main/AGENTS.md): rules for modifying the framework itself.
 
 ## Source
 
-- [Runtime source](https://github.com/Pom4H/web-component/tree/main/runtime): fine-grained reactivity, compiler, keyed reconciliation and lifecycle.
+- [Runtime source](https://github.com/Pom4H/web-component/tree/main/runtime): fine-grained reactivity, compiler, composition inputs and lifecycle.
+- [Studio composition](https://github.com/Pom4H/web-component/tree/main/examples/studio): real tag-to-file component composition using properties down and CustomEvents up.
 - [Production build](https://github.com/Pom4H/web-component/blob/main/tools/build.mjs): zero-dependency bundler/minifier for `skein.min.js`.
 - [Tests](https://github.com/Pom4H/web-component/tree/main/test): Node + real-Chrome zero-dependency test suite.

@@ -37,7 +37,7 @@ Inline one-file form:
 </script>
 ```
 
-Programmatic:
+Programmatic registration is intended mainly for playgrounds/generated source:
 
 ```js
 Skein.define('my-card', `
@@ -46,7 +46,7 @@ Skein.define('my-card', `
 `)
 ```
 
-External files:
+External files map directly from custom-element names:
 
 ```text
 <foo-bar> -> foo/bar.html
@@ -88,7 +88,55 @@ Event:
 <button @click={save}>Save</button>
 ```
 
-`onclick={save}` is not Skein 0.5 syntax. Use `@click={save}`.
+Use `@event={handler}`. `onclick={save}` is not Skein 0.5 syntax.
+
+## Component inputs and outputs
+
+Skein composition follows native Custom Element semantics: **properties down, events up**.
+
+A child declares a reactive host-property input in its script:
+
+```html
+<script>
+  this.volume = input('volume', .5)
+</script>
+
+<strong>{volume}</strong>
+```
+
+The owner binds the ordinary DOM property:
+
+```html
+<audio-strip .volume={volume}></audio-strip>
+```
+
+`input(name, fallback)`:
+
+- returns a property value already written to the custom element before the child mounts, otherwise `fallback`;
+- installs a host property accessor backed by the child's reactive state;
+- makes later `element.volume = value` writes reactive inside the child;
+- does not create two-way state binding.
+
+For child-to-owner communication, dispatch a native event:
+
+```js
+host.dispatchEvent(new CustomEvent('volume-change', {
+  detail: { volume: this.volume },
+  bubbles: true,
+  composed: true
+}))
+```
+
+The owner listens with the normal Skein event binding:
+
+```html
+<audio-strip
+  .volume={volume}
+  @volume-change={volumeChange}>
+</audio-strip>
+```
+
+Do not invent a framework event bus or mutate owner state through an input object as a substitute for an explicit event contract.
 
 ## Context
 
@@ -99,7 +147,7 @@ Event:
 </section>
 ```
 
-Lookup walks lexical contexts outward to root state. An existing local property whose value is `undefined` still shadows an outer property.
+Lookup walks lexical contexts outward to root state. A present local property whose value is `undefined` still shadows an outer property.
 
 ## Lists
 
@@ -109,14 +157,7 @@ Lookup walks lexical contexts outward to root state. An existing local property 
 </li>
 ```
 
-List locals:
-
-- `index`
-- `$index`
-
-Use stable unique keys for durable application identity. Objects use object identity when `key` is omitted.
-
-Normal HTML such as `<label for="email">` remains unchanged; only exact `for={...}` is structural.
+List locals are `index` and `$index`. Use stable unique keys for durable application identity. Objects use object identity when `key` is omitted. Normal HTML such as `<label for="email">` remains unchanged; only exact `for={...}` is structural.
 
 ## Conditions
 
@@ -141,21 +182,10 @@ Bind normally:
 ## Effects
 
 ```js
-effect(() => {
-  console.log(this.count)
-})
+effect(() => console.log(this.count))
 ```
 
-Render work settles before user effects.
-
-Synchronous writes already share one microtask flush:
-
-```js
-this.x = 1
-this.y = 2
-```
-
-There is no public `batch()` helper in Skein 0.5.
+Render work settles before user effects. Synchronous writes already share one microtask flush; there is no public `batch()` helper.
 
 ## Cleanup
 
@@ -164,24 +194,18 @@ const timer = setInterval(this.tick, 1000)
 onCleanup(() => clearInterval(timer))
 ```
 
-Prefer `abortSignal` when a platform API supports it:
+Prefer `abortSignal` where the platform supports it:
 
 ```js
 window.addEventListener('resize', this.resize, { signal: abortSignal })
 fetch(url, { signal: abortSignal })
 ```
 
-`abortSignal` is lazily allocated by the runtime.
+`abortSignal` is lazily allocated.
 
 ## Host
 
-`host` is the current Skein custom element. Use it only when real element/shadow-root access is needed.
-
-Permanent teardown is:
-
-```js
-host.dispose()
-```
+`host` is the current Skein custom element. Use it for real host/shadow-root access and native event dispatch. Permanent teardown is `host.dispose()`.
 
 ## Public module API
 

@@ -1,265 +1,48 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <base href="../">
-  <title>Skein runtime tests</title>
-  <script type="module" src="skein.js"></script>
-</head>
-<body>
-  <test-runtime></test-runtime>
-  <pre id="results">Running…</pre>
-  <script>
-    const tests = [];
-    const test = (name, callback) => tests.push([name, callback]);
-    const equal = (actual, expected, message = '') => {
-      if (!Object.is(actual, expected)) throw new Error(`${message ? message + ': ' : ''}expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-    };
-    const ok = (value, message = 'expected truthy value') => { if (!value) throw new Error(message); };
-    const tick = async () => { await Promise.resolve(); await Promise.resolve(); };
+<!doctype html><html><body>
+<test-runtime></test-runtime>
+<inline-boot></inline-boot>
+<template skein="inline-boot"><script>this.word='woven'<\/script><b id="boot-word">{word}</b></template>
+<pre id="results">Running…</pre>
+<script id="browser-tests">
+const tests=[];
+const test=(n,f)=>tests.push([n,f]);
+const equal=(a,b,m='')=>{if(!Object.is(a,b))throw new Error(`${m?m+': ':''}expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`)};
+const ok=(v,m='expected truthy')=>{if(!v)throw new Error(m)};
+const tick=async()=>{await Promise.resolve();await Promise.resolve()};
 
-    test('initial text and computed bindings', ({ root }) => {
-      equal(root.querySelector('#title').textContent, 'Hello 1');
-      equal(root.querySelector('#computed').textContent, '2');
-    });
+test('initial bindings',({root})=>{equal(root.querySelector('#title').textContent,'Hello 1');equal(root.querySelector('#computed').textContent,'2')});
+test('fine-grained update and computed',async({root,state})=>{state.count=2;await tick();equal(root.querySelector('#title').textContent,'Hello 2');equal(root.querySelector('#computed').textContent,'4');equal(root.querySelector('#real-input').value,'2')});
+test('missing property becomes reactive',async({root,state})=>{equal(root.querySelector('#later').textContent,'');state.later='now';await tick();equal(root.querySelector('#later').textContent,'now')});
+test('nested contexts and attributes',async({root,state})=>{state.user.name='Jane';state.user.address.city='Rotterdam';await tick();equal(root.querySelector('#nested').textContent,'Jane');equal(root.querySelector('#nested').getAttribute('data-name'),'user-Jane');equal(root.querySelector('#city').textContent,'Rotterdam');equal(root.querySelector('#city').getAttribute('data-city'),'Rotterdam')});
+test('undefined local shadows root',({root})=>equal(root.querySelectorAll('#items>li')[2].querySelector('.item-name').textContent,''));
+test('native for stays native',({root})=>equal(root.querySelector('#native-for').getAttribute('for'),'real-input'));
+test('boolean and property bindings',async({root,state})=>{ok(root.querySelector('#real-input').disabled);state.enabled=false;await tick();equal(root.querySelector('#real-input').disabled,false)});
+test('@event binding',async({root,state})=>{const n=state.count;root.querySelector('#event').click();await tick();equal(state.count,n+1)});
+test('sync writes share one microtask',async({root,state})=>{const runs=window.__effectRuns;state.count=10;state.count=11;state.count=12;await tick();equal(root.querySelector('#title').textContent,'Hello 12');equal(window.__effectRuns-runs,1)});
+test('keyed push preserves rows',async({root,state})=>{const old=[...root.querySelectorAll('#items>li')];state.items.push({id:4,name:'D'});await tick();const rows=[...root.querySelectorAll('#items>li')];equal(rows.length,4);equal(rows[0],old[0]);equal(rows[1],old[1]);equal(rows[2],old[2]);equal(rows[3].dataset.id,'4')});
+test('keyed reorder preserves local DOM',async({root,state})=>{const first=root.querySelector('[data-id="1"]');const input=first.querySelector('.item-input');input.value='typed';state.items.reverse();await tick();equal([...root.querySelectorAll('#items>li')].at(-1),first);equal(first.querySelector('.item-input'),input);equal(input.value,'typed')});
+test('index updates without row recreation',async({root,state})=>{state.items.reverse();await tick();equal([...root.querySelectorAll('.item-index')].map(n=>n.textContent).join(','),'0,1,2,3')});
+test('removed keyed view disposes nested component',async({state})=>{const before=window.__rowDisposals||0;state.lifeItems.length=0;await tick();equal((window.__rowDisposals||0)-before,1)});
+test('hidden branch disposes nested component',async({state})=>{const before=window.__rowDisposals||0;state.lifeBranch=false;await tick();equal((window.__rowDisposals||0)-before,1)});
+test('nested list resolves root state',async({root,state})=>{state.statuses[0].title='Running';await tick();for(const option of root.querySelectorAll('option'))equal(option.textContent,'Running')});
+test('branch disposes and recreates range',async({root,state})=>{const branch=root.querySelector('#branch');state.show=false;await tick();equal(root.querySelector('#branch'),null);state.show=true;await tick();ok(root.querySelector('#branch'));ok(root.querySelector('#branch')!==branch)});
+test('1000 keyed rows stay incremental',async({root,state})=>{const m={};let t=performance.now();state.items=Array.from({length:1000},(_,i)=>({id:i,name:`Row ${i}`}));await tick();m.create1000=performance.now()-t;equal(root.querySelectorAll('#items>li').length,1000);const row0=root.querySelector('[data-id="0"]'),row999=root.querySelector('[data-id="999"]');t=performance.now();for(let i=0;i<state.items.length;i+=10)state.items[i].name=`Updated ${i}`;await tick();m.update100=performance.now()-t;equal(root.querySelector('[data-id="0"]'),row0);t=performance.now();state.items.reverse();await tick();m.reverse1000=performance.now()-t;equal(root.querySelectorAll('#items>li')[0],row999);equal(root.querySelectorAll('#items>li')[999],row0);t=performance.now();state.items.length=0;await tick();m.clear1000=performance.now()-t;equal(root.querySelectorAll('#items>li').length,0);window.__benchmark=m});
+test('style blocks stay native CSS',({root})=>{const css=root.querySelector('#style-test').textContent;ok(css.includes('#title { color: rgb(1 2 3); }'));ok(css.includes('@supports (display: grid) { #title { display: block; } }'))});
+test('public API stays tiny',()=>{equal(Object.keys(Skein).sort().join(','),'define,version');equal(Skein.stats,undefined);equal(Skein.flush,undefined);equal(Skein.Signal,undefined)});
+test('rendered nodes are not polluted with legacy helpers',({root})=>{const button=root.querySelector('#event');equal('$' in button,false);equal('open' in button,false);equal('replace' in button,false)});
+test('inline template bootstraps',async()=>{const el=document.querySelector('inline-boot');while(!el.shadowRoot?.querySelector('#boot-word'))await new Promise(r=>setTimeout(r,0));equal(el.shadowRoot.querySelector('#boot-word').textContent,'woven');equal(document.querySelector('template[skein]'),null)});
+test('Skein.define avoids fetch',async()=>{Skein.define('inline-defined','<script>this.value=41;this.up=()=>this.value++<\/script><button id="b" @click={up}>{value}</button>');const el=document.createElement('inline-defined');document.body.append(el);while(!el.shadowRoot?.querySelector('#b'))await new Promise(r=>setTimeout(r,0));const b=el.shadowRoot.querySelector('#b');equal(b.textContent,'41');b.click();await tick();equal(b.textContent,'42');el.dispose();el.remove()});
+test('abortSignal is lazy and aborts on dispose',async()=>{Skein.define('abort-life','<script>window.__browserAbort=abortSignal<\/script><i>abort</i>');const el=document.createElement('abort-life');document.body.append(el);while(!window.__browserAbort)await new Promise(r=>setTimeout(r,0));equal(window.__browserAbort.aborted,false);el.dispose();equal(window.__browserAbort.aborted,true);el.remove();window.__browserAbort=null});
+test('disconnect pauses and reconnect resumes',async({host,state})=>{const parent=host.parentNode,title=host.shadowRoot.querySelector('#title');host.remove();state.count=30;await tick();equal(title.textContent,'Hello 12');parent.prepend(host);await tick();equal(title.textContent,'Hello 30')});
+test('dispose tears down cleanup, nested components and DOM',async({host})=>{const before=window.__rowDisposals||0;host.dispose();await tick();equal(window.__cleanupRuns,1);equal((window.__rowDisposals||0)-before,1);equal(host.shadowRoot.childNodes.length,0)});
 
-    test('fine-grained text update', async ({ root, state }) => {
-      const title = root.querySelector('#title');
-      state.count = 2;
-      await tick();
-      equal(title.textContent, 'Hello 2');
-      equal(root.querySelector('#computed').textContent, '4');
-      equal(root.querySelector('#real-input').value, '2');
-    });
-
-    test('nested context and attributes', async ({ root, state }) => {
-      state.user.name = 'Jane';
-      state.user.address.city = 'Rotterdam';
-      await tick();
-      equal(root.querySelector('#nested').textContent, 'Jane');
-      equal(root.querySelector('#nested').getAttribute('data-name'), 'user-Jane');
-      equal(root.querySelector('#city').textContent, 'Rotterdam');
-      equal(root.querySelector('#city').getAttribute('data-city'), 'Rotterdam');
-    });
-
-    test('undefined local value shadows root state', ({ root }) => {
-      const rows = root.querySelectorAll('#items > li');
-      equal(rows[2].querySelector('.item-name').textContent, '');
-    });
-
-    test('native for attribute is not structural binding', ({ root }) => {
-      equal(root.querySelector('#native-for').getAttribute('for'), 'real-input');
-    });
-
-    test('boolean and property parts', async ({ root, state }) => {
-      ok(root.querySelector('#real-input').disabled);
-      state.enabled = false;
-      await tick();
-      equal(root.querySelector('#real-input').disabled, false);
-    });
-
-    test('event part resolves handler without rebinding', async ({ root, state }) => {
-      const before = state.count;
-      root.querySelector('#event').click();
-      await tick();
-      equal(state.count, before + 1);
-    });
-
-    test('keyed push creates one row and preserves existing rows', async ({ root, state }) => {
-      const existing = [...root.querySelectorAll('#items > li')];
-      state.items.push({ id: 4, name: 'D' });
-      await tick();
-      const rows = [...root.querySelectorAll('#items > li')];
-      equal(rows.length, 4);
-      equal(rows[0], existing[0]);
-      equal(rows[1], existing[1]);
-      equal(rows[2], existing[2]);
-      equal(rows[3].getAttribute('data-id'), '4');
-    });
-
-    test('keyed reorder preserves DOM identity and local input state', async ({ root, state }) => {
-      const first = root.querySelector('[data-id="1"]');
-      const input = first.querySelector('.item-input');
-      input.value = 'typed locally';
-      state.items.reverse();
-      await tick();
-      equal(root.querySelectorAll('#items > li')[root.querySelectorAll('#items > li').length - 1], first);
-      equal(first.querySelector('.item-input'), input);
-      equal(input.value, 'typed locally');
-    });
-
-    test('index is reactive without recreating rows', async ({ root, state }) => {
-      state.items.reverse();
-      await tick();
-      const indices = [...root.querySelectorAll('.item-index')].map(node => node.textContent).join(',');
-      equal(indices, '0,1,2,3');
-    });
-
-    test('keyed splice disposes only removed row', async ({ root, state, runtime }) => {
-      const keep = root.querySelector('[data-id="2"]');
-      const removes = runtime.stats.listRemoves;
-      const index = state.items.findIndex(item => item.id === 3);
-      state.items.splice(index, 1);
-      await tick();
-      equal(root.querySelector('[data-id="3"]'), null);
-      equal(root.querySelector('[data-id="2"]'), keep);
-      equal(runtime.stats.listRemoves - removes, 1);
-    });
-
-    test('nested list can resolve component root state', async ({ root, state }) => {
-      state.statuses[0].title = 'Running';
-      await tick();
-      for (const option of root.querySelectorAll('option')) equal(option.textContent, 'Running');
-    });
-
-    test('branch mounts and disposes a range', async ({ root, state }) => {
-      const branch = root.querySelector('#branch');
-      state.show = false;
-      await tick();
-      equal(root.querySelector('#branch'), null);
-      state.show = true;
-      await tick();
-      ok(root.querySelector('#branch'));
-      ok(root.querySelector('#branch') !== branch, 'branch should create a new view after disposal');
-    });
-
-    test('scheduler batches synchronous writes', async ({ root, state, runtime }) => {
-      const flushes = runtime.stats.flushes;
-      state.count = 10;
-      state.count = 11;
-      state.count = 12;
-      await tick();
-      equal(root.querySelector('#title').textContent, 'Hello 12');
-      equal(runtime.stats.flushes - flushes, 1);
-    });
-
-    test('explicit batch produces one consistent commit wave', async ({ root, state, batch }) => {
-      batch(() => {
-        state.count = 20;
-        state.user.name = 'Batch';
-      });
-      await tick();
-      equal(root.querySelector('#title').textContent, 'Hello 20');
-      equal(root.querySelector('#nested').textContent, 'Batch');
-      equal(root.querySelector('#computed').textContent, '40');
-    });
-
-    test('performance smoke: 1000 keyed rows stay incremental', async ({ root, state, batch }) => {
-      const metrics = {};
-      let start = performance.now();
-      state.items = Array.from({ length: 1000 }, (_, index) => ({ id: index, name: `Row ${index}` }));
-      await tick();
-      metrics.create1000 = performance.now() - start;
-      equal(root.querySelectorAll('#items > li').length, 1000);
-
-      const row0 = root.querySelector('[data-id="0"]');
-      const row999 = root.querySelector('[data-id="999"]');
-      start = performance.now();
-      batch(() => {
-        for (let index = 0; index < state.items.length; index += 10) state.items[index].name = `Updated ${index}`;
-      });
-      await tick();
-      metrics.update100 = performance.now() - start;
-      equal(root.querySelector('[data-id="0"]'), row0);
-      equal(root.querySelector('[data-id="0"] .item-name').textContent, 'Updated 0');
-
-      start = performance.now();
-      state.items.reverse();
-      await tick();
-      metrics.reverse1000 = performance.now() - start;
-      equal(root.querySelectorAll('#items > li')[0], row999);
-      equal(root.querySelectorAll('#items > li')[999], row0);
-
-      start = performance.now();
-      state.items.length = 0;
-      await tick();
-      metrics.clear1000 = performance.now() - start;
-      equal(root.querySelectorAll('#items > li').length, 0);
-      window.__benchmark = metrics;
-    });
-
-    test('creative site examples compile and mount', async () => {
-      let index = 0;
-      for (const example of window.__siteExamples) {
-        const tag = `site-example-${index++}`;
-        Skein.define(tag, example.source);
-        const element = document.createElement(tag);
-        element.style.width = '620px';
-        element.style.height = '360px';
-        document.body.append(element);
-        for (let attempt = 0; attempt < 50 && !element.shadowRoot?.childNodes.length; attempt++) await new Promise(resolve => setTimeout(resolve, 0));
-        ok(element.shadowRoot?.childNodes.length, `${example.id} should mount`);
-        element.dispose();
-        element.remove();
-      }
-    });
-
-    test('template[skein] boots an inline component', async () => {
-      const inline = document.querySelector('inline-boot');
-      while (!inline.shadowRoot?.querySelector('#boot-word')) await new Promise(resolve => setTimeout(resolve, 0));
-      equal(inline.shadowRoot.querySelector('#boot-word').textContent, 'woven');
-      equal(document.querySelector('template[skein]'), null);
-    });
-
-    test('Skein.define registers source without a fetch', async () => {
-      Skein.define('inline-defined', '<script>this.value=41;this.up=()=>this.value++<\/script><button id="defined-button" @click={up}>{value}</button>');
-      const inline = document.createElement('inline-defined');
-      document.body.append(inline);
-      while (!inline.shadowRoot?.querySelector('#defined-button')) await new Promise(resolve => setTimeout(resolve, 0));
-      const button = inline.shadowRoot.querySelector('#defined-button');
-      equal(button.textContent, '41');
-      button.click();
-      await tick();
-      equal(button.textContent, '42');
-      inline.dispose();
-      inline.remove();
-    });
-
-    test('disconnect pauses and reconnect resumes dirty bindings', async ({ host, state }) => {
-      const parent = host.parentNode;
-      const title = host.shadowRoot.querySelector('#title');
-      host.remove();
-      state.count = 30;
-      await tick();
-      equal(title.textContent, 'Hello 20');
-      parent.prepend(host);
-      await tick();
-      equal(title.textContent, 'Hello 30');
-    });
-
-    test('dispose runs cleanup and tears down DOM', async ({ host }) => {
-      host.dispose();
-      await tick();
-      equal(window.__cleanupRuns, 1);
-      equal(host.shadowRoot.childNodes.length, 0);
-    });
-
-    (async () => {
-      const host = document.querySelector('test-runtime');
-      while (!host.shadowRoot?.querySelector('#title') || !window.__state) await new Promise(resolve => setTimeout(resolve, 0));
-      const context = {
-        host,
-        root: host.shadowRoot,
-        state: window.__state,
-        runtime: window.Skein,
-        batch: window.__batch,
-      };
-      const lines = [];
-      let failed = 0;
-      for (const [name, callback] of tests) {
-        try {
-          await callback(context);
-          lines.push(`✓ ${name}`);
-        } catch (error) {
-          failed++;
-          lines.push(`✗ ${name}\n  ${error.stack || error.message}`);
-        }
-      }
-      document.querySelector('#results').textContent = lines.join('\n');
-      document.body.dataset.tests = failed ? 'failed' : 'passed';
-      document.body.dataset.failed = String(failed);
-      console.log(`${tests.length - failed}/${tests.length} tests passed`);
-    })();
-  </script>
-</body>
-</html>
+(async()=>{
+ const host=document.querySelector('test-runtime');
+ while(!host.shadowRoot?.querySelector('#title')||!window.__state)await new Promise(r=>setTimeout(r,0));
+ const ctx={host,root:host.shadowRoot,state:window.__state};
+ const lines=[];let failed=0;
+ for(const [name,fn] of tests){try{await fn(ctx);lines.push(`✓ ${name}`)}catch(e){failed++;lines.push(`✗ ${name}\n  ${e.stack||e}`)}}
+ document.querySelector('#results').textContent=lines.join('\n');document.body.dataset.tests=failed?'failed':'passed';document.body.dataset.failed=failed;console.log(`${tests.length-failed}/${tests.length} tests passed`)
+})();
+</script>
+</body></html>

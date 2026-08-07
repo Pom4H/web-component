@@ -3,6 +3,21 @@ const keywords = new Set(['const','let','var','this','return','if','else','for',
 
 const span = (kind, value) => `<span class="tok-${kind}">${escapeHTML(value)}</span>`;
 
+const highlightTag = raw => {
+  const marks = [];
+  const mark = (kind, value) => {
+    const index = marks.push(span(kind, value)) - 1;
+    return `\u0000${index}\u0000`;
+  };
+
+  let escaped = escapeHTML(raw)
+    .replace(/^(&lt;\/?)([\w-]+)/, (_, prefix, name) => `${prefix}${mark('tag', name)}`)
+    .replace(/([\s])([:@?.]?[\w-]+)(?==)/g, (_, space, name) => `${space}${mark('attr', name)}`)
+    .replace(/\{([^{}]+)\}/g, value => mark('bind', value));
+
+  return escaped.replace(/\u0000(\d+)\u0000/g, (_, index) => marks[Number(index)]);
+};
+
 export function highlight(source) {
   let out = '';
   let i = 0;
@@ -15,11 +30,9 @@ export function highlight(source) {
     if ((match = rest.match(/^(['"`])(?:\\.|(?!\1)[\s\S])*?\1/))) { out += span('string', match[0]); i += match[0].length; continue; }
     if ((match = rest.match(/^<\/?[A-Za-z][^>]*>/))) {
       const raw = match[0];
-      const escaped = escapeHTML(raw)
-        .replace(/^(&lt;\/?)([\w-]+)/, '$1<span class="tok-tag">$2</span>')
-        .replace(/([\s])([:@?.]?[\w-]+)(?==)/g, '$1<span class="tok-attr">$2</span>')
-        .replace(/\{([^{}]+)\}/g, '<span class="tok-bind">{$1}</span>');
-      out += escaped; i += raw.length; continue;
+      out += highlightTag(raw);
+      i += raw.length;
+      continue;
     }
     if ((match = rest.match(/^\{[^{}\n]+\}/))) { out += span('bind', match[0]); i += match[0].length; continue; }
     if ((match = rest.match(/^\b\d+(?:\.\d+)?\b/))) { out += span('number', match[0]); i += match[0].length; continue; }

@@ -1,12 +1,10 @@
 # Skein syntax reference
 
-Load this file when generating or reviewing Skein application code.
+Use this file when generating or reviewing Skein 0.5 application code.
 
 ## Component source
 
-A Skein component source is HTML containing optional `<script>`, markup and `<style>`.
-
-The component script runs with `this` bound to the component's reactive state.
+A component is HTML containing optional top-level `<script>`, markup and `<style>`:
 
 ```html
 <script>
@@ -21,7 +19,11 @@ The component script runs with `this` bound to the component's reactive state.
 </style>
 ```
 
-## Inline registration
+The component script runs with `this` bound to a deep reactive state Proxy.
+
+## Registration
+
+Inline one-file form:
 
 ```html
 <my-card></my-card>
@@ -30,12 +32,12 @@ The component script runs with `this` bound to the component's reactive state.
   ...component source...
 </template>
 
-<script type="module" src="https://cdn.jsdelivr.net/gh/Pom4H/web-component@main/skein.min.js"></script>
+<script type="module"
+  src="https://cdn.jsdelivr.net/gh/Pom4H/web-component@main/skein.min.js">
+</script>
 ```
 
-Production entry: `skein.min.js` — 21.4 kB raw, 6.1 kB gzip, 5.6 kB Brotli. `skein.js` is the readable modular source entry.
-
-## Programmatic registration
+Programmatic:
 
 ```js
 Skein.define('my-card', `
@@ -44,67 +46,49 @@ Skein.define('my-card', `
 `)
 ```
 
-## External files
-
-Tag names map to paths:
+External files:
 
 ```text
 <foo-bar> -> foo/bar.html
 <app-home-card> -> app/home/card.html
 ```
 
-## Text/path binding
+## Bindings
+
+Text:
 
 ```html
 <h1>{title}</h1>
 <p>{user.profile.name}</p>
 ```
 
-Braces contain property paths only. Use `computed()` for logic.
-
-## String attributes
+String attributes:
 
 ```html
 <div data-id={id} title="Project {title}"></div>
 ```
 
-For an exact binding, `null`, `undefined`, or `false` removes the attribute.
+A full attribute binding removes the attribute for `null`, `undefined` or `false`.
 
-## DOM properties
+DOM property:
 
 ```html
 <input .value={name}>
 ```
 
-Use `.property` when the live DOM property matters.
-
-## Boolean attributes
+Boolean attribute:
 
 ```html
 <button ?disabled={saving}>Save</button>
 ```
 
-## Events
-
-Preferred:
+Event:
 
 ```html
 <button @click={save}>Save</button>
 ```
 
-Also supported:
-
-```html
-<button onclick={save}>Save</button>
-```
-
-Legacy inline browser handler:
-
-```html
-<button onclick="$.save(event)">Save</button>
-```
-
-`$` is the component state exposed on rendered elements for this compatibility style.
+`onclick={save}` is not Skein 0.5 syntax. Use `@click={save}`.
 
 ## Context
 
@@ -115,7 +99,7 @@ Legacy inline browser handler:
 </section>
 ```
 
-Contexts are lexical. Lookup walks outward through parent contexts and finally root component state.
+Lookup walks lexical contexts outward to root state. An existing local property whose value is `undefined` still shadows an outer property.
 
 ## Lists
 
@@ -125,16 +109,19 @@ Contexts are lexical. Lookup walks outward through parent contexts and finally r
 </li>
 ```
 
-Available list locals: `index` and `$index`. Use stable keys for durable identity.
+List locals:
 
-A normal HTML attribute such as `<label for="email">` is not a list binding. Only a full `for={...}` expression is structural.
+- `index`
+- `$index`
+
+Use stable unique keys for durable application identity. Objects use object identity when `key` is omitted.
+
+Normal HTML such as `<label for="email">` remains unchanged; only exact `for={...}` is structural.
 
 ## Conditions
 
 ```html
-<section if={visible}>
-  ...
-</section>
+<section if={visible}>...</section>
 ```
 
 The branch owns a child scope and is disposed when hidden.
@@ -145,34 +132,30 @@ The branch owns a child scope and is disposed when hidden.
 this.fullName = computed(() => `${this.first} ${this.last}`)
 ```
 
-Then bind normally:
+Bind normally:
 
 ```html
 <strong>{fullName}</strong>
 ```
 
-## Effects and batch
+## Effects
 
 ```js
-effect(() => console.log(this.count))
-
-batch(() => {
-  this.x = 1
-  this.y = 2
+effect(() => {
+  console.log(this.count)
 })
 ```
 
-User effects run after render work.
+Render work settles before user effects.
 
-## Signal and untrack
+Synchronous writes already share one microtask flush:
 
 ```js
-const selected = signal(null)
-selected.value = 42
-const snapshot = untrack(() => this.largeObject)
+this.x = 1
+this.y = 2
 ```
 
-Application state usually should remain normal `this.property` assignments.
+There is no public `batch()` helper in Skein 0.5.
 
 ## Cleanup
 
@@ -188,13 +171,30 @@ window.addEventListener('resize', this.resize, { signal: abortSignal })
 fetch(url, { signal: abortSignal })
 ```
 
+`abortSignal` is lazily allocated by the runtime.
+
 ## Host
 
-`host` is the current custom element instance. Use it when access to the custom element or its shadow root is genuinely needed.
+`host` is the current Skein custom element. Use it only when real element/shadow-root access is needed.
+
+Permanent teardown is:
+
+```js
+host.dispose()
+```
+
+## Public module API
+
+```js
+Skein.version
+Skein.define(tag, source)
+```
+
+Do not generate `Skein.stats`, `Skein.flush`, `Skein.Signal`, `signal()`, `untrack()` or `batch()`; these are not public v0.5 APIs.
 
 ## Static page content
 
-Do not wrap static page copy in a Skein component just for consistency.
+Do not wrap static page copy in a component only for consistency:
 
 ```html
 <h1>Native creative web experiences.</h1>
@@ -202,4 +202,4 @@ Do not wrap static page copy in a Skein component just for consistency.
 <interactive-art></interactive-art>
 ```
 
-The document can remain crawlable and meaningful while Skein owns only the interactive part.
+Skein can own the interactive region while the document remains meaningful without JavaScript.

@@ -2,10 +2,10 @@
 name: skein-web
 description: Build, modify, review, or debug websites and Web Components using the Skein HTML-first reactive runtime. Use for Skein bindings, component files, creative CSS/SVG/Canvas work, keyed lists, lifecycle/cleanup, SEO/progressive enhancement, playground examples, or changes to the Skein runtime itself.
 license: MIT
-compatibility: Browser projects using Skein 0.3+ or the Skein repository. Core work should remain zero-dependency and runnable without a build step.
+compatibility: Browser projects using Skein 0.4+ or the Skein repository. Core work should remain zero-dependency and runnable without a build step.
 metadata:
   author: Pom4H
-  version: "0.1.0"
+  version: "0.2.0"
 ---
 
 # Skein Web
@@ -28,9 +28,11 @@ For a tiny demo, prototype, embed, or single-page experiment, prefer one HTML fi
 </template>
 
 <script type="module"
-  src="https://cdn.jsdelivr.net/gh/Pom4H/web-component@main/skein.js">
+  src="https://cdn.jsdelivr.net/gh/Pom4H/web-component@main/skein.min.js">
 </script>
 ```
+
+The production runtime is `skein.min.js`: 21.4 kB raw, 6.1 kB gzip, 5.6 kB Brotli, zero dependencies. For reproducible production output, pin a commit SHA rather than `@main`.
 
 For a larger project, use external component files. A tag maps to a path by replacing hyphens with slashes:
 
@@ -56,9 +58,7 @@ If content is static, semantic, linkable, accessibility-critical, or important f
 </main>
 ```
 
-Use Skein for the interactive region. This keeps meaningful content present before JavaScript executes.
-
-If a server must compute HTML per request, use an external SSR/static-generation layer and let Skein enhance the delivered HTML. Never claim Skein itself currently provides SSR or hydration.
+Use Skein for the interactive region. If a server must compute HTML per request, use an external server/static-generation layer and let Skein enhance the delivered HTML. Never claim Skein itself currently provides SSR or hydration.
 
 ## Write ordinary state
 
@@ -83,8 +83,6 @@ this.total = computed(() => this.price * this.quantity)
 Template braces contain paths, not arbitrary JavaScript expressions.
 
 ## Bind to the correct DOM primitive
-
-Choose the binding that matches browser semantics:
 
 ```html
 <h1>{title}</h1>
@@ -111,25 +109,14 @@ Do not replace keyed reconciliation with `innerHTML`, full-list cloning, or inde
 
 ## Let CSS, SVG, and Canvas do their own jobs
 
-For visual work, bind state into the native medium rather than recreating the medium in JavaScript.
-
-CSS:
+Bind state into the native medium rather than recreating the medium in JavaScript.
 
 ```html
 <article style="--x:{x}px"></article>
-```
-
-Then animate/layout using CSS.
-
-SVG:
-
-```html
 <circle cx={x} cy={y} r="6" />
 ```
 
-Keep the SVG tree native.
-
-Canvas should normally keep an imperative render loop. Use Skein for state, controls and lifecycle, and dispose animation frames/resources when their scope ends.
+Let CSS animate/layout. Keep the SVG tree native. Canvas should normally keep an imperative render loop; use Skein for state, controls and lifecycle.
 
 ## Own resources correctly
 
@@ -147,8 +134,6 @@ const id = setInterval(this.tick, 1000)
 onCleanup(() => clearInterval(id))
 ```
 
-Do not manually scatter teardown logic outside the owning scope.
-
 ## When modifying Skein itself
 
 Read `references/architecture.md` before changing runtime behavior.
@@ -164,7 +149,8 @@ Preserve these invariants:
 - keyed list identity survives reorder;
 - scopes own effects and cleanup;
 - render work settles before user effects;
-- reconnect pauses/resumes rather than destroying state.
+- reconnect pauses/resumes rather than destroying state;
+- `skein.min.js` remains behaviorally equivalent to the readable runtime.
 
 Run:
 
@@ -187,6 +173,7 @@ Do not:
 - wrap SVG in a framework-specific object model;
 - make Canvas declarative pixel-by-pixel;
 - silently add third-party dependencies;
+- resurrect removed pre-Skein globals or entry files;
 - claim SSR, hydration, suspense, or error boundaries already exist.
 
 ## Useful project context

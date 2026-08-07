@@ -11,18 +11,10 @@ const state = $('#state');
 const errorBox = $('#error');
 let timer;
 
-const runtimeFiles = [
-  '../runtime/reactive.js',
-  '../runtime/template.js',
-  '../runtime/component.js',
-  '../skein.js',
-];
-
-const runtime = Promise.all(runtimeFiles.map(async path => {
-  const response = await fetch(new URL(path, location.href));
-  if (!response.ok) throw new Error(`Cannot load ${path}: ${response.status}`);
+const runtime = fetch(new URL('../skein.min.js', location.href)).then(async response => {
+  if (!response.ok) throw new Error(`Cannot load Skein runtime: ${response.status}`);
   return response.text();
-})).then(([reactive, template, component, entry]) => ({ reactive, template, component, entry }));
+});
 
 for (const example of examples) {
   exampleSelect.add(new Option(`${example.kind.toLowerCase()} / ${example.title}`, example.id));
@@ -50,10 +42,11 @@ function paint() {
   localStorage.setItem('skein.playground', source.value);
 }
 
-function srcdoc(value, modules) {
-  const payload = JSON.stringify(modules);
+function srcdoc(value, runtimeSource) {
   const component = JSON.stringify(value);
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${location.href.replace(/"/g, '&quot;')}"><style>html,body{margin:0;min-height:100%;height:100%}body{display:grid}play-ground{display:block;min-height:100%;height:100%}</style></head><body><script>addEventListener('error',e=>parent.postMessage({type:'skein-error',message:e.error?.stack||e.message},'*'));addEventListener('unhandledrejection',e=>parent.postMessage({type:'skein-error',message:e.reason?.stack||String(e.reason)},'*'));<\/script><script type="module">try{const m=${payload};const reactiveURL=URL.createObjectURL(new Blob([m.reactive],{type:'text/javascript'}));const templateURL=URL.createObjectURL(new Blob([m.template.replace('./reactive.js',reactiveURL)],{type:'text/javascript'}));const componentURL=URL.createObjectURL(new Blob([m.component.replace('./reactive.js',reactiveURL).replace('./template.js',templateURL)],{type:'text/javascript'}));const entryURL=URL.createObjectURL(new Blob([m.entry.replace('./runtime/component.js',componentURL)],{type:'text/javascript'}));const {Skein}=await import(entryURL);Skein.define('play-ground',${component});const element=document.createElement('play-ground');document.body.append(element);await customElements.whenDefined('play-ground');await new Promise(resolve=>setTimeout(resolve,0));parent.postMessage({type:'skein-ready',stats:Skein.stats},'*')}catch(error){parent.postMessage({type:'skein-error',message:error.stack||String(error)},'*')}<\/script></body></html>`;
+  const runtimeText = JSON.stringify(runtimeSource);
+  const base = location.href.replace(/"/g, '&quot;');
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${base}"><style>html,body{margin:0;min-height:100%;height:100%}body{display:grid}play-ground{display:block;min-height:100%;height:100%}</style></head><body><script>addEventListener('error',e=>parent.postMessage({type:'skein-error',message:e.error?.stack||e.message},'*'));addEventListener('unhandledrejection',e=>parent.postMessage({type:'skein-error',message:e.reason?.stack||String(e.reason)},'*'));<\/script><script type="module">try{const runtimeURL=URL.createObjectURL(new Blob([${runtimeText}],{type:'text/javascript'}));const {Skein}=await import(runtimeURL);Skein.define('play-ground',${component});const element=document.createElement('play-ground');document.body.append(element);await customElements.whenDefined('play-ground');await new Promise(resolve=>setTimeout(resolve,0));parent.postMessage({type:'skein-ready',stats:Skein.stats},'*')}catch(error){parent.postMessage({type:'skein-error',message:error.stack||String(error)},'*')}<\/script></body></html>`;
 }
 
 async function run() {

@@ -32,7 +32,7 @@ Preserve these unless the user explicitly asks to change them:
 - scopes own effects and cleanup;
 - disconnect pauses, explicit `dispose()` destroys;
 - render work settles before user effects;
-- CSS, SVG and Canvas should stay native rather than be wrapped in framework-specific representations.
+- CSS, SVG and Canvas stay native rather than being wrapped in framework-specific representations.
 
 ## SEO and document content
 
@@ -46,7 +46,13 @@ Never claim Skein currently implements SSR, hydration, suspense or error boundar
 
 ## Public entry points
 
-Canonical runtime:
+Production/CDN runtime:
+
+```text
+skein.min.js
+```
+
+Readable source entry:
 
 ```text
 skein.js
@@ -55,12 +61,12 @@ skein.js
 Public GitHub-backed CDN during this phase:
 
 ```text
-https://cdn.jsdelivr.net/gh/Pom4H/web-component@main/skein.js
+https://cdn.jsdelivr.net/gh/Pom4H/web-component@main/skein.min.js
 ```
 
-For reproducible production examples, prefer pinning a commit SHA rather than `@main`.
+Current bundle size: 21.4 kB raw, 6.1 kB gzip, 5.6 kB Brotli. For reproducible production examples, pin a commit SHA rather than `@main`.
 
-`web-component.js` remains a compatibility alias.
+There is no pre-Skein compatibility entry or legacy global API. Public browser state is exposed as `window.Skein`.
 
 ## Application patterns
 
@@ -78,7 +84,7 @@ Tiny apps and examples should prefer the one-file form when that makes the examp
   <button @click={inc}>{count}</button>
 </template>
 
-<script type="module" src="https://cdn.jsdelivr.net/gh/Pom4H/web-component@main/skein.js"></script>
+<script type="module" src="https://cdn.jsdelivr.net/gh/Pom4H/web-component@main/skein.min.js"></script>
 ```
 
 Larger projects can use external component files where `<foo-bar>` resolves to `foo/bar.html`.
@@ -120,7 +126,7 @@ Requirements are Node.js 22+ and Chrome/Chromium (`CHROME_BIN` may be set explic
 
 The test harness deliberately uses Node built-ins and raw Chrome DevTools Protocol. Do not add Playwright, Puppeteer, jsdom, Jest, Vitest or another test framework merely for convenience.
 
-When changing runtime semantics, add a regression test for the actual invariant being changed rather than only a superficial rendered-text assertion.
+When changing runtime semantics, add a regression test for the actual invariant being changed rather than only a superficial rendered-text assertion. Also smoke-test `skein.min.js` because it is the production artifact used by the website and CDN examples.
 
 ## Documentation sync
 

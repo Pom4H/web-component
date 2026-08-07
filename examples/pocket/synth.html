@@ -1,6 +1,7 @@
 <script>
   this.wave = input('wave', 'sawtooth')
   this.volume = input('volume', .18)
+  this.audioState = 'tap a key to enable audio'
   this.notes = [
     { id:'c4', label:'C', key:'A', freq:261.63, active:false },
     { id:'d4', label:'D', key:'S', freq:293.66, active:false },
@@ -14,12 +15,35 @@
   this.playing = computed(() => this.notes.filter(note => note.active).map(note => note.label).join(' · ') || 'ready')
   let audio
   const voices = new Map()
+  const Audio = globalThis.AudioContext || globalThis.webkitAudioContext
 
   const emit = (type, detail) => host.dispatchEvent(new CustomEvent(type, { detail, bubbles:true, composed:true }))
-  const context = () => audio ||= new AudioContext()
+  const syncAudioState = () => {
+    if (!audio) return
+    this.audioState = audio.state === 'running' ? 'audio on' : audio.state === 'suspended' ? 'tap a key to enable audio' : 'audio ' + audio.state
+  }
+  const context = () => {
+    if (!Audio) {
+      this.audioState = 'Web Audio unavailable'
+      return null
+    }
+    if (!audio) {
+      audio = new Audio()
+      audio.addEventListener('statechange', syncAudioState, { signal:abortSignal })
+    }
+    if (audio.state === 'suspended') {
+      audio.resume().then(syncAudioState).catch(error => {
+        this.audioState = 'audio blocked'
+        emit('audio-error', { message:error?.message || String(error) })
+      })
+    }
+    syncAudioState()
+    return audio
+  }
   const start = note => {
     if (!note || voices.has(note.id)) return
     const ctx = context()
+    if (!ctx) return
     const osc = ctx.createOscillator()
     const gain = ctx.createGain()
     const level = Math.max(.001, Math.min(.6, Number(this.volume) || 0))
@@ -75,7 +99,7 @@
       </select>
     </label>
   </header>
-  <div class="display"><i></i><span>{playing}</span></div>
+  <div class="display"><i></i><span>{playing}</span><em>{audioState}</em></div>
   <div class="keys">
     <button for={notes} key={id} data-id={id} data-active={active}
       @pointerdown={down} @pointerup={up} @pointercancel={up} @pointerleave={up}>
@@ -93,8 +117,9 @@
   h1 { margin:3px 0 0; font:900 clamp(36px,8vw,72px)/.8 Arial Black,sans-serif; letter-spacing:-.08em; }
   label { display:grid; gap:5px; font:700 9px ui-monospace,monospace; letter-spacing:.1em; }
   select { border:1px solid #111; background:transparent; padding:6px; }
-  .display { margin:22px 0 12px; display:flex; align-items:center; gap:8px; padding:9px 11px; border:1px solid #111; font:11px ui-monospace,monospace; text-transform:uppercase; }
+  .display { margin:22px 0 12px; display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:8px; padding:9px 11px; border:1px solid #111; font:11px ui-monospace,monospace; text-transform:uppercase; }
   .display i { width:7px; aspect-ratio:1; border-radius:50%; background:#ff4d37; box-shadow:0 0 14px #ff4d37; }
+  .display em { font-style:normal; opacity:.5; font-size:9px; }
   .keys { display:grid; grid-template-columns:repeat(8,1fr); height:190px; border:2px solid #111; border-right:0; }
   .keys button { position:relative; min-width:0; border:0; border-right:2px solid #111; background:#f8f5e9; color:#111; cursor:pointer; touch-action:none; transition:transform 40ms,background 40ms; }
   .keys button[data-active="true"] { background:#ff5d49; transform:translateY(5px); }
@@ -102,5 +127,5 @@
   .keys strong { position:absolute; bottom:28px; left:0; right:0; font-size:22px; }
   .keys small { position:absolute; bottom:9px; left:0; right:0; font:8px ui-monospace,monospace; opacity:.45; }
   p { margin:10px 0 0; font:700 9px ui-monospace,monospace; letter-spacing:.08em; text-align:right; }
-  @media(max-width:600px){.synth{padding:14px}.keys{height:160px}.keys strong{font-size:17px}.keys small{display:none}}
+  @media(max-width:600px){.synth{padding:14px}.display{grid-template-columns:auto 1fr}.display em{grid-column:2}.keys{height:160px}.keys strong{font-size:17px}.keys small{display:none}}
 </style>

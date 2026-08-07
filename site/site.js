@@ -8,6 +8,7 @@ Skein.define('skein-nav', `
     <a href="start/" data-path="start">Start</a>
     <a href="examples/" data-path="examples">Examples</a>
     <a href="docs/" data-path="docs">Docs</a>
+    <a href="ai/" data-path="ai">AI</a>
     <a class="play" href="playground/" data-path="playground">Play</a>
     <a class="gh" href="https://github.com/Pom4H/web-component" target="_blank" rel="noreferrer">GitHub ↗</a>
   </div>
@@ -22,13 +23,13 @@ Skein.define('skein-nav', `
   .links a { opacity:.7; transition:opacity .2s, transform .2s; }
   .links a:hover { opacity:1; transform:translateY(-1px); }
   .play { padding:10px 15px; border:1px solid currentColor; border-radius:999px; opacity:1!important; }
-  @media(max-width:700px){ nav{height:60px}.links{gap:12px}.links a:not(.play):not(.gh){display:none}.gh{font-size:0}.gh::after{content:'↗';font-size:15px} }
+  @media(max-width:760px){ nav{height:60px}.links{gap:12px}.links a:not(.play):not(.gh){display:none}.gh{font-size:0}.gh::after{content:'↗';font-size:15px} }
 </style>`);
 
 Skein.define('skein-footer', `
 <footer>
   <div><strong>Skein</strong><span>native web, tightly woven.</span></div>
-  <div class="right"><a href="https://github.com/Pom4H/web-component">source</a><span>zero dependencies</span><span>2026</span></div>
+  <div class="right"><a href="https://github.com/Pom4H/web-component">source</a><span>5.6 kB brotli</span><span>zero dependencies</span><span>2026</span></div>
 </footer>
 <style>
   :host{display:block;border-top:1px solid var(--line,#d4d0c6);margin-top:80px}

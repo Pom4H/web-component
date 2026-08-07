@@ -1,9 +1,6 @@
-import { examples as baseExamples } from '../site/examples.js';
-import { labExamples } from '../site/examples-lab.js';
+import { examples, exampleById } from '../site/examples.js';
 import { highlight } from '../site/highlight.js';
 
-const examples = [...labExamples, ...baseExamples];
-const exampleById = id => examples.find(example => example.id === id) || examples[0];
 const $ = selector => document.querySelector(selector);
 const source = $('#source');
 const highlighted = $('#highlight code');
@@ -18,6 +15,12 @@ const runtime = fetch(new URL('../skein.min.js', location.href)).then(async resp
   if (!response.ok) throw new Error(`Cannot load Skein runtime: ${response.status}`);
   return response.text();
 });
+
+const loadExample = async example => {
+  const response = await fetch(new URL(example.file, location.href));
+  if (!response.ok) throw new Error(`Cannot load ${example.file}: ${response.status}`);
+  return response.text();
+};
 
 for (const example of examples) {
   exampleSelect.add(new Option(`${example.kind.toLowerCase()} / ${example.title}`, example.id));
@@ -46,7 +49,8 @@ if (location.hash.startsWith('#code=')) {
 }
 
 const saved = localStorage.getItem('skein.playground');
-source.value = sharedSource ?? (requestedExample ? selected.source : saved || selected.source);
+const selectedSource = await loadExample(selected);
+source.value = sharedSource ?? (requestedExample ? selectedSource : saved || selectedSource);
 
 function paint() {
   highlighted.innerHTML = highlight(source.value);
@@ -106,12 +110,20 @@ auto.addEventListener('change', () => {
   else state.textContent = 'manual';
 });
 
-exampleSelect.addEventListener('change', () => {
+exampleSelect.addEventListener('change', async () => {
   const example = exampleById(exampleSelect.value);
-  source.value = example.source;
-  history.replaceState(null, '', `?example=${example.id}`);
-  paint();
-  run();
+  state.textContent = 'loading…';
+  errorBox.hidden = true;
+  try {
+    source.value = await loadExample(example);
+    history.replaceState(null, '', `?example=${example.id}`);
+    paint();
+    run();
+  } catch (error) {
+    state.textContent = 'error';
+    errorBox.hidden = false;
+    errorBox.textContent = error.stack || String(error);
+  }
 });
 
 $('#run').addEventListener('click', run);

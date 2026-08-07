@@ -31,7 +31,7 @@ for (const example of [studio, ...examples]) {
   const sourceHref = example.source || `../playground/?example=${example.id}`;
   const sourceLabel = example.source ? 'Open composition →' : 'Open source →';
   card.className = 'demo-card';
-  card.innerHTML = `<iframe class="demo-frame" title="${example.title}"></iframe><div class="demo-meta"><div><h2>${example.title}</h2><p>${example.blurb}</p><a class="demo-link" href="${sourceHref}">${sourceLabel}</a></div><span class="pill">${example.kind}</span></div>`;
+  card.innerHTML = `<iframe class="demo-frame" title="${example.title}" allow="autoplay"></iframe><div class="demo-meta"><div><h2>${example.title}</h2><p>${example.blurb}</p><a class="demo-link" href="${sourceHref}">${sourceLabel}</a></div><span class="pill">${example.kind}</span></div>`;
   card.querySelector('iframe').srcdoc = srcdoc(example);
   gallery.append(card);
 }

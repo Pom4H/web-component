@@ -2,7 +2,7 @@
 
 > Skein is a zero-dependency, HTML-first Web Components runtime with fine-grained reactivity. It is designed for creative CSS, SVG, Canvas and native-DOM sites where HTML remains the document and Skein binds only dynamic data.
 
-Skein has no virtual DOM, build step, CLI, npm dependency, or required server runtime. The canonical browser entry is `skein.js`. State is ordinary JavaScript through a reactive Proxy, templates are real HTML, and updates target exact DOM parts.
+Skein has no virtual DOM, build step, CLI, npm dependency, or required server runtime. The production browser entry is `skein.min.js`: 21.4 kB raw, 6.1 kB gzip, 5.6 kB Brotli. State is ordinary JavaScript through a reactive Proxy, templates are real HTML, and updates target exact DOM parts.
 
 Important guidance for code generation: keep static, semantic, and SEO-critical content in ordinary HTML whenever possible. Use Skein for interactive regions. Binding expressions inside `{...}` are property paths, not arbitrary JavaScript; put derived logic in `computed()`. Prefer stable `key={id}` for lists. Clean up resources with `onCleanup()` or the provided `abortSignal`.
 
@@ -20,7 +20,7 @@ Important guidance for code generation: keep static, semantic, and SEO-critical 
 ## Examples
 
 - [Creative examples](https://pom4h.github.io/web-component/examples/): Live CSS, SVG, Canvas and keyed-DOM examples.
-- [Playground](https://pom4h.github.io/web-component/playground/): Zero-dependency one-file component editor with live preview.
+- [Playground](https://pom4h.github.io/web-component/playground/): Sandboxed one-file component editor with live preview.
 
 ## Agent resources
 
@@ -29,5 +29,6 @@ Important guidance for code generation: keep static, semantic, and SEO-critical 
 
 ## Optional
 
-- [Runtime source](https://github.com/Pom4H/web-component/tree/main/runtime): Fine-grained signals, template compiler, DOM parts, keyed reconciliation and component lifecycle implementation.
+- [Minified runtime](https://cdn.jsdelivr.net/gh/Pom4H/web-component@main/skein.min.js): Single-file production/CDN runtime.
+- [Readable runtime source](https://github.com/Pom4H/web-component/tree/main/runtime): Fine-grained signals, template compiler, DOM parts, keyed reconciliation and component lifecycle implementation.
 - [Tests](https://github.com/Pom4H/web-component/tree/main/test): Zero-dependency Node and real-Chrome test suite.

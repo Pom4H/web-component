@@ -1,0 +1,56 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Docs — Skein</title><meta name="description" content="Skein reference: bindings, lists, conditions, computed values, effects and lifecycle."><link rel="stylesheet" href="../site/styles.css"><script type="module" src="../site/site.js"></script>
+</head><body><skein-nav></skein-nav><main>
+<section class="page-hero"><div class="wrap"><p class="eyebrow">Reference / runtime v0.3</p><h1 class="display">DOCS.</h1><p class="lede">The public surface is deliberately small. Ordinary JavaScript owns state; HTML describes where it goes.</p></div></section>
+<section class="section"><div class="wrap docs-layout">
+<nav class="docs-nav"><a href="#state">State</a><a href="#bindings">Bindings</a><a href="#lists">Lists</a><a href="#conditions">Conditions</a><a href="#computed">Computed</a><a href="#effects">Effects</a><a href="#lifecycle">Lifecycle</a><a href="#cdn">CDN</a></nav>
+<div class="docs-content">
+<section id="state"><p class="eyebrow">State</p><h2>Plain assignments are reactive.</h2><p>A component script runs with <code>this</code> bound to its deep reactive state proxy.</p><div class="code-card"><pre><code data-highlight>&lt;script&gt;
+  this.count = 0
+  this.user = { name: 'Mina' }
+  this.items = []
+
+  this.count++
+  this.user.name = 'Iris'
+  this.items.push({ id: 1 })
+&lt;/script&gt;</code></pre></div></section>
+<section id="bindings"><p class="eyebrow">Bindings</p><h2>Use paths, not template expressions.</h2><p>Derived logic belongs in <code>computed()</code>. That keeps the template easy to inspect and lets the runtime track dependencies precisely.</p><div class="code-card"><pre><code data-highlight>&lt;h1&gt;Hello {user.name}&lt;/h1&gt;
+&lt;div title="User {user.name}"&gt;&lt;/div&gt;
+&lt;input .value={user.name}&gt;
+&lt;button ?disabled={saving}&gt;Save&lt;/button&gt;
+&lt;button @click={save}&gt;Save&lt;/button&gt;</code></pre></div><h3>Context</h3><p><code>in={user}</code> creates a lexical binding context for the element and its descendants.</p><div class="code-card"><pre><code data-highlight>&lt;address in={user.address}&gt;
+  {city}, {street}
+&lt;/address&gt;</code></pre></div></section>
+<section id="lists"><p class="eyebrow">Lists</p><h2>Keyed ranges preserve DOM identity.</h2><div class="code-card"><pre><code data-highlight>&lt;article for={projects} key={id}&gt;
+  &lt;b&gt;{index}. {title}&lt;/b&gt;
+  &lt;input placeholder="local DOM state survives reorder"&gt;
+&lt;/article&gt;</code></pre></div><p>Objects use object identity by default. A stable <code>key={id}</code> is preferable when records can be replaced. Push creates one view; removal disposes one view; reorder moves existing nodes.</p></section>
+<section id="conditions"><p class="eyebrow">Conditions</p><h2>Branches own their own scope.</h2><div class="code-card"><pre><code data-highlight>&lt;aside if={inspectorOpen}&gt;
+  &lt;canvas&gt;&lt;/canvas&gt;
+&lt;/aside&gt;</code></pre></div><p>When the condition becomes false, the branch's effects, listeners, nested scopes and DOM range are disposed together.</p></section>
+<section id="computed"><p class="eyebrow">Computed</p><h2>Lazy, cached derived state.</h2><div class="code-card"><pre><code data-highlight>&lt;script&gt;
+  this.price = 100
+  this.quantity = 2
+  this.total = computed(() =&gt; this.price * this.quantity)
+&lt;/script&gt;
+
+&lt;strong&gt;{total}&lt;/strong&gt;</code></pre></div></section>
+<section id="effects"><p class="eyebrow">Effects</p><h2>Render settles before user effects.</h2><div class="code-card"><pre><code data-highlight>&lt;script&gt;
+  effect(() =&gt; console.log(this.total))
+
+  batch(() =&gt; {
+    this.x = 10
+    this.y = 20
+  })
+&lt;/script&gt;</code></pre></div><p>Synchronous writes are deduplicated into one scheduled wave. <code>batch()</code> is useful when a logical transaction spans multiple writes.</p></section>
+<section id="lifecycle"><p class="eyebrow">Lifecycle</p><h2>Cleanup belongs to the component scope.</h2><div class="code-card"><pre><code data-highlight>&lt;script&gt;
+  const frame = requestAnimationFrame(draw)
+  onCleanup(() =&gt; cancelAnimationFrame(frame))
+
+  window.addEventListener('resize', measure, {
+    signal: abortSignal
+  })
+&lt;/script&gt;</code></pre></div><p>Disconnect pauses reactive work. Reconnect resumes dirty bindings. Explicit <code>host.dispose()</code> permanently tears the component down.</p></section>
+<section id="cdn"><p class="eyebrow">CDN</p><h2>The canonical entry is <code>skein.js</code>.</h2><p>During the public-GitHub phase you can load it through jsDelivr's GitHub endpoint:</p><div class="code-card"><div class="code-top"><span>GitHub-backed CDN</span><button data-copy="#cdn-code">Copy</button></div><pre><code id="cdn-code">https://cdn.jsdelivr.net/gh/Pom4H/web-component@main/skein.js</code></pre></div><p>For reproducible production sites, pin a commit SHA instead of <code>@main</code>. The old <code>web-component.js</code> file remains as a compatibility alias.</p></section>
+</div></div></section>
+</main><skein-footer></skein-footer></body></html>

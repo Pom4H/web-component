@@ -1,4 +1,7 @@
-# web-component
+# Skein
+
+**Native web, tightly woven.**
+
 
 A tiny HTML-first Web Components runtime with fine-grained reactivity.
 
@@ -21,14 +24,32 @@ The runtime never rerenders a component and never builds a virtual DOM tree.
 
 ## Quick start
 
+The smallest Skein project is one HTML file. `template[skein]` is inert browser HTML until Skein registers it as a component:
+
 ```html
 <!doctype html>
-<script type="module" src="web-component.js"></script>
 
-<counter-app></counter-app>
+<click-count></click-count>
+
+<template skein="click-count">
+  <script>
+    this.count = 0
+    this.up = () => this.count++
+  </script>
+
+  <button onclick={up}>clicked {count}</button>
+</template>
+
+<script type="module"
+  src="https://cdn.jsdelivr.net/gh/Pom4H/web-component@main/skein.js">
+</script>
 ```
 
-A tag maps to an HTML file by replacing `-` with `/`:
+No npm, CLI, config, bundler or dev dependency is required. During the public-GitHub phase `skein.js` is the canonical CDN entry. Pin a commit SHA instead of `@main` for reproducible production sites.
+
+You can also register source from JavaScript with `Skein.define('my-element', source)`. This is what the zero-dependency playground uses.
+
+For larger projects, keep component source in separate files. A tag maps to an HTML file by replacing `-` with `/`:
 
 ```text
 <counter-app> -> counter/app.html
@@ -223,7 +244,7 @@ state write
 
 Parts cache their last committed value and skip identical DOM writes.
 
-The runtime itself is split into native ES modules with no bundler: `runtime/reactive.js`, `runtime/template.js`, `runtime/component.js`, and the small `web-component.js` entry point.
+The runtime itself is split into native ES modules with no bundler: `runtime/reactive.js`, `runtime/template.js`, `runtime/component.js`, and the canonical `skein.js` entry point. `web-component.js` remains a compatibility alias.
 
 ## Keyed reconciliation
 
@@ -334,7 +355,7 @@ The performance smoke prints timings for create 1000, update 100 rows, reverse 1
 For development and benchmarks:
 
 ```js
-WebComponentRuntime.stats
+Skein.stats
 ```
 
 contains counters for scheduler flushes, reactive effect runs, DOM commits and list operations.
@@ -342,10 +363,20 @@ contains counters for scheduler flushes, reactive effect runs, DOM commits and l
 A synchronous flush is also available for low-level tests:
 
 ```js
-WebComponentRuntime.flush()
+Skein.flush()
 ```
 
 Application code normally should not need either.
+
+## CDN and browser requirements
+
+Canonical GitHub-backed CDN entry:
+
+```text
+https://cdn.jsdelivr.net/gh/Pom4H/web-component@main/skein.js
+```
+
+`web-component.js` is kept as a compatibility alias while the project moves to the Skein brand.
 
 ## Browser requirements
 

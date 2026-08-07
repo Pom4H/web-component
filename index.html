@@ -1,12 +1,118 @@
-<!DOCTYPE html>
-<html>
-
+<!doctype html>
+<html lang="en">
 <head>
-  <script type="module" src="web-component.js"></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#f4f0e6" />
+  <meta name="description" content="Skein is a zero-dependency, HTML-first Web Components runtime for creative CSS, SVG and Canvas sites." />
+  <title>Skein — native web, tightly woven</title>
+  <link rel="stylesheet" href="site/styles.css" />
+  <script type="module" src="site/site.js"></script>
 </head>
-
 <body>
-  <page-test></page-test>
-</body>
+  <skein-nav></skein-nav>
+  <main>
+    <section class="hero">
+      <skein-threads></skein-threads>
+      <div class="badge-row"><span class="badge">0 dependencies</span><span class="badge">no build</span><span class="badge">native DOM</span></div>
+      <div class="wrap hero-copy">
+        <p class="eyebrow">HTML-first reactive web components</p>
+        <h1 class="display">SKEIN</h1>
+        <div class="subrow">
+          <p class="lede">A tiny reactive layer for the browser you already have. Built for people making expressive CSS, SVG and Canvas instead of rebuilding the DOM in JavaScript.</p>
+          <div class="actions"><a class="button" href="playground/">Open playground →</a><a class="button ghost" href="start/">Start in one file</a></div>
+        </div>
+      </div>
+    </section>
 
+    <div class="ticker" aria-hidden="true"><div class="ticker-track">
+      <span>custom elements</span><span>signals</span><span>shadow dom</span><span>keyed ranges</span><span>css</span><span>svg</span><span>canvas</span><span>no virtual dom</span>
+      <span>custom elements</span><span>signals</span><span>shadow dom</span><span>keyed ranges</span><span>css</span><span>svg</span><span>canvas</span><span>no virtual dom</span>
+    </div></div>
+
+    <section class="section">
+      <div class="wrap">
+        <div class="section-head" data-reveal><p class="eyebrow">01 / the premise</p><h2>The browser is already a rendering engine.</h2></div>
+        <div class="grid-3" data-reveal>
+          <article class="feature"><span class="num">DOM</span><div><h3>Create once.</h3><p>Templates compile once per component. There is no virtual tree to recreate and diff on every state change.</p></div></article>
+          <article class="feature"><span class="num">SIGNALS</span><div><h3>Touch only what changed.</h3><p>Reactive reads wire state directly to text, attributes, properties, branches and keyed list ranges.</p></div></article>
+          <article class="feature"><span class="num">WEB APIs</span><div><h3>Keep the good parts native.</h3><p>CSS animates CSS. SVG stays SVG. Canvas keeps its imperative loop. Skein handles state, ownership and cleanup.</p></div></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="wrap split">
+        <div data-reveal>
+          <p class="eyebrow">02 / start</p>
+          <h2 style="font-size:clamp(48px,7vw,96px);letter-spacing:-.065em;line-height:.9;margin:20px 0 24px">One HTML file is enough.</h2>
+          <p class="lede" style="font-size:19px">Put an inert component template next to the element, load one module from GitHub-backed CDN, and you are running. No npm. No CLI. No config.</p>
+          <div class="actions" style="margin-top:28px"><a class="button" href="start/">See the 60-second start</a></div>
+        </div>
+        <div class="code-card" data-reveal>
+          <div class="code-top"><span>index.html</span><button data-copy="#quick-code">Copy</button></div>
+          <pre><code id="quick-code" data-highlight>&lt;click-count&gt;&lt;/click-count&gt;
+
+&lt;template skein="click-count"&gt;
+  &lt;script&gt;
+    this.count = 0
+    this.up = () =&gt; this.count++
+  &lt;/script&gt;
+
+  &lt;button onclick={up}&gt;
+    clicked {count}
+  &lt;/button&gt;
+&lt;/template&gt;
+
+&lt;script type="module"
+  src="https://cdn.jsdelivr.net/gh/Pom4H/web-component@main/skein.js"&gt;
+&lt;/script&gt;</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="statement">
+      <div class="wrap" data-reveal><blockquote>Design in the medium.<br />Bind only the data.</blockquote><small>CSS / SVG / Canvas / Web Components</small></div>
+    </section>
+
+    <section class="section">
+      <div class="wrap">
+        <div class="section-head" data-reveal><p class="eyebrow">03 / model</p><h2>Fine-grained without turning HTML into a programming language.</h2></div>
+        <div class="split">
+          <div class="code-card" data-reveal>
+            <div class="code-top"><span>poster/card.html</span><a href="playground/?example=kinetic" style="color:inherit">run ↗</a></div>
+            <pre><code data-highlight>&lt;script&gt;
+  this.x = 50
+  this.move = e =&gt; this.x = e.offsetX
+&lt;/script&gt;
+
+&lt;article style="--x:{x}px" @pointermove={move}&gt;
+  &lt;h1&gt;Skein&lt;/h1&gt;
+&lt;/article&gt;
+
+&lt;style&gt;
+  h1 { transform: translateX(var(--x)); }
+&lt;/style&gt;</code></pre>
+          </div>
+          <div data-reveal>
+            <div class="big-number">1→1</div>
+            <h3 style="font-size:32px;letter-spacing:-.04em;margin:28px 0 12px">State write → exact DOM part.</h3>
+            <p class="lede" style="font-size:18px">A signal invalidates only the parts that read it. Synchronous writes batch into one microtask. Render effects settle before user effects. Keyed rows move instead of being recreated.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="wrap">
+        <div class="section-head" data-reveal><p class="eyebrow">04 / playground</p><h2>One editor, because a component is one file.</h2></div>
+        <div class="split">
+          <div data-reveal><p class="lede">No HTML/CSS/JS panel ceremony. Edit the component source as it exists in a real project and see a fresh isolated preview. Syntax highlighting is written in a few dozen lines with no editor dependency.</p><p style="margin-top:28px"><a class="button" href="playground/">Make something weird →</a></p></div>
+          <div class="feature" style="min-height:330px;background:#0c0c0b;color:#f4f0e6;border:0" data-reveal><span class="num" style="color:var(--acid)">PLAYGROUND</span><div><h3 style="font-size:46px;margin-bottom:16px">source.html<br />→ live DOM</h3><p style="color:#aaa">Auto-run · share URL · examples · runtime errors · no account · no backend</p></div></div>
+        </div>
+      </div>
+    </section>
+  </main>
+  <skein-footer></skein-footer>
+</body>
 </html>

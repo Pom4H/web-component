@@ -30,6 +30,13 @@ class CodeLoader {
   static #cache = new Map();
   static #parser = new DOMParser();
 
+  static register(tag, source) {
+    if (!isCustomTag(tag)) throw new TypeError(`Skein component names must contain a hyphen: ${tag}`);
+    const component = this.#compile(source);
+    this.#cache.set(tag, Promise.resolve(component));
+    return component;
+  }
+
   static loadFromTag(tag) {
     if (!this.#cache.has(tag)) {
       const promise = this.#load(tag).catch(error => {
@@ -45,8 +52,11 @@ class CodeLoader {
     const path = `${tag.toLowerCase().split('-').join('/')}.html`;
     const response = await fetch(new URL(path, WebComponent.baseURL));
     if (!response.ok) throw new Error(`Cannot load <${tag}>: ${response.status} ${response.statusText}`);
-    const body = await response.text();
-    const doc = this.#parser.parseFromString(`<html><body>${body}</body></html>`, 'text/html');
+    return this.#compile(await response.text());
+  }
+
+  static #compile(source) {
+    const doc = this.#parser.parseFromString(`<html><body>${source}</body></html>`, 'text/html');
     return new CompiledComponent(doc.body);
   }
 }
@@ -164,6 +174,12 @@ export class WebComponent extends HTMLElement {
   };
 }
 
+export const registerComponent = (tag, source) => {
+  CodeLoader.register(tag, source);
+  defineElement(tag);
+  return customElements.get(tag);
+};
+
 export const Runtime = {
   Scope,
   Scheduler,
@@ -176,4 +192,5 @@ export const Runtime = {
   flush: () => Scheduler.flush(),
   stats: Scheduler.stats,
   raw: value => value?.[RAW] || value,
+  define: registerComponent,
 };

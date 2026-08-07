@@ -178,6 +178,43 @@
       window.__benchmark = metrics;
     });
 
+    test('creative site examples compile and mount', async () => {
+      let index = 0;
+      for (const example of window.__siteExamples) {
+        const tag = `site-example-${index++}`;
+        Skein.define(tag, example.source);
+        const element = document.createElement(tag);
+        element.style.width = '620px';
+        element.style.height = '360px';
+        document.body.append(element);
+        for (let attempt = 0; attempt < 50 && !element.shadowRoot?.childNodes.length; attempt++) await new Promise(resolve => setTimeout(resolve, 0));
+        ok(element.shadowRoot?.childNodes.length, `${example.id} should mount`);
+        element.dispose();
+        element.remove();
+      }
+    });
+
+    test('template[skein] boots an inline component', async () => {
+      const inline = document.querySelector('inline-boot');
+      while (!inline.shadowRoot?.querySelector('#boot-word')) await new Promise(resolve => setTimeout(resolve, 0));
+      equal(inline.shadowRoot.querySelector('#boot-word').textContent, 'woven');
+      equal(document.querySelector('template[skein]'), null);
+    });
+
+    test('Skein.define registers source without a fetch', async () => {
+      Skein.define('inline-defined', '<script>this.value=41;this.up=()=>this.value++<\/script><button id="defined-button" @click={up}>{value}</button>');
+      const inline = document.createElement('inline-defined');
+      document.body.append(inline);
+      while (!inline.shadowRoot?.querySelector('#defined-button')) await new Promise(resolve => setTimeout(resolve, 0));
+      const button = inline.shadowRoot.querySelector('#defined-button');
+      equal(button.textContent, '41');
+      button.click();
+      await tick();
+      equal(button.textContent, '42');
+      inline.dispose();
+      inline.remove();
+    });
+
     test('disconnect pauses and reconnect resumes dirty bindings', async ({ host, state }) => {
       const parent = host.parentNode;
       const title = host.shadowRoot.querySelector('#title');

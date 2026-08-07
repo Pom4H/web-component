@@ -1,5 +1,5 @@
-export const SIGNAL_REF = Symbol('WebComponent.signal');
-export const RAW = Symbol('WebComponent.raw');
+export const SIGNAL_REF = Symbol('Skein.signal');
+export const RAW = Symbol('Skein.raw');
 
 export const isObject = value => typeof value === 'object' && value !== null;
 export const hasOwnOrInherited = (value, key) => value != null && (typeof value === 'object' || typeof value === 'function') && key in value;

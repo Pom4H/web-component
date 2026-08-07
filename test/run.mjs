@@ -119,7 +119,7 @@ const modules = {
   reactive: await readFile(join(root, 'runtime/reactive.js'), 'utf8'),
   template: await readFile(join(root, 'runtime/template.js'), 'utf8'),
   component: await readFile(join(root, 'runtime/component.js'), 'utf8'),
-  entry: await readFile(join(root, 'web-component.js'), 'utf8'),
+  entry: await readFile(join(root, 'skein.js'), 'utf8'),
 };
 
 async function loadRuntime(send) {
@@ -138,6 +138,7 @@ async function loadRuntime(send) {
   await evaluate(send, expression, { awaitPromise: true });
 }
 
+const { examples: siteExamples } = await import(new URL('../site/examples.js', import.meta.url));
 const runtimeFixture = await readFile(join(root, 'test/runtime.html'), 'utf8');
 const testIndex = await readFile(join(root, 'test/index.html'), 'utf8');
 const harness = [...testIndex.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(match => match[1]).filter(Boolean).at(-1);
@@ -149,9 +150,10 @@ for (const path of ['page/test.html', 'test/canvas.html', 'test/function.html', 
 
 const { socket, send, exceptions } = await connect();
 try {
-  await newDocument(send, '<test-runtime></test-runtime><pre id="results">Running…</pre>');
+  await newDocument(send, '<test-runtime></test-runtime><inline-boot></inline-boot><template skein="inline-boot"><script>this.word="woven"<\/script><b id="boot-word">{word}</b></template><pre id="results">Running…</pre>');
   await evaluate(send, `window.fetch = async url => String(url).endsWith('test/runtime.html') ? new Response(${JSON.stringify(runtimeFixture)}, { status: 200, headers: { 'Content-Type': 'text/html' } }) : new Response('', { status: 404 });`);
   await loadRuntime(send);
+  await evaluate(send, `window.__siteExamples = ${JSON.stringify(siteExamples.map(({ id, source }) => ({ id, source })))}`);
   await evaluate(send, harness);
 
   let result = {};

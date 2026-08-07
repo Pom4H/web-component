@@ -1,118 +1,120 @@
 # AGENTS.md
 
-This repository contains **Skein**, a zero-dependency, HTML-first Web Components runtime for fine-grained reactive CSS, SVG, Canvas and native-DOM sites.
+This repository contains **Skein**, a zero-dependency HTML-first Web Components runtime for fine-grained reactive CSS, SVG, Canvas and native DOM sites.
 
 ## Before changing code
 
-If the task touches Skein application syntax, read:
+For application syntax, read:
 
 - `llms-full.txt`
 - `.agents/skills/skein/references/syntax.md`
 
-If the task touches runtime internals, rendering, reactivity, reconciliation, lifecycle or performance, also read:
+For renderer/reactivity/lifecycle/performance work, also read:
 
 - `.agents/skills/skein/references/architecture.md`
-- the relevant file under `runtime/`
-- the relevant browser/core tests under `test/`
+- the relevant `runtime/` source
+- `test/`
 
-## Project invariants
+## Runtime invariants
 
-Preserve these unless the user explicitly asks to change them:
+Preserve these unless the task explicitly changes them:
 
 - zero runtime dependencies;
 - no virtual DOM;
-- no build step required for users;
+- no build step required by users;
 - no component-wide rerender loop;
-- ordinary JavaScript state through a reactive Proxy;
-- templates remain normal HTML;
-- `{...}` contains property paths, not arbitrary JavaScript;
-- computed logic belongs in `computed()`;
-- specialized DOM bindings preserve native semantics;
-- keyed lists preserve DOM identity across reorder;
-- scopes own effects and cleanup;
+- ordinary JavaScript state through a deep reactive Proxy;
+- `{...}` bindings are property paths, not arbitrary JavaScript;
+- binding paths compile once;
+- exact reactive reads invalidate exact DOM work;
+- synchronous writes naturally batch through one microtask;
+- render effects settle before user effects;
+- keyed lists preserve DOM identity;
+- list/branch scopes own disposal;
 - disconnect pauses, explicit `dispose()` destroys;
-- render work settles before user effects;
-- CSS, SVG and Canvas stay native rather than being wrapped in framework-specific representations.
+- CSS, SVG and Canvas stay native.
 
-## SEO and document content
+Do not reintroduce the removed public low-level APIs (`batch`, `signal`, `untrack`, `Skein.stats`, `Skein.flush`) or the old `onclick={handler}` binding alias without an explicit product decision. Use `@event={handler}`.
 
-Skein currently does not provide SSR or hydration.
+## Public API
 
-Do not solve this by moving meaningful content into client-only components. Prefer static semantic HTML for content that should exist before JavaScript runs: titles, headings, value propositions, navigation links, product copy, article text, structured data and other crawlable content.
-
-Use Skein as an enhancement layer for interactive regions. If request-time HTML generation is required, use a server/static-generation layer outside Skein and enhance the result with Skein.
-
-Never claim Skein currently implements SSR, hydration, suspense or error boundaries.
-
-## Public entry points
-
-Production/CDN runtime:
+Production entry:
 
 ```text
 skein.min.js
 ```
 
-Readable source entry:
+Readable entry:
 
 ```text
 skein.js
 ```
 
-Public GitHub-backed CDN during this phase:
+Public module/global surface:
+
+```js
+Skein.version
+Skein.define(tag, source)
+```
+
+Injected component-script helpers:
 
 ```text
-https://cdn.jsdelivr.net/gh/Pom4H/web-component@main/skein.min.js
+computed
+effect
+onCleanup
+host
+abortSignal
 ```
 
-Current bundle size: 21.4 kB raw, 6.1 kB gzip, 5.6 kB Brotli. For reproducible production examples, pin a commit SHA rather than `@main`.
+## SEO and document content
 
-There is no pre-Skein compatibility entry or legacy global API. Public browser state is exposed as `window.Skein`.
+Skein currently has no SSR or hydration. Keep static, semantic and SEO-critical content in ordinary document HTML whenever possible. Use Skein for interactive regions.
 
-## Application patterns
+If request-time HTML generation is required, use a server or static generator outside Skein and enhance the resulting HTML.
 
-Tiny apps and examples should prefer the one-file form when that makes the example clearer:
+Never claim Skein currently implements SSR, hydration, suspense or error boundaries.
 
-```html
-<demo-card></demo-card>
-
-<template skein="demo-card">
-  <script>
-    this.count = 0
-    this.inc = () => this.count++
-  </script>
-
-  <button @click={inc}>{count}</button>
-</template>
-
-<script type="module" src="https://cdn.jsdelivr.net/gh/Pom4H/web-component@main/skein.min.js"></script>
-```
-
-Larger projects can use external component files where `<foo-bar>` resolves to `foo/bar.html`.
-
-Use stable keys for application lists:
-
-```html
-<li for={items} key={id}>{title}</li>
-```
-
-Use native DOM semantics:
-
-```html
-<input .value={name}>
-<button ?disabled={saving}>Save</button>
-<button @click={save}>Save</button>
-```
-
-## Creative-site rule
-
-When building visual experiences:
+## Creative-site rules
 
 - bind values into CSS custom properties and let CSS animate/layout;
 - keep SVG as actual SVG and update only dynamic attributes/properties;
 - keep Canvas imperative and use Skein for state, controls and lifecycle;
-- register timers, animation frames, observers, listeners and requests with `abortSignal` or `onCleanup()`.
+- clean up timers, animation frames, observers and requests with `onCleanup()` or `abortSignal`;
+- do not add editor, animation, state-management or rendering libraries unless explicitly requested.
 
-Do not add editor, animation, state-management, templating or rendering libraries unless the user explicitly requests them.
+## Performance rules
+
+Before adding an abstraction, consider its allocation cost in repeated list/item scopes.
+
+Important v0.5 choices:
+
+- `AbortController` is lazy;
+- declarative event listeners use scope cleanup rather than allocating an AbortController per item;
+- registered component sources are cached directly rather than wrapped in resolved Promises;
+- list keys resolve directly against items;
+- binding paths are compiled once;
+- renderer instructions are compact tuples;
+- production diagnostics are not on hot paths;
+- nested Skein elements must be disposed when their owning view disappears.
+
+Do not trade keyed identity, cleanup correctness or lifecycle semantics merely to reduce the bundle-size number.
+
+## Production build
+
+The production file is generated by a zero-dependency Node script:
+
+```bash
+node tools/build.mjs
+```
+
+Check that the committed artifact is current:
+
+```bash
+node tools/build.mjs --check
+```
+
+The build script must remain string-safe: identifier mangling must never modify selector/source strings such as `template[skein]`, DOM property names or user-facing public names. Any minifier change must be exercised against `skein.min.js` in real Chrome.
 
 ## Testing
 
@@ -122,21 +124,24 @@ Run the complete suite after runtime changes:
 node test/run.mjs
 ```
 
-Requirements are Node.js 22+ and Chrome/Chromium (`CHROME_BIN` may be set explicitly).
+Requirements: Node.js 22+ and Chrome/Chromium (`CHROME_BIN` may be set).
 
-The test harness deliberately uses Node built-ins and raw Chrome DevTools Protocol. Do not add Playwright, Puppeteer, jsdom, Jest, Vitest or another test framework merely for convenience.
+The test harness intentionally uses Node built-ins and raw Chrome DevTools Protocol. Do not add Playwright, Puppeteer, jsdom, Jest or Vitest merely for convenience.
 
-When changing runtime semantics, add a regression test for the actual invariant being changed rather than only a superficial rendered-text assertion. Also smoke-test `skein.min.js` because it is the production artifact used by the website and CDN examples.
+Runtime changes should have regression tests for the actual invariant: DOM identity, disposal, scheduling, missing-property tracking, array structure, lifecycle, production minified output, or sandbox behavior.
+
+Do not make machine-dependent performance timings pass/fail thresholds.
 
 ## Documentation sync
 
-When public syntax or behavior changes, update the relevant surfaces together:
+When public syntax or behavior changes, update together:
 
 - `README.md`
 - `docs/`
+- `start/` and landing examples
 - `llms.txt`
 - `llms-full.txt`
 - `.agents/skills/skein/`
-- examples/playground when the change is user-visible.
+- Playground/examples when relevant.
 
-Keep `llms.txt` concise and link-oriented. Put the fuller machine-readable explanation in `llms-full.txt`.
+Keep `llms.txt` concise and link-oriented. Put the fuller machine model in `llms-full.txt`.

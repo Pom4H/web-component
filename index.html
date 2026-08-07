@@ -14,7 +14,7 @@
   <main>
     <section class="hero">
       <skein-threads></skein-threads>
-      <div class="badge-row"><span class="badge">0 dependencies</span><span class="badge">5.6 kB brotli</span><span class="badge">no build</span></div>
+      <div class="badge-row"><span class="badge">0 dependencies</span><span class="badge">4.6 kB brotli</span><span class="badge">no build</span></div>
       <div class="wrap hero-copy">
         <p class="eyebrow">HTML-first reactive web components</p>
         <h1 class="display">SKEIN</h1>
@@ -47,7 +47,7 @@
           <p class="eyebrow">02 / start</p>
           <h2 style="font-size:clamp(48px,7vw,96px);letter-spacing:-.065em;line-height:.9;margin:20px 0 24px">One HTML file is enough.</h2>
           <p class="lede" style="font-size:19px">Put an inert component template next to the element, load one module from the CDN, and you are running. No npm. No CLI. No config.</p>
-          <p style="margin-top:18px;font:600 12px ui-monospace,monospace;letter-spacing:.04em">skein.min.js · 21.4 kB raw · 6.1 kB gzip · 5.6 kB brotli</p>
+          <p style="margin-top:18px;font:600 12px ui-monospace,monospace;letter-spacing:.04em">skein.min.js · 14.0 kB raw · 5.1 kB gzip · 4.6 kB brotli</p>
           <div class="actions" style="margin-top:28px"><a class="button" href="start/">See the 60-second start</a></div>
         </div>
         <div class="code-card" data-reveal>
@@ -60,7 +60,7 @@
     this.up = () =&gt; this.count++
   &lt;/script&gt;
 
-  &lt;button onclick={up}&gt;
+  &lt;button @click={up}&gt;
     clicked {count}
   &lt;/button&gt;
 &lt;/template&gt;
@@ -98,7 +98,7 @@
           <div data-reveal>
             <div class="big-number">1→1</div>
             <h3 style="font-size:32px;letter-spacing:-.04em;margin:28px 0 12px">State write → exact DOM part.</h3>
-            <p class="lede" style="font-size:18px">A signal invalidates only the parts that read it. Synchronous writes batch into one microtask. Render effects settle before user effects. Keyed rows move instead of being recreated.</p>
+            <p class="lede" style="font-size:18px">A signal invalidates only the parts that read it. Synchronous writes collapse into one microtask. Render effects settle before user effects. Keyed rows move instead of being recreated.</p>
           </div>
         </div>
       </div>

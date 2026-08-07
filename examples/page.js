@@ -1,5 +1,7 @@
-import { examples } from '../site/examples.js';
+import { examples as baseExamples } from '../site/examples.js';
+import { labExamples } from '../site/examples-lab.js';
 
+const examples = [...labExamples, ...baseExamples];
 const gallery = document.querySelector('#gallery');
 const runtimeURL = new URL('../skein.min.js', location.href).href;
 

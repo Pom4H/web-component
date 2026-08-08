@@ -1,6 +1,6 @@
 <script>
-  this.pattern = input('pattern', [true,false,true,false,true,true,false,true])
-  this.step = input('step', 0)
+  input('pattern', [true,false,true,false,true,true,false,true])
+  input('step', 0)
   this.cells = computed(() => this.pattern.map((active, index) => ({ id:index, active, current:index === this.step, label:String(index + 1).padStart(2,'0') })))
   this.toggle = event => {
     const index = Number(event.currentTarget.dataset.index)
@@ -13,7 +13,7 @@
 <section>
   <header><span>STEP SEQUENCER</span><small>keyed rows / property input</small></header>
   <div class="steps">
-    <button for={cells} key={id} data-index={id} data-active={active} data-current={current} @click={toggle}>
+    <button each={cells} key={id} data-index={id} data-active={active} data-current={current} @click={toggle}>
       <i></i><b>{label}</b>
     </button>
   </div>

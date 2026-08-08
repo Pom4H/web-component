@@ -27,7 +27,7 @@
   </header>
 
   <div class="channels">
-    <button for={channels} key={id} data-id={id} @click={pick}>
+    <button each={channels} key={id} data-id={id} @click={pick}>
       <span>{label}</span>
       <strong>{value}</strong>
       <em>{unit}</em>
@@ -35,9 +35,9 @@
     </button>
   </div>
 
-  <footer in={inspecting}>
-    <div><small>INSPECTING</small><b>{label}</b></div>
-    <div><strong>{value}</strong><span>{unit}</span></div>
+  <footer>
+    <div><small>INSPECTING</small><b>{inspecting.label}</b></div>
+    <div><strong>{inspecting.value}</strong><span>{inspecting.unit}</span></div>
     <button @click={shuffle}>reorder channels ↝</button>
   </footer>
 </section>

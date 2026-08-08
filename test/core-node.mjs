@@ -56,11 +56,48 @@ state.later = 7;
 Scheduler.flush();
 equal(missing, 7, 'missing property tracks');
 
-const highlighted = highlight(`<click-count></click-count>
-<template skein="click-count">
-  <script type="module">this.count = 0</script>
-  <button @click={up}>clicked {count}</button>
-</template>`);
+// Shared objects use one proxy across component state roots.
+const shared = { value: 1 };
+const a = new ReactiveState({ shared });
+const b = new ReactiveState({ shared: a.shared });
+equal(a.shared, b.shared, 'shared object uses one proxy');
+let sharedSeen;
+const sharedScope = new Scope();
+new ReactiveEffect(() => { sharedSeen = b.shared.value; }, sharedScope, true);
+a.shared.value = 2;
+Scheduler.flush();
+equal(sharedSeen, 2, 'shared proxy propagates across roots');
+sharedScope.dispose();
+
+// Platform and class instances stay opaque so internal-slot methods remain valid.
+const date = new Date(0);
+const map = new Map([['x', 1]]);
+class Box { constructor() { this.value = 3; } }
+const box = new Box();
+const opaque = new ReactiveState({ date, map, box });
+equal(opaque.date, date, 'Date stays native');
+equal(opaque.date.getTime(), 0, 'Date methods keep receiver');
+equal(opaque.map, map, 'Map stays native');
+equal(opaque.map.get('x'), 1, 'Map methods keep receiver');
+equal(opaque.box, box, 'class instance stays opaque');
+
+// Failed writes do not invalidate subscribers.
+const frozen = Object.freeze({ value: 1 });
+const frozenState = new ReactiveState({ item: frozen });
+let frozenRuns = 0;
+const frozenScope = new Scope();
+new ReactiveEffect(() => { frozenRuns++; frozenState.item.value; }, frozenScope, true);
+equal(Reflect.set(frozenState.item, 'value', 2), false, 'failed frozen write returns false');
+Scheduler.flush();
+equal(frozenRuns, 1, 'failed frozen write does not invalidate');
+frozenScope.dispose();
+
+const inherited = Object.create({ secret: 'prototype' });
+inherited.own = 'own';
+const lexical = new ReactiveState({ inherited });
+equal(lexical.inherited.secret, 'prototype', 'opaque object behavior is native');
+
+const highlighted = highlight(`<click-count></click-count>\n<template skein="click-count">\n  <script type="module">this.count = 0</script>\n  <button @click={up}>clicked {count}</button>\n</template>`);
 assert(highlighted.includes('&lt;<span class="tok-tag">click-count</span>&gt;'), 'opening custom-element tag should remain valid highlighted HTML');
 assert(highlighted.includes('&lt;/<span class="tok-tag">click-count</span>&gt;'), 'closing custom-element tag should remain valid highlighted HTML');
 assert(highlighted.includes('<span class="tok-attr">skein</span>='), 'attribute names should be highlighted');

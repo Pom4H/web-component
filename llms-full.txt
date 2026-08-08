@@ -1,329 +1,205 @@
-# Skein — full LLM context
+# Skein 0.6 — full agent context
 
-Skein 0.5 is a tiny HTML-first Web Components runtime for interactive websites and documents. It adds fine-grained reactive state, keyed lists, conditions, component inputs and scoped lifecycle while leaving the rendering medium native: HTML stays HTML, CSS stays CSS, SVG stays SVG, Canvas stays Canvas, Web Audio stays Web Audio, and component boundaries stay Custom Elements.
+Skein is a small HTML-first runtime for native Web Components. Treat the browser DOM, Custom Elements, CSS, SVG, Canvas, Web Audio and other platform APIs as primary. Skein adds fine-grained reactive state, binding compilation, keyed DOM identity and scoped lifecycle.
 
-Production entry: `skein.min.js`.
-Current production size: 14,455 B raw, 5,267 B gzip, 4,753 B Brotli.
-Runtime dependencies: zero.
-Repository: https://github.com/Pom4H/web-component
-Website: https://pom4h.github.io/web-component/
-Playground: https://pom4h.github.io/web-component/playground/
+## Component file model
 
-## Core philosophy
+`<user-card>` maps to `user/card.html`; hyphens become path separators and `.html` is appended. A component file may have top-level `<script>`, markup and `<style>`.
 
-1. The browser is already the rendering engine. Do not introduce a virtual DOM.
-2. Static content should remain static semantic HTML. Skein binds only dynamic data.
-3. SEO-critical headings, links, product copy, article text, metadata and structured information should normally exist in the original HTML response.
-4. Skein currently has no SSR or hydration. If request-time HTML is required, generate it outside Skein and enhance the result.
-5. `{...}` contains property paths, not arbitrary JavaScript expressions.
-6. Put derived logic in `computed()`.
-7. Prefer native browser APIs over framework abstractions.
-8. Component composition follows the platform: properties down, DOM events up.
-9. Keep the runtime and official examples zero-dependency unless a task explicitly chooses otherwise.
-
-## Smallest app
+For inline demos:
 
 ```html
-<click-count></click-count>
-
-<template skein="click-count">
-  <script>
-    this.count = 0
-    this.up = () => this.count++
-  </script>
-  <button @click={up}>clicked {count}</button>
+<hello-card></hello-card>
+<template skein="hello-card">
+  <script>this.name='world'</script>
+  <b>Hello {name}</b>
 </template>
-
-<script type="module"
-  src="https://cdn.jsdelivr.net/gh/Pom4H/web-component@main/skein.min.js">
-</script>
 ```
 
-No npm, CLI, bundler, config file or application server is required.
+Unknown tags are not eagerly claimed. Skein first fetches the matching HTML source; only a successful load causes `customElements.define`. A 404 leaves the tag undefined so another Web Components library can own it.
 
-## External component convention
+`Skein.define(tag, source)` is explicit registration for tooling/generated source and defines once. Redefinition throws. Production hot-reload instance registries/reload/generation machinery do not exist.
 
-Custom-element names map to HTML files by replacing hyphens with slashes:
+## Reactive state
 
-```text
-<counter-app> -> counter/app.html
-<user-card> -> user/card.html
-<studio-mixer> -> studio/mixer.html
-```
+Inside component scripts, `this` is a Proxy-backed state object.
 
-A component source can contain top-level `<script>`, markup and `<style>` in one file.
+Only arrays and plain/null-prototype objects are recursively reactive. Date, Map, Set, DOM nodes, AudioContext and class instances remain native objects and are not proxied. Their internal mutations are not automatically observable.
 
-## State
+Reactive proxy/dependency registries are module-global WeakMaps. If the same raw object crosses component boundaries through a property input, both components see the same Skein Proxy rather than a proxy-of-proxy.
 
-Component scripts execute with `this` bound to a deep reactive Proxy:
+Reads track per raw-object/property dependency nodes. Missing own property reads track too. Binding lookup does not accept inherited prototype properties. Object enumeration tracks a dedicated structural dependency. Array growth/truncation notifies length/removed-index dependencies as needed. Failed Reflect writes/deletes do not notify.
 
-```js
-this.count = 0
-this.count++
-this.user = { name: 'Ada' }
-this.user.name = 'Grace'
-this.items = []
-this.items.push({ id: 1, title: 'One' })
-```
+## Paths and lookup
 
-Synchronous writes settle in one scheduled microtask wave. There is no public `batch()` helper. Missing-property reads and array structure/length are reactive, including direct truncation.
+Bindings are strict dotted property paths. Examples: `count`, `user.name`, `items.0.title`, `$index`. Whitespace, empty segments, `{a + b}` and other expressions are compile errors.
 
-## Bindings
+Every binding path segment requires an own property. Missing keys on reactive proxies still track without reading inherited values. `each` creates an item BindingScope with local `index`/`$index`, then fallback walks outer item scopes to root. An own property with value `undefined` still shadows outer scopes.
+
+There is no `in={...}` lexical-context feature in 0.6. Use explicit full paths outside list item scopes.
+
+## Binding syntax
+
+Text:
 
 ```html
-<h1>Hello {user.name}</h1>
-<div title="User {user.name}"></div>
-<input .value={user.name}>
+<h1>{user.name}</h1>
+```
+
+String/native attributes:
+
+```html
+<div title="User {user.name}" data-id={id}></div>
+<label for={inputId}>Name</label>
+```
+
+A full attribute binding removes the attribute for null/undefined/false.
+
+DOM property:
+
+```html
+<input .value={name}>
+```
+
+Boolean attribute:
+
+```html
 <button ?disabled={saving}>Save</button>
+```
+
+Event:
+
+```html
 <button @click={save}>Save</button>
 ```
 
-Do not generate `onclick={save}`. The v0.5 event syntax is `@event={handler}`.
+`.`, `?`, `@` forms require exactly one path and compile-time fail otherwise. Event handlers are invoked with the node as `this`, matching native listener semantics; prefer arrow handlers plus `event.currentTarget` in component scripts.
 
-Context:
-
-```html
-<address in={user.address}>
-  {city}, {street}
-</address>
-```
-
-Context lookup is lexical and walks outward to root state. A present local property whose value is `undefined` still shadows an outer property.
-
-## Component composition
-
-Skein uses native Custom Element contracts instead of a separate framework component protocol.
-
-Owner-to-child data uses DOM properties:
-
-```html
-<studio-mixer
-  .wave={wave}
-  .volume={volume}
-  @mix-change={mix}>
-</studio-mixer>
-```
-
-The child explicitly declares properties that should be reactive:
-
-```html
-<script>
-  this.wave = input('wave', 'sawtooth')
-  this.volume = input('volume', .18)
-</script>
-```
-
-`input(name, fallback)` semantics:
-
-- if the custom element already has an own property of `name` when its component script runs, return that value instead of the fallback;
-- this preserves parent `.property={...}` writes that occur before an asynchronously loaded child component has mounted;
-- install a host property getter/setter backed by the child reactive state;
-- later `element[name] = value` assignments update child state reactively;
-- repeated declaration during a Skein reload reuses the existing host accessor/state;
-- the input is one-way with respect to the owner; changing child state or the child host property does not mutate owner state automatically.
-
-Child-to-owner communication uses native events:
-
-```js
-host.dispatchEvent(new CustomEvent('mix-change', {
-  detail: { name: 'volume', value: .3 },
-  bubbles: true,
-  composed: true
-}))
-```
-
-The owner handles it with normal `@event={handler}` syntax. Use bubbling/composed events when the event must cross Shadow DOM boundaries.
-
-Do not introduce provide/inject, a framework event bus or a store solely to connect Skein components. Shared application state can live in the owning component and flow to children as properties.
-
-The reference composition is `examples/studio/`: `<studio-app>` loads and composes `<studio-transport>`, `<studio-sequencer>`, `<pocket-synth>`, `<studio-mixer>` and `<studio-scope>` as separate HTML files.
+`<style>` contents are opaque to Skein parsing.
 
 ## Lists
 
 ```html
-<article for={projects} key={id}>
-  <b>{index}. {title}</b>
-  <input placeholder="DOM state survives reorder">
-</article>
+<li each={items} key={id}>
+  {index}: {title}
+</li>
 ```
 
-Use stable unique keys when records have application identity. Without an explicit key, objects use object identity and primitive duplicates are disambiguated by occurrence.
+Do not use old `for={items}` list syntax. `for` is left available to native dynamic attributes.
 
-List reconciliation is incremental: append creates new views, removal disposes removed views, reorder moves existing DOM nodes, browser-local form state can survive reorder, and `index` / `$index` are reactive locals.
+`ListPart` keeps key→record and ordered-record structures. It preflights keys before modifying record/view state. Explicit keys resolving null/undefined or duplicating another key throw. Existing records keep DOM/view identity, context and index refs update, removed records dispose, and surviving node ranges move with native `moveBefore()` when available or `insertBefore()` fallback.
+
+Without an explicit key, object items use object identity. Primitive values use value+occurrence identity. Prefer explicit stable keys for application records.
 
 ## Conditions
 
 ```html
-<section if={inspectorOpen}>...</section>
+<section if={visible}>...</section>
 ```
 
-A conditional branch owns a child reactive scope. False disposes its effects, listeners, nested components and DOM view; true creates a fresh scoped view.
+A BranchPart owns a child Scope and one current View. Hide permanently disposes that view and removes its nodes; show instantiates a fresh view.
 
-## Computed values
+## Composition
+
+Owner-to-child is native property assignment:
 
 ```html
-<script>
-  this.price = 100
-  this.quantity = 2
-  this.total = computed(() => this.price * this.quantity)
-</script>
-<strong>{total}</strong>
+<volume-control .value={volume}></volume-control>
 ```
 
-Computed values are lazy, cached and dependency-tracked.
-
-## Effects
+Child declares:
 
 ```js
-effect(() => console.log(this.total))
+input('value', .5)
 ```
 
-Render work settles before user effects. If a user effect dirties rendering, render work runs again before later user effects.
+`input(name, fallback)` captures a pre-upgrade own property if present, otherwise fallback; deletes the temporary property; installs a host accessor backed by child state; seeds child state; lazily records the input; returns the initial value for compatibility with old `this.value = input(...)` syntax. Names colliding with `state` or inherited Skein/HTMLElement APIs throw.
 
-## Component-script helpers
-
-The injected helper surface is intentionally small:
-
-- `input(name, fallback)` — declare a reactive host-property input.
-- `computed(fn)` — lazy cached derived state.
-- `effect(fn)` — user effect after render effects.
-- `onCleanup(fn)` — deterministic cleanup owned by the current component scope.
-- `host` — current Skein custom element; use for real host/shadow-root access and native events.
-- `abortSignal` — scope-owned native AbortSignal.
-
-Removed/not public: `batch`, `signal`, `untrack`.
-
-Example cleanup:
+Child-to-owner is native DOM events:
 
 ```js
-window.addEventListener('resize', this.measure, { signal: abortSignal })
-fetch(url, { signal: abortSignal })
-const frame = requestAnimationFrame(this.draw)
-onCleanup(() => cancelAnimationFrame(frame))
+host.dispatchEvent(new CustomEvent('value-change', {
+  detail:{ value:this.value }, bubbles:true, composed:true
+}))
 ```
 
-The AbortController is lazily allocated only when `abortSignal` is referenced. Component input bookkeeping is also lazy and is allocated only if `input()` is used.
+No two-way binding, event bus, provide/inject or framework store is required for composition.
 
-## Public module/global API
+## Scheduler and computed/effects
+
+`computed(fn)` returns a lazy cached ComputedRef that subscribes to dependencies read during computation. `effect(fn)` creates a user effect.
+
+Synchronous writes enqueue one microtask. The scheduler always exhausts render effects before running one user effect, then returns to render effects if that user effect dirtied DOM work. This preserves settled-DOM-before-user-effect behavior.
+
+There is no public `batch()`.
+
+## Scope and lifecycle
+
+Scope owns child scopes, effects/computed refs, cleanup callbacks and a lazily allocated AbortController.
+
+`onCleanup(fn)` registers deterministic permanent cleanup. `abortSignal` is a lazily allocated Scope signal suitable for listeners/fetch.
+
+Custom Element lifecycle:
+- connect mounts once or resumes an existing paused view;
+- disconnect pauses scope work;
+- reconnect resumes dirty effects without rebuilding DOM;
+- state-preserving platform moves can use connectedMoveCallback;
+- `host.dispose()` permanently disposes and clears shadow DOM.
+
+Mount is transactional. If template instantiation throws, the fresh Scope is disposed and partial shadow DOM is cleared before the error is reported.
+
+Dynamic view teardown only force-disposes nested elements that are actual SkeinElement instances. Third-party custom elements rely on normal disconnected lifecycle; arbitrary `dispose()` methods on external elements are never called.
+
+## Native objects
+
+Prefer local variables for imperative browser resources:
+
+```js
+const audio = new AudioContext()
+const ctx = canvas.getContext('2d')
+```
+
+They may also be stored in component state, but Skein returns them unchanged and does not observe internal mutation. Represent UI-observed values with normal reactive primitives/plain objects.
+
+## Public surface
 
 ```js
 Skein.version
 Skein.define(tag, source)
 ```
 
-`window.Skein` exposes the same object. Do not rely on runtime internals such as Scheduler, Signal, Effect, ReactiveState, `Skein.stats` or `Skein.flush`.
-
-## Lifecycle
-
-Every component owns a root scope. Lists and branches create child scopes. Disconnect pauses reactive effects; reconnect resumes dirty work without rebuilding. `connectedMoveCallback()` supports state-preserving moves.
-
-Permanent teardown:
-
-```js
-host.dispose()
-```
-
-Renderer-owned list/branch removal disposes nested Skein custom elements automatically.
-
-## Static HTML and SEO
-
-Skein has no SSR today. This does not mean page content should be generated in JavaScript.
-
-```html
-<main>
-  <h1>Creative websites with native HTML, CSS, SVG and Canvas.</h1>
-  <p>Skein adds fine-grained reactive bindings without a virtual DOM.</p>
-  <a href="/work/">See the work</a>
-  <interactive-demo></interactive-demo>
-</main>
-```
-
-If a server must compute personalized/request-dependent HTML, use an external server/static-generation layer.
-
-## Native CSS / SVG / Canvas / Web Audio
-
-CSS should handle layout, transitions and interpolation; bind state into normal properties/custom properties. Keep SVG as an SVG tree and update only dynamic attributes/properties. Canvas and Web Audio should retain imperative loops/graphs; use Skein for state, controls, composition and cleanup.
-
-## Runtime architecture
-
-Readable files:
+Injected component script names:
 
 ```text
-skein.js
-runtime/reactive.js
-runtime/template.js
-runtime/component.js
+input
+computed
+effect
+onCleanup
+host
+abortSignal
 ```
 
-`runtime/reactive.js` contains the dependency graph, computed values, scheduler, scopes, reactive Proxy and lexical lookup.
-
-`runtime/template.js` compiles real DOM to compact instructions and implements exact DOM bindings, keyed reconciliation and branches. `.property={path}` writes the ordinary DOM property; it has no Skein-specific child channel.
-
-`runtime/component.js` implements source loading/caching, Custom Element lifecycle, script execution and `input()` host-property adoption.
-
-Important v0.5 implementation properties:
-
-- binding paths compile once;
-- ordinary lookup does not allocate frame arrays;
-- list keys resolve directly against items;
-- Scope resources, AbortController and component input metadata are lazy;
-- declarative event cleanup does not allocate an AbortController per list item;
-- production diagnostics counters are absent from hot paths;
-- nested Skein elements are disposed with their owning view;
-- disconnected instances are not permanently retained;
-- an input can capture a host property written before asynchronous child source loading completes.
+Do not invent `Skein.stats`, `Skein.flush`, `Skein.Signal`, `signal()`, `batch()`, `untrack()`, JSX expressions, SSR/hydration/suspense/error boundaries.
 
 ## Production build
 
-```bash
-node tools/build.mjs
-node tools/build.mjs --check
+`tools/build.mjs` concatenates readable modules, removes module syntax and lexically minifies/mangles known internals with zero dependencies. It is not an AST transform: identifier names that are native/public properties must not be added to the mangle map. Runtime source intentionally uses `hit['index']` and `controller['signal']` where necessary to avoid collisions. `dispose` must stay public.
+
+Run `node tools/build.mjs`, `node tools/build.mjs --check`, `node test/run.mjs`.
+
+The Chrome suite covers readable and minified runtime, 1000-row keyed identity, duplicate/missing keys, mount rollback, dynamic native `for`, third-party custom-element coexistence/disposal, input timing/collisions, shared Proxy identity, native Date/Map behavior, lifecycle, late define and real multi-file Skein Studio composition.
+
+## 0.6 migration
+
+```diff
+- <li for={items} key={id}>...</li>
++ <li each={items} key={id}>...</li>
+
+- <address in={user.address}>{city}</address>
++ <address>{user.address.city}</address>
+
+- this.value = input('value', .5)
++ input('value', .5)
 ```
 
-The zero-dependency build concatenates readable runtime files, strips module-only syntax, lexically minifies and mangles known internal identifiers while preserving strings/regex literals. `skein.min.js` is tested directly in Chrome.
-
-Current size:
-
-```text
-raw      14,455 B
-gzip      5,267 B
-brotli    4,753 B
-```
-
-## Testing
-
-```bash
-node test/run.mjs
-```
-
-Requirements: Node.js 22+ and Chrome/Chromium.
-
-Coverage includes reactive core behavior, missing properties, arrays, exact bindings, keyed identity, nested disposal, lifecycle/reconnect, component input fallback and pre-mount property adoption, one-way property/event composition, the real multi-file Studio example, CSS/SVG/Canvas behavior, inline bootstrap, late registration, generated minified runtime correctness and Playground sandbox serialization.
-
-## Current limitations
-
-- no SSR or hydration;
-- no built-in async resource/suspense primitive;
-- no built-in error-boundary primitive;
-- `{...}` expressions are property paths rather than arbitrary JavaScript;
-- component scripts use `AsyncFunction`, so strict CSP currently requires `unsafe-eval`.
-
-## Rules for AI agents
-
-When building a Skein application:
-
-1. Start with the smallest native HTML solution.
-2. Keep semantic/SEO-critical static content outside client-only components when possible.
-3. Use Skein only where state/interactivity is useful.
-4. Prefer one-file `<template skein>` for tiny examples.
-5. Use external tag-to-path component files when a project grows.
-6. Keep `{...}` to paths and use `computed()` for derivation.
-7. Use `.property`, `?boolean` and `@event` for native semantics.
-8. For component composition, declare child host properties with `input()`, pass state down with `.property`, and send requests/notifications up with native CustomEvents.
-9. Use stable keys for persistent list identity.
-10. Use CSS, SVG, Canvas and Web Audio directly.
-11. Register resource cleanup with `onCleanup()` or `abortSignal`.
-12. Do not add dependencies unless explicitly requested.
-13. Do not reintroduce removed low-level/public compatibility APIs without an explicit requirement.
-
-When modifying the runtime, read `AGENTS.md` and `.agents/skills/skein/references/architecture.md`, regenerate `skein.min.js`, and run the full suite.
+The input assignment form remains compatible. `for` list syntax and `in` contexts are intentionally removed.

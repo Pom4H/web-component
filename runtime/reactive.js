@@ -2,6 +2,10 @@ const ITERATE = Symbol();
 const MISS = Symbol();
 
 let activeObserver = null;
+const deps = new WeakMap();
+const proxies = new WeakMap();
+const rawValues = new WeakMap();
+const owns = Object.hasOwn;
 
 const clearDependencies = observer => {
   for (const source of observer.dependencies) source.subscribers.delete(observer);
@@ -37,10 +41,84 @@ export class Ref extends Dep {
     if (Object.is(this.current, value)) return false;
     this.current = value;
     this.notify();
+    return true;
   }
 }
 
 export const unwrap = value => value instanceof Dep ? value.get() : value;
+export const raw = value => rawValues.get(value) || value;
+
+const reactiveTarget = value => {
+  if (value === null || typeof value !== 'object') return false;
+  if (Array.isArray(value)) return true;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+};
+
+const dep = (target, property) => {
+  let map = deps.get(target);
+  if (!map) deps.set(target, map = new Map());
+  let dependency = map.get(property);
+  if (!dependency) map.set(property, dependency = new Dep());
+  return dependency;
+};
+
+const reactive = target => {
+  if (!reactiveTarget(target)) return target;
+  if (rawValues.has(target)) return target;
+  const cached = proxies.get(target);
+  if (cached) return cached;
+
+  const proxy = new Proxy(target, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver);
+      if (typeof property !== 'symbol') dep(target, property).track();
+      return reactive(unwrap(value));
+    },
+
+    set(target, property, value, receiver) {
+      const had = owns(target, property);
+      const previous = Reflect.get(target, property, receiver);
+      const previousLength = Array.isArray(target) ? target.length : -1;
+      const next = raw(value);
+      const result = Reflect.set(target, property, next, receiver);
+      if (!result || Object.is(previous, next)) return result;
+
+      dep(target, property).notify();
+      let structural = !had;
+      if (Array.isArray(target) && target.length !== previousLength) {
+        if (property !== 'length') dep(target, 'length').notify();
+        else if (next < previousLength) {
+          const map = deps.get(target);
+          if (map) for (const [key, dependency] of map) {
+            if (typeof key !== 'symbol' && +key >= next) dependency.notify();
+          }
+        }
+        structural = true;
+      }
+      if (structural) dep(target, ITERATE).notify();
+      return result;
+    },
+
+    deleteProperty(target, property) {
+      if (!owns(target, property)) return true;
+      const result = Reflect.deleteProperty(target, property);
+      if (!result) return false;
+      dep(target, property).notify();
+      dep(target, ITERATE).notify();
+      return true;
+    },
+
+    ownKeys(target) {
+      dep(target, ITERATE).track();
+      return Reflect.ownKeys(target);
+    },
+  });
+
+  proxies.set(target, proxy);
+  rawValues.set(proxy, target);
+  return proxy;
+};
 
 export class Scheduler {
   static renderQueue = new Set();
@@ -228,103 +306,44 @@ export class Scope {
   }
 }
 
-const owns = Object.hasOwn;
-
 export class ReactiveState {
-  #deps = new WeakMap();
-  #proxies = new WeakMap();
-  #raw = new WeakMap();
-
   constructor(value = {}) {
-    return this.reactive(value);
-  }
-
-  raw(value) {
-    return this.#raw.get(value) || value;
-  }
-
-  dep(target, property) {
-    let map = this.#deps.get(target);
-    if (!map) this.#deps.set(target, map = new Map());
-    let dep = map.get(property);
-    if (!dep) map.set(property, dep = new Dep());
-    return dep;
-  }
-
-  reactive(target) {
-    if (target === null || typeof target !== 'object') return target;
-    if (this.#raw.has(target)) return target;
-    const cached = this.#proxies.get(target);
-    if (cached) return cached;
-
-    const proxy = new Proxy(target, {
-      get: (target, property, receiver) => {
-        const value = Reflect.get(target, property, receiver);
-        if (typeof property !== 'symbol') this.dep(target, property).track();
-        return this.reactive(unwrap(value));
-      },
-      set: (target, property, value, receiver) => {
-        const had = owns(target, property);
-        const previous = Reflect.get(target, property, receiver);
-        const previousLength = Array.isArray(target) ? target.length : -1;
-        const raw = this.raw(value);
-        const result = Reflect.set(target, property, raw, receiver);
-        if (Object.is(previous, raw)) return result;
-
-        this.dep(target, property).notify();
-        let structural = !had;
-        if (Array.isArray(target) && target.length !== previousLength) {
-          if (property !== 'length') this.dep(target, 'length').notify();
-          else if (raw < previousLength) {
-            const deps = this.#deps.get(target);
-            if (deps) for (const [key, dep] of deps) if (typeof key !== 'symbol' && +key >= raw) dep.notify();
-          }
-          structural = true;
-        }
-        if (structural) this.dep(target, ITERATE).notify();
-        return result;
-      },
-      deleteProperty: (target, property) => {
-        if (!owns(target, property)) return true;
-        const result = Reflect.deleteProperty(target, property);
-        this.dep(target, property).notify();
-        this.dep(target, ITERATE).notify();
-        return result;
-      },
-      ownKeys: target => {
-        this.dep(target, ITERATE).track();
-        return Reflect.ownKeys(target);
-      },
-    });
-
-    this.#proxies.set(target, proxy);
-    this.#raw.set(proxy, target);
-    return proxy;
+    return reactive(value);
   }
 }
 
-export const compilePath = expression => expression.match(/[^.\s]+/g) || [];
+export const compilePath = expression => {
+  const path = expression.trim();
+  if (!path || /[\s{}]/.test(path) || path.startsWith('.') || path.endsWith('.') || path.includes('..')) {
+    throw new SyntaxError('Invalid Skein binding path: ' + expression);
+  }
+  return path.split('.');
+};
 
 const read = (value, key) => {
   if (value == null) return MISS;
   const type = typeof value;
   if (type !== 'object' && type !== 'function') return MISS;
-  const result = value[key];
-  return key in value ? result : MISS;
+  if (!owns(value, key)) {
+    const target = rawValues.get(value);
+    if (target) dep(target, key).track();
+    return MISS;
+  }
+  return value[key];
 };
 
 const follow = (value, path, start = 1) => {
   value = unwrap(value);
   for (let index = start; index < path.length; index++) {
-    if (value == null) return undefined;
-    value = unwrap(value[path[index]]);
+    const next = read(value, path[index]);
+    if (next === MISS) return undefined;
+    value = unwrap(next);
   }
   return value;
 };
 
 export class BindingScope {
-  constructor(rootState, context = rootState, parent = null, locals = null, mutable = false) {
-    this.rootState = rootState;
+  constructor(context, parent = null, locals = null, mutable = false) {
     this.contextValue = mutable ? new Ref(context) : context;
     this.parent = parent;
     this.locals = locals;
@@ -333,26 +352,9 @@ export class BindingScope {
   setContext(value) { this.contextValue.set(value); }
   context() { return unwrap(this.contextValue); }
 
-  lookup(path, contextChain = null) {
-    let contexts = null;
-    if (contextChain?.length) {
-      contexts = [];
-      for (const contextPath of contextChain) contexts.unshift(this.find(contextPath, contexts));
-    }
-    return this.find(path, contexts);
-  }
-
-  find(path, contexts = null) {
-    if (!path.length) return unwrap(contexts?.[0] ?? this.context());
+  lookup(path) {
+    if (!path.length) return this.context();
     const head = path[0];
-
-    if (contexts) {
-      for (const context of contexts) {
-        const value = read(context, head);
-        if (value !== MISS) return follow(value, path);
-      }
-    }
-
     for (let scope = this; scope; scope = scope.parent) {
       if (scope.locals) {
         const value = read(scope.locals, head);

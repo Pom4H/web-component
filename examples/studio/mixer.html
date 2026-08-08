@@ -1,6 +1,6 @@
 <script>
-  this.wave = input('wave', 'sawtooth')
-  this.volume = input('volume', .18)
+  input('wave', 'sawtooth')
+  input('volume', .18)
   const emit = (name, value) => host.dispatchEvent(new CustomEvent('mix-change', { detail:{ name, value }, bubbles:true, composed:true }))
   this.waveChange = event => emit('wave', event.currentTarget.value)
   this.volumeChange = event => emit('volume', Number(event.currentTarget.value))
@@ -10,13 +10,10 @@
   <header><b>MIXER</b><span>properties ↓</span></header>
   <label>WAVE
     <select .value={wave} @change={waveChange}>
-      <option value="sine">sine</option><option value="triangle">triangle</option>
-      <option value="square">square</option><option value="sawtooth">saw</option>
+      <option value="sine">sine</option><option value="triangle">triangle</option><option value="square">square</option><option value="sawtooth">saw</option>
     </select>
   </label>
-  <label>LEVEL <strong>{volume}</strong>
-    <input type="range" min="0.02" max="0.5" step="0.01" .value={volume} @input={volumeChange}>
-  </label>
+  <label>LEVEL <strong>{volume}</strong><input type="range" min="0.02" max="0.5" step="0.01" .value={volume} @input={volumeChange}></label>
   <footer>CustomEvent ↑</footer>
 </section>
 

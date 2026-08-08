@@ -19,7 +19,7 @@
 <section class="palette">
   <header><span>⌘</span><input autofocus placeholder="Type a command…" .value={query} @input={search}></header>
   <div class="count">{count}</div>
-  <button for={visible} key={id}>
+  <button each={visible} key={id}>
     <small>{group}</small><b>{name}</b><kbd>{shortcut}</kbd>
   </button>
   <div class="empty" if={empty}>Nothing matches “{query}”</div>

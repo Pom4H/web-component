@@ -10,7 +10,7 @@
 
 <section>
   <header><strong>identity / preserved</strong><button @click={flip}>reverse</button></header>
-  <label for={people} key={id}>
+  <label each={people} key={id}>
     <b>{name}</b><span>{role}</span><input placeholder="type here, then reverse" />
   </label>
 </section>

@@ -148,6 +148,17 @@ Input names may not shadow `HTMLElement` or Skein host APIs such as `title`, `st
 
 See `examples/studio/` for a composed application using file-loaded transport, sequencer, synth, mixer and Canvas scope components.
 
+## Examples
+
+The gallery is intentionally small. Each example demonstrates one runtime property instead of trying to be a component catalogue:
+
+- **Queue Board** — keyed DOM identity. Type into an uncontrolled row input, reorder the records, and the browser-local input state stays attached to the same DOM node.
+- **Field Atlas** — native SVG. Pointer state updates exact SVG attributes while keyed SVG nodes remain real elements.
+- **Type Machine** — native CSS. Reactive controls collapse into CSS custom properties; CSS owns typography, transforms and layout.
+- **Skein Studio** — multi-file composition. DOM properties flow down and bubbling/composed `CustomEvent`s flow up across real Custom Element boundaries.
+
+Open the live gallery at `https://pom4h.github.io/web-component/examples/` or load the three single-file examples directly in the Playground.
+
 ## Keyed lists
 
 Skein 0.6 uses `each={...}` so native HTML `for={...}` remains available for labels and outputs:

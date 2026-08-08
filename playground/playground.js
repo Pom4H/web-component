@@ -40,7 +40,7 @@ const decode = value => {
 const scriptValue = value => JSON.stringify(value).replaceAll('<', '\\u003c');
 const params = new URLSearchParams(location.search);
 const requestedExample = params.get('example');
-const selected = exampleById(requestedExample || 'signal-room');
+const selected = exampleById(requestedExample || 'queue');
 exampleSelect.value = selected.id;
 
 let sharedSource;

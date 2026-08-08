@@ -1,0 +1,68 @@
+<script>
+  this.pointerX = 500
+  this.pointerY = 260
+  this.selected = 'AMS'
+  this.nodes = [
+    { id:'AMS', label:'AMSTERDAM', cx:170, cy:145, tx:142, ty:119 },
+    { id:'HEL', label:'HELSINKI', cx:405, cy:92, tx:380, ty:66 },
+    { id:'BER', label:'BERLIN', cx:525, cy:260, tx:500, ty:234 },
+    { id:'LIS', label:'LISBON', cx:270, cy:390, tx:246, ty:424 },
+    { id:'TLL', label:'TALLINN', cx:760, cy:155, tx:736, ty:129 },
+    { id:'ROM', label:'ROME', cx:745, cy:385, tx:722, ty:419 }
+  ]
+
+  this.points = computed(() => this.nodes.map(node => ({ ...node, selected:node.id === this.selected })))
+  this.readout = computed(() => `${this.selected} · ${this.pointerX}:${this.pointerY}`)
+  this.move = event => {
+    const box = event.currentTarget.getBoundingClientRect()
+    this.pointerX = Math.round((event.clientX - box.left) / box.width * 1000)
+    this.pointerY = Math.round((event.clientY - box.top) / box.height * 520)
+  }
+  this.pick = event => this.selected = event.currentTarget.dataset.id
+</script>
+
+<section class="atlas">
+  <header>
+    <div><small>REAL SVG / LIST SCOPES</small><h1>FIELD ATLAS</h1></div>
+    <output>{readout}</output>
+  </header>
+
+  <svg viewBox="0 0 1000 520" preserveAspectRatio="xMidYMid meet" @pointermove={move}>
+    <defs>
+      <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="currentColor" stroke-opacity=".08"/></pattern>
+      <filter id="glow"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    </defs>
+    <rect width="1000" height="520" fill="url(#grid)"/>
+    <g class="links">
+      <line each={points} key={id} x1={cx} y1={cy} x2={pointerX} y2={pointerY}></line>
+    </g>
+    <g class="points">
+      <circle each={points} key={id} data-id={id} data-selected={selected} cx={cx} cy={cy} r="13" @click={pick}></circle>
+      <text each={points} key={id} x={tx} y={ty}>{label}</text>
+    </g>
+    <circle class="cursor" cx={pointerX} cy={pointerY} r="8"></circle>
+    <circle class="halo" cx={pointerX} cy={pointerY} r="26"></circle>
+  </svg>
+
+  <footer><span>move pointer to reroute exact SVG attributes</span><b>{selected}</b></footer>
+</section>
+
+<style>
+  :host { display:block; min-height:100%; background:#ede9de; color:#171817; font-family:system-ui,sans-serif; }
+  * { box-sizing:border-box; }
+  .atlas { min-height:100%; padding:20px; display:grid; grid-template-rows:auto 1fr auto; }
+  header,footer { display:flex; align-items:end; justify-content:space-between; gap:20px; }
+  header small,footer,output { font:700 9px ui-monospace,monospace; letter-spacing:.1em; text-transform:uppercase; }
+  header small { color:#7158ff; }
+  h1 { margin:2px 0 0; font:900 clamp(38px,7vw,76px)/.8 Arial Black,sans-serif; letter-spacing:-.07em; }
+  output { padding:8px 10px; border:1px solid #171817; }
+  svg { width:100%; height:100%; min-height:360px; margin:14px 0; border:1px solid #99958d; background:#f5f1e7; touch-action:none; }
+  .links line { stroke:#7158ff; stroke-width:1; stroke-opacity:.2; vector-effect:non-scaling-stroke; }
+  .points circle { fill:#f5f1e7; stroke:#171817; stroke-width:2; cursor:pointer; transition:r .16s,fill .16s; }
+  .points circle[data-selected="true"] { fill:#d8ff58; r:20px; filter:url(#glow); }
+  .points text { fill:#171817; font:700 12px ui-monospace,monospace; letter-spacing:.08em; pointer-events:none; }
+  .cursor { fill:#7158ff; pointer-events:none; }
+  .halo { fill:none; stroke:#7158ff; stroke-width:1; stroke-dasharray:3 5; pointer-events:none; }
+  footer { align-items:center; color:#6f6c65; }
+  footer b { color:#171817; font-size:16px; }
+</style>

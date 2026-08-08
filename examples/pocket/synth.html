@@ -1,6 +1,6 @@
 <script>
-  this.wave = input('wave', 'sawtooth')
-  this.volume = input('volume', .18)
+  input('wave', 'sawtooth')
+  input('volume', .18)
   this.audioState = 'tap a key to enable audio'
   this.notes = [
     { id:'c4', label:'C', key:'A', freq:261.63, active:false },
@@ -101,7 +101,7 @@
   </header>
   <div class="display"><i></i><span>{playing}</span><em>{audioState}</em></div>
   <div class="keys">
-    <button for={notes} key={id} data-id={id} data-active={active}
+    <button each={notes} key={id} data-id={id} data-active={active}
       @pointerdown={down} @pointerup={up} @pointercancel={up} @pointerleave={up}>
       <kbd>{key}</kbd><strong>{label}</strong><small>{freq}</small>
     </button>

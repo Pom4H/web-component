@@ -7,12 +7,12 @@
 </script>
 
 <h1 id="title">{title} {count}</h1>
-<p id="user" in={user} data-name="user-{name}">{name}</p>
+<p id="user" data-name="user-{user.name}">{user.name}</p>
 <ul id="items">
-  <li for={items}>{name}</li>
+  <li each={items}>{name}</li>
 </ul>
 <select>
-  <option for={statuses} value={value}>{title}</option>
+  <option each={statuses} value={value}>{title}</option>
 </select>
 <label id="label" for="real-input">Label</label>
 

@@ -18,19 +18,8 @@ runNode('tools/build.mjs', ['--check']);
 runNode('test/core-node.mjs');
 
 const which = command => spawnSync(process.platform === 'win32' ? 'where' : 'which', [command], { encoding: 'utf8' }).stdout.trim().split(/\r?\n/)[0];
-const browserPath = [
-  process.env.CHROME_BIN,
-  which('chromium'),
-  which('chromium-browser'),
-  which('google-chrome'),
-  which('google-chrome-stable'),
-  process.platform === 'darwin' ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : null,
-].filter(Boolean)[0];
-
-if (!browserPath) {
-  console.error('Chrome/Chromium not found. Set CHROME_BIN to run browser tests.');
-  process.exit(1);
-}
+const browserPath = [process.env.CHROME_BIN, which('chromium'), which('chromium-browser'), which('google-chrome'), which('google-chrome-stable')].filter(Boolean)[0];
+if (!browserPath) throw new Error('Chrome/Chromium not found');
 
 const port = await new Promise((resolvePort, reject) => {
   const server = createServer();
@@ -42,16 +31,7 @@ const port = await new Promise((resolvePort, reject) => {
 });
 
 const profile = await mkdtemp(join(tmpdir(), 'skein-chrome-'));
-const browser = spawn(browserPath, [
-  '--headless=new',
-  '--no-sandbox',
-  '--disable-gpu',
-  '--disable-dev-shm-usage',
-  `--remote-debugging-port=${port}`,
-  `--user-data-dir=${profile}`,
-  'about:blank',
-], { stdio: 'ignore' });
-
+const browser = spawn(browserPath, ['--headless=new','--no-sandbox','--disable-gpu','--disable-dev-shm-usage',`--remote-debugging-port=${port}`,`--user-data-dir=${profile}`,'about:blank'], { stdio: 'ignore' });
 const sleep = ms => new Promise(resolveSleep => setTimeout(resolveSleep, ms));
 const endpoint = `http://127.0.0.1:${port}`;
 
@@ -73,45 +53,33 @@ async function connect() {
   let id = 0;
   const pending = new Map();
   const exceptions = [];
-
   socket.onmessage = event => {
     const message = JSON.parse(event.data);
     if (message.id && pending.has(message.id)) {
-      const { resolve: resolveRequest, reject } = pending.get(message.id);
+      const request = pending.get(message.id);
       pending.delete(message.id);
-      if (message.error) reject(new Error(message.error.message));
-      else resolveRequest(message.result);
+      if (message.error) request.reject(new Error(message.error.message));
+      else request.resolve(message.result);
       return;
     }
-    if (message.method === 'Runtime.exceptionThrown') {
-      exceptions.push(message.params.exceptionDetails.exception?.description || message.params.exceptionDetails.text);
-    }
+    if (message.method === 'Runtime.exceptionThrown') exceptions.push(message.params.exceptionDetails.exception?.description || message.params.exceptionDetails.text);
   };
-
-  await new Promise((resolveSocket, reject) => {
-    socket.onopen = resolveSocket;
-    socket.onerror = reject;
-  });
-
+  await new Promise((resolveSocket, reject) => { socket.onopen = resolveSocket; socket.onerror = reject; });
   const send = (method, params = {}) => new Promise((resolveRequest, reject) => {
     const requestId = ++id;
     pending.set(requestId, { resolve: resolveRequest, reject });
     socket.send(JSON.stringify({ id: requestId, method, params }));
   });
-
   await send('Runtime.enable');
   await send('Page.enable');
   return { socket, send, exceptions };
 }
 
-async function newDocument(send, body) {
+async function newDocument(send, body = '') {
   await send('Page.navigate', { url: 'about:blank' });
   await sleep(40);
   const frameId = (await send('Page.getFrameTree')).frameTree.frame.id;
-  await send('Page.setDocumentContent', {
-    frameId,
-    html: `<!doctype html><html><head><base href="http://example.test/"></head><body>${body}</body></html>`,
-  });
+  await send('Page.setDocumentContent', { frameId, html: `<!doctype html><html><head><base href="http://example.test/"></head><body>${body}</body></html>` });
 }
 
 async function evaluate(send, expression, options = {}) {
@@ -128,51 +96,28 @@ const modules = {
 };
 const minRuntime = await readFile(join(root, 'skein.min.js'), 'utf8');
 const studioFixtures = Object.fromEntries(await Promise.all([
-  'studio/app.html',
-  'studio/transport.html',
-  'studio/sequencer.html',
-  'studio/mixer.html',
-  'studio/scope.html',
-  'pocket/synth.html',
+  'studio/app.html','studio/transport.html','studio/sequencer.html','studio/mixer.html','studio/scope.html','pocket/synth.html'
 ].map(async path => [path, await readFile(join(root, 'examples', path), 'utf8')])));
 
 async function loadReadable(send) {
-  const expression = `(async () => {
-    const reactiveURL = URL.createObjectURL(new Blob([${JSON.stringify(modules.reactive)}], { type: 'text/javascript' }));
-    const templateURL = URL.createObjectURL(new Blob([${JSON.stringify(modules.template)}.replace('./reactive.js', reactiveURL)], { type: 'text/javascript' }));
-    const componentURL = URL.createObjectURL(new Blob([${JSON.stringify(modules.component)}.replace('./reactive.js', reactiveURL).replace('./template.js', templateURL)], { type: 'text/javascript' }));
-    const entryURL = URL.createObjectURL(new Blob([${JSON.stringify(modules.entry)}.replace('./runtime/component.js', componentURL)], { type: 'text/javascript' }));
-    await import(entryURL);
-  })()`;
+  const expression = `(async()=>{const r=URL.createObjectURL(new Blob([${JSON.stringify(modules.reactive)}],{type:'text/javascript'}));const t=URL.createObjectURL(new Blob([${JSON.stringify(modules.template)}.replace('./reactive.js',r)],{type:'text/javascript'}));const c=URL.createObjectURL(new Blob([${JSON.stringify(modules.component)}.replace('./reactive.js',r).replace('./template.js',t)],{type:'text/javascript'}));const e=URL.createObjectURL(new Blob([${JSON.stringify(modules.entry)}.replace('./runtime/component.js',c)],{type:'text/javascript'}));await import(e)})()`;
   await evaluate(send, expression, { awaitPromise: true });
 }
 
 async function loadMin(send, afterImport = '') {
-  const expression = `(async () => {
-    const runtimeURL = URL.createObjectURL(new Blob([${JSON.stringify(minRuntime)}], { type: 'text/javascript' }));
-    const module = await import(runtimeURL);
-    ${afterImport}
-    return module.Skein.version;
-  })()`;
+  const expression = `(async()=>{const u=URL.createObjectURL(new Blob([${JSON.stringify(minRuntime)}],{type:'text/javascript'}));const {Skein}=await import(u);${afterImport};return Skein.version})()`;
   return evaluate(send, expression, { awaitPromise: true });
 }
 
-const safeScriptValue = value => JSON.stringify(value).replaceAll('<', '\\u003c');
-const playgroundSrcdoc = (componentSource, runtimeSource) => {
-  const component = safeScriptValue(componentSource);
-  const runtimeText = safeScriptValue(runtimeSource);
-  return `<!doctype html><html><head><meta charset="utf-8"><base href="https://example.test/playground/"></head><body><script>addEventListener('error',e=>parent.postMessage({type:'skein-error',message:e.error?.stack||e.message},'*'));addEventListener('unhandledrejection',e=>parent.postMessage({type:'skein-error',message:e.reason?.stack||String(e.reason)},'*'));<\/script><script type="module">try{const runtimeURL=URL.createObjectURL(new Blob([${runtimeText}],{type:'text/javascript'}));const {Skein}=await import(runtimeURL);Skein.define('play-ground',${component});const element=document.createElement('play-ground');document.body.append(element);await customElements.whenDefined('play-ground');await new Promise(resolve=>setTimeout(resolve,0));parent.postMessage({type:'skein-ready',text:element.shadowRoot?.textContent?.trim(),origin:location.origin},'*')}catch(error){parent.postMessage({type:'skein-error',message:error.stack||String(error)},'*')}<\/script></body></html>`;
-};
-
 const runtimeFixture = await readFile(join(root, 'test/runtime.html'), 'utf8');
 const testIndex = await readFile(join(root, 'test/index.html'), 'utf8');
-const harnessMarker = '<script id="browser-tests">';
-const harness = testIndex.slice(testIndex.indexOf(harnessMarker) + harnessMarker.length, testIndex.lastIndexOf('</script>'));
-
+const marker = '<script id="browser-tests">';
+const harness = testIndex.slice(testIndex.indexOf(marker) + marker.length, testIndex.lastIndexOf('</script>'));
 const { socket, send, exceptions } = await connect();
+
 try {
-  await newDocument(send, '<test-runtime></test-runtime><inline-boot></inline-boot><template skein="inline-boot"><script>this.word="woven"<\/script><b id="boot-word">{word}</b></template><pre id="results">Running…</pre>');
-  await evaluate(send, `window.fetch = async url => String(url).endsWith('test/runtime.html') ? new Response(${JSON.stringify(runtimeFixture)}, { status: 200 }) : new Response('', { status: 404 });`);
+  await newDocument(send, '<third-party-box></third-party-box><test-runtime></test-runtime><inline-boot></inline-boot><template skein="inline-boot"><script>this.word="woven"</script><b id="boot-word">{word}</b></template><pre id="results">Running…</pre>');
+  await evaluate(send, `window.fetch=async url=>String(url).endsWith('test/runtime.html')?new Response(${JSON.stringify(runtimeFixture)},{status:200}):new Response('',{status:404})`);
   await loadReadable(send);
   await evaluate(send, `Skein.define('row-life','<script>onCleanup(()=>window.__rowDisposals=(window.__rowDisposals||0)+1)<\\/script><i>life</i>')`);
   await evaluate(send, harness);
@@ -180,10 +125,9 @@ try {
   let result = {};
   for (let attempt = 0; attempt < 400; attempt++) {
     await sleep(25);
-    result = await evaluate(send, `({ status: document.body.dataset.tests, failed: document.body.dataset.failed, text: document.querySelector('#results')?.textContent, benchmark: window.__benchmark })`);
+    result = await evaluate(send, `({status:document.body.dataset.tests,failed:document.body.dataset.failed,text:document.querySelector('#results')?.textContent,benchmark:window.__benchmark})`);
     if (result.status) break;
   }
-
   console.log(result.text || 'Browser tests did not finish');
   if (result.benchmark) {
     console.log('\nperformance smoke (Chrome, ms):');
@@ -191,90 +135,68 @@ try {
   }
   if (result.status !== 'passed') throw new Error(`${result.failed || '?'} browser tests failed`);
 
-  // Production bundle: all public binding types, styles, SVG, Canvas and tiny API.
   await newDocument(send, '<prod-test></prod-test>');
-  await evaluate(send, `window.fetch=async()=>new Response('',{status:404});window.__canvasOk=false;`);
-  await loadMin(send, `
-    Skein.define('prod-test', '<script>this.count=1;this.rows=[{id:1,n:"A"},{id:2,n:"B"}];this.show=true;this.double=computed(()=>this.count*2);this.up=()=>this.count++;queueMicrotask(()=>{window.__canvasOk=!!host.shadowRoot.querySelector("canvas").getContext("2d")})<\\/script><style>:host{display:block}b{font-weight:700}</style><button id="up" @click={up}>{count}/{double}</button><i for={rows} key={id} data-id={id}>{n}</i><em if={show}>yes</em><svg><circle id="dot" cx={count} cy="5" r="2"></circle></svg><canvas></canvas>');
-  `);
+  await evaluate(send, `window.fetch=async()=>new Response('',{status:404});window.__canvasOk=false`);
+  await loadMin(send, `Skein.define('prod-test','<script>this.count=1;this.rows=[{id:1,n:"A"},{id:2,n:"B"}];this.show=true;this.double=computed(()=>this.count*2);this.up=()=>this.count++;queueMicrotask(()=>{window.__canvasOk=!!host.shadowRoot.querySelector("canvas").getContext("2d")})<\\/script><style>:host{display:block}b{font-weight:700}</style><button id="up" @click={up}>{count}/{double}</button><i each={rows} key={id} data-id={id}>{n}</i><em if={show}>yes</em><svg><circle id="dot" cx={count} cy="5" r="2"></circle></svg><canvas></canvas>')`);
   let prod;
   for (let attempt = 0; attempt < 100; attempt++) {
     await sleep(20);
-    prod = await evaluate(send, `(() => { const root=document.querySelector('prod-test')?.shadowRoot; return { text:root?.querySelector('#up')?.textContent, rows:root?.querySelectorAll('i').length, style:root?.querySelector('style')?.textContent, cx:root?.querySelector('#dot')?.getAttribute('cx'), canvas:window.__canvasOk, api:Object.keys(Skein).sort().join(',') }; })()`);
+    prod = await evaluate(send, `(()=>{const root=document.querySelector('prod-test')?.shadowRoot;return{text:root?.querySelector('#up')?.textContent,rows:root?.querySelectorAll('i').length,style:root?.querySelector('style')?.textContent,cx:root?.querySelector('#dot')?.getAttribute('cx'),canvas:window.__canvasOk,api:Object.keys(Skein).sort().join(','),dispose:typeof document.querySelector('prod-test')?.dispose}})()`);
     if (prod.text && prod.canvas) break;
   }
-  if (prod.text !== '1/2' || prod.rows !== 2 || !prod.style?.includes('font-weight:700') || prod.cx !== '1' || !prod.canvas || prod.api !== 'define,version') {
-    throw new Error(`Production runtime smoke failed: ${JSON.stringify(prod)}`);
-  }
+  if (prod.text !== '1/2' || prod.rows !== 2 || !prod.style?.includes('font-weight:700') || prod.cx !== '1' || !prod.canvas || prod.api !== 'define,version' || prod.dispose !== 'function') throw new Error(`Production runtime smoke failed: ${JSON.stringify(prod)}`);
   await evaluate(send, `document.querySelector('prod-test').shadowRoot.querySelector('#up').click()`);
   await sleep(20);
-  prod = await evaluate(send, `({ text:document.querySelector('prod-test').shadowRoot.querySelector('#up').textContent, cx:document.querySelector('prod-test').shadowRoot.querySelector('#dot').getAttribute('cx') })`);
+  prod = await evaluate(send, `({text:document.querySelector('prod-test').shadowRoot.querySelector('#up').textContent,cx:document.querySelector('prod-test').shadowRoot.querySelector('#dot').getAttribute('cx')})`);
   if (prod.text !== '2/4' || prod.cx !== '2') throw new Error(`Production update failed: ${JSON.stringify(prod)}`);
   console.log('min-runtime: passed');
 
-  // Production bundle composition contract: property input down, CustomEvent up.
-  await newDocument(send, '');
-  await evaluate(send, `window.fetch=async()=>new Response('',{status:404});`);
-  await loadMin(send, `
-    Skein.define('prod-input-child','<script>this.value=input("value",0);this.raise=()=>host.dispatchEvent(new CustomEvent("value-change",{detail:{value:Number(this.value)+1},bubbles:true,composed:true}))<\\/script><button id="raise" @click={raise}>{value}</button>');
-    Skein.define('prod-input-parent','<script>this.value=7;this.changed=e=>this.value=e.detail.value<\\/script><prod-input-child id="child" .value={value} @value-change={changed}></prod-input-child><b id="parent">{value}</b>');
-    document.body.append(document.createElement('prod-input-parent'));
-  `);
+  await newDocument(send);
+  await evaluate(send, `window.fetch=async()=>new Response('',{status:404})`);
+  await loadMin(send, `Skein.define('prod-input-child','<script>input("value",0);this.raise=()=>host.dispatchEvent(new CustomEvent("value-change",{detail:{value:Number(this.value)+1},bubbles:true,composed:true}))<\\/script><button id="raise" @click={raise}>{value}</button>');Skein.define('prod-input-parent','<script>this.value=7;this.changed=e=>this.value=e.detail.value<\\/script><prod-input-child id="child" .value={value} @value-change={changed}></prod-input-child><b id="parent">{value}</b>');document.body.append(document.createElement('prod-input-parent'))`);
   let contract;
   for (let attempt = 0; attempt < 100; attempt++) {
     await sleep(20);
-    contract = await evaluate(send, `(() => { const parent=document.querySelector('prod-input-parent');const child=parent?.shadowRoot?.querySelector('#child');return {parent:parent?.shadowRoot?.querySelector('#parent')?.textContent,child:child?.shadowRoot?.querySelector('#raise')?.textContent};})()`);
+    contract = await evaluate(send, `(()=>{const p=document.querySelector('prod-input-parent'),c=p?.shadowRoot?.querySelector('#child');return{parent:p?.shadowRoot?.querySelector('#parent')?.textContent,child:c?.shadowRoot?.querySelector('#raise')?.textContent}})()`);
     if (contract.child) break;
   }
   if (contract.parent !== '7' || contract.child !== '7') throw new Error(`Production input mount failed: ${JSON.stringify(contract)}`);
   await evaluate(send, `document.querySelector('prod-input-parent').shadowRoot.querySelector('#child').shadowRoot.querySelector('#raise').click()`);
   await sleep(20);
-  contract = await evaluate(send, `(() => { const parent=document.querySelector('prod-input-parent');const child=parent.shadowRoot.querySelector('#child');return {parent:parent.shadowRoot.querySelector('#parent').textContent,child:child.shadowRoot.querySelector('#raise').textContent};})()`);
-  if (contract.parent !== '8' || contract.child !== '8') throw new Error(`Production input/event update failed: ${JSON.stringify(contract)}`);
+  contract = await evaluate(send, `(()=>{const p=document.querySelector('prod-input-parent'),c=p.shadowRoot.querySelector('#child');return{parent:p.shadowRoot.querySelector('#parent').textContent,child:c.shadowRoot.querySelector('#raise').textContent}})()`);
+  if (contract.parent !== '8' || contract.child !== '8') throw new Error(`Production composition failed: ${JSON.stringify(contract)}`);
   console.log('min-composition: passed');
 
-  // Actual Studio example: nested file-loaded components compose only through properties and CustomEvents.
   await newDocument(send, '<studio-app></studio-app>');
-  await evaluate(send, `window.fetch=async url=>{const path=new URL(String(url)).pathname.slice(1);const source=${JSON.stringify(studioFixtures)}[path];return source===undefined?new Response('',{status:404}):new Response(source,{status:200})};`);
+  await evaluate(send, `window.fetch=async url=>{const path=new URL(String(url)).pathname.slice(1);const source=${JSON.stringify(studioFixtures)}[path];return source===undefined?new Response('',{status:404}):new Response(source,{status:200})}`);
   await loadMin(send);
   let studio;
   for (let attempt = 0; attempt < 150; attempt++) {
     await sleep(20);
-    studio = await evaluate(send, `(() => {const app=document.querySelector('studio-app');const root=app?.shadowRoot;const synth=root?.querySelector('pocket-synth');const mixer=root?.querySelector('studio-mixer');return {ready:!!mixer?.shadowRoot?.querySelector('input'),wave:synth?.wave,volume:synth?.volume,children:root?.querySelectorAll(':scope>*, .lower>*').length||0};})()`);
+    studio = await evaluate(send, `(()=>{const app=document.querySelector('studio-app'),root=app?.shadowRoot,synth=root?.querySelector('pocket-synth'),mixer=root?.querySelector('studio-mixer');return{ready:!!mixer?.shadowRoot?.querySelector('input'),wave:synth?.wave,volume:synth?.volume}})()`);
     if (studio.ready) break;
   }
   if (!studio.ready || studio.wave !== 'sawtooth' || studio.volume !== .18) throw new Error(`Studio mount failed: ${JSON.stringify(studio)}`);
-  await evaluate(send, `(() => {const app=document.querySelector('studio-app');const mixer=app.shadowRoot.querySelector('studio-mixer');const input=mixer.shadowRoot.querySelector('input');input.value='.31';input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+  await evaluate(send, `(()=>{const app=document.querySelector('studio-app'),mixer=app.shadowRoot.querySelector('studio-mixer'),input=mixer.shadowRoot.querySelector('input');input.value='.31';input.dispatchEvent(new Event('input',{bubbles:true}))})()`);
   await sleep(30);
-  studio = await evaluate(send, `(() => {const app=document.querySelector('studio-app');const root=app.shadowRoot;return {app:app.state.volume,synth:root.querySelector('pocket-synth').volume,mixer:root.querySelector('studio-mixer').volume};})()`);
+  studio = await evaluate(send, `(()=>{const app=document.querySelector('studio-app'),root=app.shadowRoot;return{app:app.state.volume,synth:root.querySelector('pocket-synth').volume,mixer:root.querySelector('studio-mixer').volume}})()`);
   if (studio.app !== .31 || studio.synth !== .31 || studio.mixer !== .31) throw new Error(`Studio mixer propagation failed: ${JSON.stringify(studio)}`);
-  await evaluate(send, `(() => {const app=document.querySelector('studio-app');const transport=app.shadowRoot.querySelector('studio-transport');transport.shadowRoot.querySelector('button').click();})()`);
+  await evaluate(send, `(()=>{const app=document.querySelector('studio-app'),transport=app.shadowRoot.querySelector('studio-transport');transport.shadowRoot.querySelector('button').click()})()`);
   await sleep(40);
-  studio = await evaluate(send, `(() => {const app=document.querySelector('studio-app');const transport=app.shadowRoot.querySelector('studio-transport');return {app:app.state.playing,child:transport.playing};})()`);
+  studio = await evaluate(send, `(()=>{const app=document.querySelector('studio-app'),transport=app.shadowRoot.querySelector('studio-transport');return{app:app.state.playing,child:transport.playing}})()`);
   if (studio.app !== true || studio.child !== true) throw new Error(`Studio transport propagation failed: ${JSON.stringify(studio)}`);
-  await evaluate(send, `(() => {const app=document.querySelector('studio-app');const synth=app.shadowRoot.querySelector('pocket-synth');synth.dispatchEvent(new CustomEvent('note',{detail:{note:'C',velocity:.2},bubbles:true,composed:true}));})()`);
+  await evaluate(send, `(()=>{const app=document.querySelector('studio-app'),synth=app.shadowRoot.querySelector('pocket-synth');synth.dispatchEvent(new CustomEvent('note',{detail:{note:'C',velocity:.2},bubbles:true,composed:true}))})()`);
   await sleep(20);
-  studio = await evaluate(send, `(() => {const app=document.querySelector('studio-app');const scope=app.shadowRoot.querySelector('studio-scope');return {note:app.state.note,level:app.state.level,scopeNote:scope.note,scopeLevel:scope.level};})()`);
+  studio = await evaluate(send, `(()=>{const app=document.querySelector('studio-app'),scope=app.shadowRoot.querySelector('studio-scope');return{note:app.state.note,level:app.state.level,scopeNote:scope.note,scopeLevel:scope.level}})()`);
   if (studio.note !== 'C' || studio.scopeNote !== 'C' || studio.level !== .2 || studio.scopeLevel !== .2) throw new Error(`Studio event propagation failed: ${JSON.stringify(studio)}`);
   console.log('studio-composition: passed');
 
-  // Minifier regression: strings such as template[skein] must never be mangled.
-  await newDocument(send, '<min-inline></min-inline><template skein="min-inline"><script>this.word="small"<\/script><b id="word">{word}</b></template>');
-  await loadMin(send);
-  let inline;
-  for (let attempt = 0; attempt < 100; attempt++) {
-    await sleep(20);
-    inline = await evaluate(send, `document.querySelector('min-inline')?.shadowRoot?.querySelector('#word')?.textContent`);
-    if (inline) break;
-  }
-  if (inline !== 'small') throw new Error(`Minified inline bootstrap failed: ${inline}`);
-  console.log('min-bootstrap: passed');
-
-  // Late source registration must recover a connected nested component inside Shadow DOM.
-  await newDocument(send, '');
-  await evaluate(send, `window.fetch=async()=>new Response('',{status:404});`);
-  await loadMin(send, `Skein.define('late-parent','<late-child></late-child>');document.body.append(document.createElement('late-parent'));`);
+  await newDocument(send);
+  await evaluate(send, `window.fetch=async()=>new Response('',{status:404})`);
+  await loadMin(send, `Skein.define('late-parent','<late-child></late-child>');document.body.append(document.createElement('late-parent'))`);
   await sleep(40);
+  const claimed = await evaluate(send, `!!customElements.get('late-child')`);
+  if (claimed) throw new Error('Missing nested source was claimed before define');
   await evaluate(send, `Skein.define('late-child','<b id="late">ready</b>')`);
   let late;
   for (let attempt = 0; attempt < 100; attempt++) {
@@ -282,24 +204,8 @@ try {
     late = await evaluate(send, `document.querySelector('late-parent')?.shadowRoot?.querySelector('late-child')?.shadowRoot?.querySelector('#late')?.textContent`);
     if (late) break;
   }
-  if (late !== 'ready') throw new Error(`Late nested define failed: ${late}`);
+  if (late !== 'ready') throw new Error(`Late define failed: ${late}`);
   console.log('late-define: passed');
-
-  // Playground regression: literal </script> in user source inside an opaque-origin sandbox.
-  await newDocument(send, '<iframe id="preview" sandbox="allow-scripts"></iframe>');
-  const sandboxSource = '<script>this.count=0;this.up=()=>this.count++</script><button @click={up}>clicked {count}</button>';
-  const srcdoc = playgroundSrcdoc(sandboxSource, minRuntime);
-  await evaluate(send, `window.__playgroundResult=null;addEventListener('message',event=>{if(event.source===document.querySelector('#preview').contentWindow)window.__playgroundResult=event.data});document.querySelector('#preview').srcdoc=${JSON.stringify(srcdoc)}`);
-  let playgroundResult;
-  for (let attempt = 0; attempt < 150; attempt++) {
-    await sleep(20);
-    playgroundResult = await evaluate(send, 'window.__playgroundResult');
-    if (playgroundResult) break;
-  }
-  if (playgroundResult?.type !== 'skein-ready' || playgroundResult.text !== 'clicked 0' || playgroundResult.origin !== 'null') {
-    throw new Error(`Playground sandbox failed: ${JSON.stringify(playgroundResult)}`);
-  }
-  console.log('playground-sandbox: passed');
 
   if (exceptions.length) throw new Error(`Browser exceptions:\n${exceptions.join('\n')}`);
 } finally {

@@ -24,9 +24,9 @@ const exact = value => {
   return parts.length === 1 && Array.isArray(parts[0]) ? parts[0] : null;
 };
 
-const render = (tokens, scope, contexts) => {
+const render = (tokens, scope) => {
   let value = '';
-  for (const token of tokens) value += typeof token === 'string' ? token : toText(scope.lookup(token, contexts));
+  for (const token of tokens) value += typeof token === 'string' ? token : toText(scope.lookup(token));
   return value;
 };
 
@@ -38,21 +38,21 @@ const byPath = (root, path) => {
 
 const watch = (scope, callback) => new ReactiveEffect(callback, scope, true);
 
-const bindText = (node, tokens, contexts, bindingScope, owner) => {
+const bindText = (node, tokens, bindingScope, owner) => {
   let previous = node.data;
   watch(owner, () => {
-    const value = render(tokens, bindingScope, contexts);
+    const value = render(tokens, bindingScope);
     if (value === previous) return;
     previous = node.data = value;
   });
 };
 
-const bindAttribute = (node, name, tokens, contexts, bindingScope, owner) => {
-  const exactPath = tokens.length === 1 && Array.isArray(tokens[0]) ? tokens[0] : null;
+const bindAttribute = (node, name, tokens, bindingScope, owner) => {
+  const path = tokens.length === 1 && Array.isArray(tokens[0]) ? tokens[0] : null;
   let previous = INITIAL;
   watch(owner, () => {
-    const raw = exactPath ? bindingScope.lookup(exactPath, contexts) : null;
-    const value = exactPath && (raw == null || raw === false) ? null : exactPath ? toText(raw) : render(tokens, bindingScope, contexts);
+    const raw = path ? bindingScope.lookup(path) : null;
+    const value = path && (raw == null || raw === false) ? null : path ? toText(raw) : render(tokens, bindingScope);
     if (Object.is(value, previous)) return;
     previous = value;
     if (value == null) node.removeAttribute(name);
@@ -60,29 +60,29 @@ const bindAttribute = (node, name, tokens, contexts, bindingScope, owner) => {
   });
 };
 
-const bindBoolean = (node, name, path, contexts, bindingScope, owner) => {
+const bindBoolean = (node, name, path, bindingScope, owner) => {
   let previous = INITIAL;
   watch(owner, () => {
-    const value = Boolean(bindingScope.lookup(path, contexts));
+    const value = Boolean(bindingScope.lookup(path));
     if (value === previous) return;
     previous = value;
     node.toggleAttribute(name, value);
   });
 };
 
-const bindProperty = (node, name, path, contexts, bindingScope, owner) => {
+const bindProperty = (node, name, path, bindingScope, owner) => {
   let previous = INITIAL;
   watch(owner, () => {
-    const value = bindingScope.lookup(path, contexts);
+    const value = bindingScope.lookup(path);
     if (Object.is(value, previous)) return;
     previous = value;
     node[name] = value;
   });
 };
 
-const bindEvent = (node, name, path, contexts, bindingScope, owner) => {
+const bindEvent = (node, name, path, bindingScope, owner) => {
   const listener = event => {
-    const handler = bindingScope.lookup(path, contexts);
+    const handler = bindingScope.lookup(path);
     if (typeof handler === 'function') return handler.call(node, event);
   };
   node.addEventListener(name, listener);
@@ -90,18 +90,17 @@ const bindEvent = (node, name, path, contexts, bindingScope, owner) => {
 };
 
 const moveNodesBefore = (nodes, parent, anchor) => {
-  if (!nodes.length || nodes[nodes.length - 1].nextSibling === anchor) return false;
+  if (!nodes.length || nodes[nodes.length - 1].nextSibling === anchor) return;
   for (const node of nodes) {
     if (node.parentNode === parent && parent.moveBefore) parent.moveBefore(node, anchor);
     else parent.insertBefore(node, anchor);
   }
-  return true;
 };
 
 const keyFromItem = (item, path) => {
   let value = item;
   for (const key of path) {
-    if (value == null) return undefined;
+    if (value == null || !Object.hasOwn(value, key)) return undefined;
     value = unwrap(value[key]);
   }
   return value;
@@ -116,29 +115,24 @@ class ListPart {
     this.expression = instruction[2];
     this.keyPath = instruction[3];
     this.template = instruction[4];
-    this.contexts = instruction[5];
     this.bindingScope = bindingScope;
     this.scope = owner.child();
-    this.scope.cleanup(() => {
-      for (const record of this.order) record.view.dispose(false);
-      this.records.clear();
-      this.order.length = 0;
-    });
     watch(this.scope, () => this.update());
   }
 
   update() {
-    const collection = this.bindingScope.lookup(this.expression, this.contexts);
+    const collection = this.bindingScope.lookup(this.expression);
     const items = collection == null ? [] : Array.isArray(collection) ? collection : [...collection];
     const next = new Map();
     const order = [];
+    const keys = [];
     let occurrences;
 
-    for (let index = 0; index < items.length; index++) {
-      const item = items[index];
+    for (const item of items) {
       let key;
       if (this.keyPath) {
         key = keyFromItem(item, this.keyPath);
+        if (key == null) throw new Error('Skein list key resolved to ' + key);
       } else if (item !== null && typeof item === 'object') {
         key = item;
       } else {
@@ -147,7 +141,15 @@ class ListPart {
         occurrences.set(item, occurrence + 1);
         key = typeof item + ':' + String(item) + ':' + occurrence;
       }
+      if (next.has(key)) throw new Error('Duplicate Skein list key: ' + String(key));
+      next.set(key, null);
+      keys.push(key);
+    }
+    next.clear();
 
+    for (let index = 0; index < items.length; index++) {
+      const item = items[index];
+      const key = keys[index];
       let record = this.records.get(key);
       if (record) {
         record.bindingScope.setContext(item);
@@ -156,7 +158,8 @@ class ListPart {
         const scope = this.scope.child();
         const indexRef = new Ref(index);
         const locals = { index: indexRef, $index: indexRef };
-        const itemScope = new BindingScope(this.bindingScope.rootState, item, this.bindingScope, locals, true);
+        const itemScope = new BindingScope(item, this.bindingScope, locals, true);
+        locals.$value = itemScope.contextValue;
         record = { key, bindingScope: itemScope, index: indexRef, view: this.template.instantiate(itemScope, scope) };
       }
       next.set(key, record);
@@ -186,15 +189,13 @@ class BranchPart {
     this.end = end;
     this.expression = instruction[2];
     this.template = instruction[3];
-    this.contexts = instruction[4];
     this.bindingScope = bindingScope;
     this.scope = owner.child();
-    this.scope.cleanup(() => this.view?.dispose(false));
     watch(this.scope, () => this.update());
   }
 
   update() {
-    const visible = Boolean(this.bindingScope.lookup(this.expression, this.contexts));
+    const visible = Boolean(this.bindingScope.lookup(this.expression));
     if (visible === this.visible) return;
     this.visible = visible;
     if (visible) {
@@ -209,36 +210,35 @@ class BranchPart {
 }
 
 export class View {
-  constructor(fragment, nodes, scope, elements) {
+  constructor(fragment, nodes, scope) {
     this.fragment = fragment;
     this.nodes = nodes;
     this.scope = scope;
-    this.elements = elements;
   }
 
   dispose(remove = true) {
     this.scope.dispose();
-    if (this.elements) for (const element of this.elements) element.dispose?.();
     if (remove) for (const node of this.nodes) node.remove();
   }
 }
 
 export class CompiledTemplate {
-  constructor(fragment, defineElement) {
+  constructor(fragment, loadElement, disposeElement) {
     this.fragment = fragment;
-    this.defineElement = defineElement;
+    this.loadElement = loadElement;
+    this.disposeElement = disposeElement;
     this.instructions = [];
     this.customPaths = [];
-    this.compileChildren(fragment, [], []);
+    this.compileChildren(fragment, []);
   }
 
-  static fromNode(node, defineElement) {
+  static fromNode(node, loadElement, disposeElement) {
     const fragment = document.createDocumentFragment();
     fragment.append(node);
-    return new CompiledTemplate(fragment, defineElement);
+    return new CompiledTemplate(fragment, loadElement, disposeElement);
   }
 
-  compileChildren(parent, parentPath, contexts) {
+  compileChildren(parent, parentPath) {
     let index = 0;
     while (index < parent.childNodes.length) {
       const node = parent.childNodes[index];
@@ -246,7 +246,7 @@ export class CompiledTemplate {
 
       if (node.nodeType === Node.TEXT_NODE) {
         const tokenList = parseTokens(node.data);
-        if (tokenList.some(Array.isArray)) this.instructions.push([TEXT, path, tokenList, contexts]);
+        if (tokenList.some(Array.isArray)) this.instructions.push([TEXT, path, tokenList]);
         index++;
         continue;
       }
@@ -255,31 +255,39 @@ export class CompiledTemplate {
         continue;
       }
 
-      const forPath = exact(node.getAttribute('for'));
-      if (forPath) {
-        const keyPath = exact(node.getAttribute('key'));
+      const eachValue = node.getAttribute('each');
+      const eachPath = exact(eachValue);
+      if (eachValue !== null && !eachPath) throw new Error('Skein each must be a single path binding: each={items}');
+      if (eachPath) {
+        const keyValue = node.getAttribute('key');
+        const keyPath = keyValue === null ? null : exact(keyValue);
+        if (keyValue !== null && !keyPath) throw new Error('Skein key must be a single path binding: key={id}');
         const templateNode = node.cloneNode(true);
-        templateNode.removeAttribute('for');
+        templateNode.removeAttribute('each');
         templateNode.removeAttribute('key');
-        const template = CompiledTemplate.fromNode(templateNode, this.defineElement);
-        const end = document.createComment('for');
+        const template = CompiledTemplate.fromNode(templateNode, this.loadElement, this.disposeElement);
+        const end = document.createComment('each');
         parent.replaceChild(end, node);
-        this.instructions.push([LIST, path, forPath, keyPath, template, contexts]);
+        this.instructions.push([LIST, path, eachPath, keyPath, template]);
         index++;
         continue;
       }
 
-      const ifPath = exact(node.getAttribute('if'));
+      const ifValue = node.getAttribute('if');
+      const ifPath = exact(ifValue);
+      if (ifValue !== null && !ifPath) throw new Error('Skein if must be a single path binding: if={visible}');
       if (ifPath) {
         const templateNode = node.cloneNode(true);
         templateNode.removeAttribute('if');
-        const template = CompiledTemplate.fromNode(templateNode, this.defineElement);
+        const template = CompiledTemplate.fromNode(templateNode, this.loadElement, this.disposeElement);
         const end = document.createComment('if');
         parent.replaceChild(end, node);
-        this.instructions.push([BRANCH, path, ifPath, template, contexts]);
+        this.instructions.push([BRANCH, path, ifPath, template]);
         index++;
         continue;
       }
+
+      if (exact(node.getAttribute('in'))) throw new Error('Skein in={...} was removed; use full property paths');
 
       if (node.localName === 'style') {
         index++;
@@ -287,36 +295,24 @@ export class CompiledTemplate {
       }
 
       if (node.localName.includes('-')) {
-        this.defineElement(node.localName);
         this.customPaths.push(path);
-      }
-
-      let childContexts = contexts;
-      const inPath = exact(node.getAttribute('in'));
-      if (inPath) {
-        node.removeAttribute('in');
-        childContexts = [...contexts, inPath];
       }
 
       for (const name of node.getAttributeNames()) {
         const tokenList = parseTokens(node.getAttribute(name));
-        if (!tokenList.some(Array.isArray)) continue;
+        const dynamic = tokenList.some(Array.isArray);
         const pathExpression = tokenList.length === 1 && Array.isArray(tokenList[0]) ? tokenList[0] : null;
-        if (name[0] === '.' && pathExpression) {
+        if (name[0] === '.' || name[0] === '?' || name[0] === '@') {
+          if (!pathExpression) throw new Error('Skein ' + name + ' must be a single path binding');
           node.removeAttribute(name);
-          this.instructions.push([PROP, path, name.slice(1), pathExpression, childContexts]);
-        } else if (name[0] === '?' && pathExpression) {
-          node.removeAttribute(name);
-          this.instructions.push([BOOL, path, name.slice(1), pathExpression, childContexts]);
-        } else if (name[0] === '@' && pathExpression) {
-          node.removeAttribute(name);
-          this.instructions.push([EVENT, path, name.slice(1), pathExpression, childContexts]);
-        } else {
-          this.instructions.push([ATTR, path, name, tokenList, childContexts]);
+          const type = name[0] === '.' ? PROP : name[0] === '?' ? BOOL : EVENT;
+          this.instructions.push([type, path, name.slice(1), pathExpression]);
+        } else if (dynamic) {
+          this.instructions.push([ATTR, path, name, tokenList]);
         }
       }
 
-      this.compileChildren(node, path, childContexts);
+      this.compileChildren(node, path);
       index++;
     }
   }
@@ -324,13 +320,13 @@ export class CompiledTemplate {
   instantiate(bindingScope, owner) {
     const fragment = this.fragment.cloneNode(true);
     const nodes = [...fragment.childNodes];
-    let elements = null;
+
     if (this.customPaths.length) {
-      elements = [];
-      for (const path of this.customPaths) {
-        const element = byPath(fragment, path);
-        if (typeof element.dispose === 'function') elements.push(element);
-      }
+      const elements = this.customPaths.map(path => byPath(fragment, path));
+      for (const element of elements) this.loadElement(element.localName);
+      owner.cleanup(() => {
+        for (const element of elements) this.disposeElement(element);
+      });
     }
 
     for (let index = this.instructions.length - 1; index >= 0; index--) {
@@ -344,13 +340,13 @@ export class CompiledTemplate {
       }
 
       const node = byPath(fragment, instruction[1]);
-      if (type === TEXT) bindText(node, instruction[2], instruction[3], bindingScope, owner);
-      else if (type === ATTR) bindAttribute(node, instruction[2], instruction[3], instruction[4], bindingScope, owner);
-      else if (type === BOOL) bindBoolean(node, instruction[2], instruction[3], instruction[4], bindingScope, owner);
-      else if (type === PROP) bindProperty(node, instruction[2], instruction[3], instruction[4], bindingScope, owner);
-      else bindEvent(node, instruction[2], instruction[3], instruction[4], bindingScope, owner);
+      if (type === TEXT) bindText(node, instruction[2], bindingScope, owner);
+      else if (type === ATTR) bindAttribute(node, instruction[2], instruction[3], bindingScope, owner);
+      else if (type === BOOL) bindBoolean(node, instruction[2], instruction[3], bindingScope, owner);
+      else if (type === PROP) bindProperty(node, instruction[2], instruction[3], bindingScope, owner);
+      else bindEvent(node, instruction[2], instruction[3], bindingScope, owner);
     }
 
-    return new View(fragment, nodes, owner, elements);
+    return new View(fragment, nodes, owner);
   }
 }

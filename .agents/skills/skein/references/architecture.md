@@ -1,51 +1,51 @@
-# Skein runtime architecture
+# Skein 0.6 runtime architecture
 
-Read this only when modifying Skein's renderer, reactivity, lifecycle, compiler, component input contract, build or performance behavior.
+Read this when modifying renderer, reactivity, lifecycle, component inputs, loading, minification or performance behavior.
 
 ## File map
 
 ```text
-skein.js                 readable public entry/bootstrap
-skein.min.js             generated single-file production entry
-runtime/reactive.js      dependency graph, scheduler, scopes, Proxy state, lexical lookup
-runtime/template.js      compiler, bindings, keyed lists, branches, View
+skein.js                 readable entry/bootstrap
+skein.min.js             generated production entry
+runtime/reactive.js      dependency graph, scheduler, scopes, Proxy state, binding lookup
+runtime/template.js      DOM compiler, bindings, keyed lists, branches, View
 runtime/component.js     loading, registration, Custom Element lifecycle, inputs, script helpers
-tools/build.mjs          zero-dependency production bundler/minifier
-test/                    Node + real-Chrome tests
+tools/build.mjs          zero-dependency lexical bundler/minifier
+test/                    Node + real-Chrome regressions
 ```
 
-## Invariants
+## Core invariants
 
-1. Zero runtime dependencies.
-2. No virtual DOM.
-3. No component-wide rerender after state writes.
-4. Component source compiles once and is cached.
-5. Binding paths compile once, not on every update.
-6. Dependencies come from actual property reads.
-7. Missing properties are trackable.
-8. Existing-property writes do not invalidate object iteration unnecessarily.
-9. Array structural changes, including direct length truncation, invalidate required dependencies.
-10. Synchronous writes share one scheduler microtask.
-11. Render effects settle before user effects.
-12. Keyed lists preserve DOM identity when keys persist.
-13. Dynamic DOM belongs to explicit child scopes.
-14. Nested Skein elements are disposed when their owning view disappears.
-15. Disconnect pauses; explicit `dispose()` destroys.
-16. Component inputs are ordinary host DOM properties backed by child reactive state.
-17. Component outputs remain native DOM events; the runtime has no component event bus.
-18. Native CSS, SVG, Canvas, Web Audio and browser lifecycle remain first-class.
+1. Zero runtime dependencies and no virtual DOM.
+2. Source compiles once; binding paths compile once.
+3. Dependencies come from actual property reads.
+4. Missing own properties are trackable; prototype properties do not leak into lexical bindings.
+5. Synchronous writes share one scheduler microtask.
+6. Render effects settle before user effects.
+7. Keyed list records preserve real DOM identity.
+8. Explicit list keys are validated before reconciliation mutates views.
+9. Dynamic DOM owns explicit child scopes.
+10. Disconnect pauses; permanent disposal destroys.
+11. Failed mounts roll back scope/resources/partial DOM.
+12. Component inputs are native host properties; outputs are native events.
+13. Unknown custom tags are fetched before Skein registers them.
+14. External custom elements are never force-disposed by Skein.
+15. Plain objects/arrays are reactive; platform/class objects remain native.
+16. One raw object has one Skein Proxy identity across component boundaries.
 
 ## Reactive graph
 
-`ReactiveState` returns a deep Proxy directly. Per-object/property `Dep` nodes track observers; iteration has a separate dependency. Internal `Ref` values exist where a mutable binding context/value is required, such as list `index`. They are not public API.
+Module-global WeakMaps hold raw-object dependencies, raw→proxy and proxy→raw relationships. This is deliberate: a plain object passed from parent to child must not become proxy-of-proxy state. Effects in either component subscribe to the same raw property `Dep` nodes.
 
-`ComputedRef` is lazy and cached. `ReactiveEffect` removes old dynamic dependencies before each run.
+Only arrays and objects whose prototype is `Object.prototype` or `null` are recursively proxied. Date, Map, Set, DOM/platform objects and class instances are returned unchanged.
+
+`ComputedRef` is lazy/cached. `ReactiveEffect` drops dynamic dependencies before each run. Array length truncation invalidates removed indices. Failed `Reflect.set` / `Reflect.deleteProperty` operations do not notify subscribers.
 
 ## Scheduler
 
 ```text
 state writes
-→ invalidation
+→ dependency invalidation
 → one queued microtask
 → exhaust render queue
 → run one user effect
@@ -53,87 +53,80 @@ state writes
 → continue user effects
 ```
 
-There is no public `batch()` because a JavaScript call stack already completes before the scheduled microtask can flush.
+There is no public batch primitive because one JavaScript call stack already finishes before the queued microtask.
 
-## Scope ownership
+## Binding scopes
 
-A `Scope` owns child scopes and a lazily allocated resource list containing effects/computed values and cleanup callbacks. `AbortController` is lazy. Declarative `@event` listeners use deterministic `removeEventListener` cleanup so list rows do not allocate an AbortController per listener.
+There is one lookup model. Root templates read root component state. `each` creates a mutable item scope whose own properties shadow outer item/root scopes. List locals (`index`, `$index`) live beside the item context.
 
-## Template compilation
+There is no `in={...}` context chain. Removing it avoids a second lexical model and makes `if`/nested `each` compilation deterministic.
 
-The compiler operates on real DOM and emits compact numeric instruction tuples for text, attributes, boolean attributes, DOM properties, events, lists and branches.
+Lookup requires own properties at every path segment. Missing keys on reactive proxies still track directly without reading inherited values, so prototype methods/getters never become accidental bindings or execute during lookup.
 
-Expressions are precompiled to path arrays. `<style>` contents are opaque to the binding parser. Structural list/branch nodes use comment anchors. Instructions instantiate in reverse order so synchronous structural insertion cannot invalidate later node paths.
+## Template compiler
 
-`.property={path}` already writes `node[property] = value`; component inputs deliberately reuse this native behavior rather than adding a new renderer instruction.
+The compiler operates on real DOM and emits compact numeric instruction tuples for text, string attributes, boolean attributes, DOM properties, events, lists and branches.
+
+Paths are strict dotted property paths. Special `.`, `?`, `@`, `if`, `each` and `key` forms validate during compilation and fail early on malformed syntax. `<style>` content remains opaque.
+
+`each={collection}` uses a comment anchor. Existing keys reuse views, item context/index refs update, removed records dispose, and surviving node ranges move into final order. Explicit key uniqueness/nullability is checked in a preflight pass before record mutation.
+
+`if={path}` uses a comment anchor and a child Scope. Structural templates compile independently without inherited context metadata because all non-list references are explicit paths.
+
+## View and ownership
+
+`Scope` owns effects, computed refs, child scopes, native cleanup callbacks and a lazy AbortController. `View` owns only root nodes plus its Scope.
+
+During template instantiation, actual custom-element nodes are captured for teardown. The component module supplies a disposer callback that calls `dispose()` **only** when the nested node is a `SkeinElement`; arbitrary third-party elements rely on normal disconnected lifecycle.
+
+## Component loading and coexistence
+
+`loadElement(tag)` first asks `CodeLoader` for `tag.replaceAll('-', '/') + '.html'`. Only after successful source load does Skein call `customElements.define`. A 404 deletes the failed cache entry and leaves the tag undefined.
+
+This replaces the old eager “claim every undefined custom tag” behavior. External libraries can define their own tags before, during or after a failed Skein lookup.
+
+`Skein.define(tag, source)` is explicit and defines once. Production instance registries, reload and generation counters were removed; Playground already recreates its iframe/runtime for edited source, and late explicit define relies on the browser's native Custom Element upgrade behavior.
 
 ## Component inputs
 
-`input(name, fallback)` is injected by `SkeinElement.runScript()` and delegates to the host's input registration.
+`input(name, fallback)`:
 
-On first declaration for a name:
+1. rejects empty names and any name present on `SkeinElement.prototype`/HTMLElement prototypes plus the own `state` API;
+2. captures an own pre-upgrade property if the parent wrote `.property={...}` before child source/mount;
+3. deletes that temporary property;
+4. installs a host accessor backed by `state[name]`;
+5. records the declared input lazily;
+6. seeds child state immediately;
+7. returns the initial value so the old assignment spelling remains harmless/compatible.
 
-1. Check whether the custom element already has an own property of that name. This is how a parent `.property={...}` write can arrive before the child's asynchronous file load finishes.
-2. Capture that pending value, otherwise use `fallback`.
-3. Delete the pending own property if present.
-4. Define a host property accessor whose getter/setter reads/writes the child's reactive `state[name]`.
-5. Lazily record the declared input name so reload does not redefine it.
-6. Return the captured initial value so normal script assignment (`this.value = input(...)`) seeds reactive state.
-
-This keeps inputs one-way with respect to the owner: assigning the child host property changes child state only. The child uses native `CustomEvent` to request owner changes.
-
-Input bookkeeping is lazy: components that do not call `input()` do not allocate an input Set.
-
-## Binding lookup
-
-`BindingScope` performs direct lexical lookup. Context chains are resolved only when `in={...}` is present. A present property with `undefined` counts as found and shadows outer scopes.
-
-## Keyed reconciliation
-
-`ListPart` keeps `Map<key, record>` plus ordered records. Existing keys reuse views, contexts/index refs update, unseen keys instantiate, removed records dispose, and surviving node ranges move into final order. `moveBefore()` is used when available, otherwise `insertBefore()`.
+No event bus or implicit two-way link exists.
 
 ## Component lifecycle
 
-`SkeinElement` owns state, current root Scope/View, mount generation and lazy input metadata.
-
-- `connectedCallback()` mounts or resumes;
-- asynchronous file loading may overlap parent property writes, which `input()` must preserve;
-- `disconnectedCallback()` pauses and unregisters connected instances;
-- `connectedMoveCallback()` resumes state-preserving moves;
-- `dispose()` is permanent teardown;
-- `Skein.define()` may reload an existing connected Skein element while keeping declared host input accessors valid.
+- `connectedCallback`: resume existing view or start one mount.
+- asynchronous mount checks connection/disposal after source load.
+- mount instantiation is wrapped transactionally; errors dispose the fresh Scope and clear partial shadow DOM.
+- `disconnectedCallback`: pause.
+- `connectedMoveCallback`: resume state-preserving moves when the platform uses it.
+- `dispose()`: permanent teardown.
 
 ## Script execution
 
-Component scripts currently use `AsyncFunction` with these injected names:
+Component scripts use `AsyncFunction` with injected `input`, `computed`, `effect`, `onCleanup`, `host`, `abortSignal`. `abortSignal` allocation remains lazy via source-use detection. Dynamic evaluation is the current strict-CSP limitation.
 
-```text
-input
-computed
-effect
-onCleanup
-host
-abortSignal
+## Production minifier hazards
+
+`tools/build.mjs` is a lexical zero-dependency minifier and identifier mangler, not an AST transform. A mapped identifier is renamed even when it appears after `.`. Therefore public/native property tokens must never be added casually to `internalNames`.
+
+Examples deliberately written with string-key property access to protect native names that collide with internal mangle names:
+
+```js
+hit['index']
+controller['signal']
 ```
 
-`AsyncFunction` is the current strict-CSP limitation. If changing evaluation or helper ordering, update build mangling, docs, tests and LLM context together.
-
-## Production build
-
-`tools/build.mjs` concatenates readable modules, removes module-only syntax, lexically minifies and mangles known internal identifiers while preserving strings/regex literals.
-
-Run:
-
-```bash
-node tools/build.mjs
-node tools/build.mjs --check
-node test/run.mjs
-```
-
-The generated file is exercised directly in real Chrome, including production component input composition and the real multi-file Studio example.
+`dispose` is public on `host` and must never be mangled. Real-Chrome tests exercise the generated bundle, not just readable modules.
 
 ## Performance discipline
 
-Current intentional choices include lazy Scope resources, lazy AbortController, lazy input bookkeeping, compiled paths, compact instruction tuples, direct keyed-item key resolution, no path-frame allocation on ordinary reads, no renderer-wide DOM traversal at update time and no legacy helper properties attached to rendered nodes.
-
-Do not remove keyed reconciliation, computed values, component input timing guarantees, scoped cleanup or lifecycle correctness merely to cross an arbitrary byte milestone.
+Keep lazy resource allocation, compact instructions, direct item-key resolution, no update-time renderer-wide DOM traversal and no helper pollution on rendered nodes. Correctness wins over arbitrary byte targets, but remove whole concepts before micro-optimizing tokens.

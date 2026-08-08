@@ -1,0 +1,50 @@
+<script>
+  this.inputId = 'type-word'
+  this.word = 'SKEIN'
+  this.size = 112
+  this.weight = 900
+  this.tracking = -8
+  this.angle = -4
+
+  this.surface = computed(() => `--size:${this.size}px;--weight:${this.weight};--tracking:${this.tracking}px;--angle:${this.angle}deg`)
+  this.wordChange = event => this.word = event.currentTarget.value.toUpperCase().slice(0, 12) || 'SKEIN'
+  this.numberChange = event => this[event.currentTarget.name] = Number(event.currentTarget.value)
+</script>
+
+<section class="machine" style={surface}>
+  <header><small>CSS CUSTOM PROPERTIES / NATIVE FORM</small><span>{size}px · {weight} · {tracking}px</span></header>
+
+  <div class="poster">
+    <div class="mesh"></div>
+    <h1>{word}</h1>
+    <p>HTML state → one style attribute → native CSS layout & transforms</p>
+  </div>
+
+  <div class="controls">
+    <label for={inputId}>WORD</label>
+    <input id={inputId} .value={word} @input={wordChange} autocomplete="off">
+
+    <label>SIZE <b>{size}</b><input name="size" type="range" min="56" max="150" .value={size} @input={numberChange}></label>
+    <label>WEIGHT <b>{weight}</b><input name="weight" type="range" min="300" max="900" step="100" .value={weight} @input={numberChange}></label>
+    <label>TRACK <b>{tracking}</b><input name="tracking" type="range" min="-14" max="12" .value={tracking} @input={numberChange}></label>
+    <label>ANGLE <b>{angle}</b><input name="angle" type="range" min="-12" max="12" .value={angle} @input={numberChange}></label>
+  </div>
+</section>
+
+<style>
+  :host { display:block; min-height:100%; background:#7158ff; color:#101010; font-family:system-ui,sans-serif; }
+  * { box-sizing:border-box; }
+  .machine { min-height:100%; padding:18px; display:grid; grid-template-rows:auto minmax(300px,1fr) auto; gap:12px; }
+  header { display:flex; justify-content:space-between; gap:16px; color:#f6f1e7; font:700 9px ui-monospace,monospace; letter-spacing:.11em; text-transform:uppercase; }
+  .poster { position:relative; overflow:hidden; display:grid; place-items:center; min-height:330px; border:2px solid #101010; background:#d8ff58; box-shadow:10px 10px 0 #101010; }
+  .mesh { position:absolute; inset:-20%; background:repeating-linear-gradient(90deg,#101010 0 1px,transparent 1px 42px),repeating-linear-gradient(0deg,#101010 0 1px,transparent 1px 42px); opacity:.1; transform:rotate(var(--angle)); }
+  h1 { position:relative; margin:0; max-width:94%; font-family:Arial Black,Impact,sans-serif; font-size:clamp(48px,var(--size),150px); font-weight:var(--weight); letter-spacing:var(--tracking); line-height:.78; transform:rotate(var(--angle)); text-align:center; overflow-wrap:anywhere; }
+  .poster p { position:absolute; left:14px; bottom:10px; margin:0; max-width:72%; font:700 8px ui-monospace,monospace; letter-spacing:.08em; text-transform:uppercase; }
+  .controls { display:grid; grid-template-columns:auto minmax(120px,1.1fr) repeat(4,minmax(110px,1fr)); gap:10px; align-items:center; padding-top:10px; color:#f6f1e7; }
+  .controls>label { font:700 8px ui-monospace,monospace; letter-spacing:.1em; }
+  .controls>input { min-width:0; height:35px; border:1px solid #f6f1e766; background:#ffffff10; color:#fff; padding:0 9px; outline:none; }
+  .controls label:not(:first-child) { display:grid; grid-template-columns:1fr auto; gap:5px; }
+  .controls label input { grid-column:1/3; width:100%; accent-color:#d8ff58; }
+  .controls b { font-weight:700; color:#d8ff58; }
+  @media(max-width:850px){.controls{grid-template-columns:70px 1fr 1fr}.machine{padding:14px}.poster{box-shadow:6px 6px 0 #101010}.controls label:not(:first-child){grid-column:auto}}
+</style>

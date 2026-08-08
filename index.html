@@ -14,7 +14,7 @@
   <main>
     <section class="hero">
       <skein-threads></skein-threads>
-      <div class="badge-row"><span class="badge">0 dependencies</span><span class="badge">4.8 kB brotli</span><span class="badge">no build</span></div>
+      <div class="badge-row"><span class="badge">0 dependencies</span><span class="badge">4.9 kB brotli</span><span class="badge">no build</span></div>
       <div class="wrap hero-copy">
         <p class="eyebrow">HTML-first reactive web components</p>
         <h1 class="display">SKEIN</h1>
@@ -36,7 +36,7 @@
         <div class="grid-3">
           <article class="feature"><span class="num">DOM</span><div><h3>Create once.</h3><p>Templates compile once. State writes update exact DOM parts instead of rebuilding a virtual tree.</p></div></article>
           <article class="feature"><span class="num">COMPONENTS</span><div><h3>Compose as HTML.</h3><p>Tag names load HTML files. Owners pass DOM properties down; children dispatch native events up.</p></div></article>
-          <article class="feature"><span class="num">WEB APIs</span><div><h3>Keep the medium native.</h3><p>CSS animates, SVG draws, Canvas loops, Web Audio sounds. Skein handles state, identity and lifecycle.</p></div></article>
+          <article class="feature"><span class="num">WEB APIs</span><div><h3>Keep the medium native.</h3><p>Date, Map, DOM, CSS, SVG, Canvas and Web Audio remain real browser objects instead of framework wrappers.</p></div></article>
         </div>
       </div>
     </section>
@@ -47,7 +47,7 @@
           <p class="eyebrow">02 / start</p>
           <h2 style="font-size:clamp(48px,7vw,96px);letter-spacing:-.065em;line-height:.9;margin:20px 0 24px">One HTML file is enough.</h2>
           <p class="lede" style="font-size:19px">No npm, CLI or config. Prototype inline, then move components into files when the project actually needs boundaries.</p>
-          <p style="margin-top:18px;font:600 12px ui-monospace,monospace;letter-spacing:.04em">skein.min.js · 14.5 kB raw · 5.3 kB gzip · 4.8 kB brotli</p>
+          <p style="margin-top:18px;font:600 12px ui-monospace,monospace;letter-spacing:.04em">skein.min.js · 15.0 kB raw · 5.5 kB gzip · 4.9 kB brotli</p>
           <p style="margin-top:28px"><a class="button" href="start/">See the 60-second start</a></p>
         </div>
         <div class="code-card">
@@ -93,7 +93,7 @@
           <div>
             <div class="big-number">↓↑</div>
             <h3 style="font-size:32px;letter-spacing:-.04em;margin:28px 0 12px">DOM properties + CustomEvent.</h3>
-            <p class="lede" style="font-size:18px">A child declares <code>this.volume = input('volume', .18)</code>. The owner writes the host property through <code>.volume={volume}</code>. Requests travel back as bubbling, composed native events.</p>
+            <p class="lede" style="font-size:18px">A child declares <code>input('volume', .18)</code>. The owner writes the host property through <code>.volume={volume}</code>. Requests travel back as bubbling, composed native events.</p>
             <p><a class="button ghost" href="docs/#composition">Read the contract →</a></p>
           </div>
         </div>
@@ -104,20 +104,30 @@
       <div class="wrap">
         <div class="section-head"><p class="eyebrow">04 / rendering</p><h2>Fine-grained without turning HTML into a programming language.</h2></div>
         <div class="grid-3">
-          <article class="feature"><span class="num">PATHS</span><div><h3>Bindings stay small.</h3><p><code>{...}</code> contains property paths. Derived logic belongs in lazy cached <code>computed()</code>.</p></div></article>
-          <article class="feature"><span class="num">KEYS</span><div><h3>Identity survives.</h3><p>Keyed rows move as real DOM ranges, preserving browser-local input and focus state.</p></div></article>
-          <article class="feature"><span class="num">SCOPE</span><div><h3>Cleanup has an owner.</h3><p>Branches and lists dispose effects, listeners and nested components with their DOM.</p></div></article>
+          <article class="feature"><span class="num">PATHS</span><div><h3>Bindings stay strict.</h3><p><code>{...}</code> contains property paths. Invalid expressions fail early; derived logic belongs in lazy <code>computed()</code>.</p></div></article>
+          <article class="feature"><span class="num">EACH</span><div><h3>Identity survives.</h3><p><code>each={items} key={id}</code> moves real DOM ranges. Native dynamic <code>for={inputId}</code> stays HTML.</p></div></article>
+          <article class="feature"><span class="num">SCOPE</span><div><h3>Cleanup has an owner.</h3><p>Branches and lists dispose Skein-owned effects/components without force-disposing external Custom Elements.</p></div></article>
         </div>
       </div>
     </section>
 
     <section class="section">
       <div class="wrap split">
-        <div><p class="eyebrow">05 / content</p><h2 style="font-size:clamp(42px,6vw,80px);letter-spacing:-.06em;line-height:.92">Static content can just be HTML.</h2><p class="lede" style="font-size:18px">Skein has no SSR today. If a heading, article or navigation matters before JavaScript, put it directly in the document and use Skein for the interactive regions.</p></div>
+        <div><p class="eyebrow">05 / coexistence</p><h2 style="font-size:clamp(42px,6vw,80px);letter-spacing:-.06em;line-height:.92">A missing Skein file does not steal the tag.</h2><p class="lede" style="font-size:18px">Skein fetches component source before <code>customElements.define()</code>. If <code>google/map.html</code> is not there, <code>&lt;google-map&gt;</code> remains free for its real library.</p></div>
+        <div class="code-card"><pre><code data-highlight>&lt;my-panel&gt;&lt;/my-panel&gt;
+&lt;third-party-chart&gt;&lt;/third-party-chart&gt;
+
+// my/panel.html exists → Skein defines it
+// third/party/chart.html 404 → left untouched</code></pre></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="wrap split">
+        <div><p class="eyebrow">06 / content</p><h2 style="font-size:clamp(42px,6vw,80px);letter-spacing:-.06em;line-height:.92">Static content can just be HTML.</h2><p class="lede" style="font-size:18px">Skein has no SSR today. If a heading, article or navigation matters before JavaScript, put it directly in the document and use Skein for interactive regions.</p></div>
         <div class="code-card"><pre><code data-highlight>&lt;main&gt;
   &lt;h1&gt;Native creative web experiences.&lt;/h1&gt;
   &lt;p&gt;Already present in the HTML response.&lt;/p&gt;
-
   &lt;interactive-art&gt;&lt;/interactive-art&gt;
 &lt;/main&gt;</code></pre></div>
       </div>
@@ -125,11 +135,11 @@
 
     <section class="section">
       <div class="wrap">
-        <div class="section-head"><p class="eyebrow">06 / agents</p><h2>Humans get docs. Agents get the same contract.</h2></div>
+        <div class="section-head"><p class="eyebrow">07 / agents</p><h2>Humans get docs. Agents get the same contract.</h2></div>
         <div class="grid-3">
-          <article class="feature"><span class="num">LLMS</span><div><h3>/llms.txt</h3><p>Concise machine-readable framework rules, including component composition semantics.</p><p style="margin-top:18px"><a href="llms.txt">read it →</a></p></div></article>
-          <article class="feature"><span class="num">SKILL</span><div><h3>Agent Skill</h3><p>Portable instructions cover inputs, events, lifecycle, HTML files and native APIs.</p><p style="margin-top:18px"><a href="ai/">agent resources →</a></p></div></article>
-          <article class="feature"><span class="num">TESTS</span><div><h3>Real Chrome.</h3><p>The generated minified runtime and multi-file Studio composition are exercised directly in Chromium.</p></div></article>
+          <article class="feature"><span class="num">LLMS</span><div><h3>/llms.txt</h3><p>Concise machine-readable framework rules, including 0.6 path/list/input semantics.</p><p style="margin-top:18px"><a href="llms.txt">read it →</a></p></div></article>
+          <article class="feature"><span class="num">SKILL</span><div><h3>Agent Skill</h3><p>Portable instructions cover composition, lifecycle, native objects and Custom Element coexistence.</p><p style="margin-top:18px"><a href="ai/">agent resources →</a></p></div></article>
+          <article class="feature"><span class="num">TESTS</span><div><h3>Real Chrome.</h3><p>The readable and generated minified runtimes plus multi-file Studio are exercised directly in Chromium.</p></div></article>
         </div>
       </div>
     </section>

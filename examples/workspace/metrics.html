@@ -1,0 +1,26 @@
+<script>
+  input('projects', [])
+  input('tasks', [])
+  input('team', [])
+  this.active = computed(() => this.tasks.filter(task => task.status === 'active').length)
+  this.review = computed(() => this.tasks.filter(task => task.status === 'review').length)
+  this.done = computed(() => this.tasks.filter(task => task.status === 'done').length)
+  this.projectCount = computed(() => this.projects.length)
+  this.teamCount = computed(() => this.team.length)
+</script>
+
+<div class="metrics">
+  <ui-metric .name={projectLabel} .value={projectCount}></ui-metric>
+  <ui-metric name="Active" .value={active} tone="lime"></ui-metric>
+  <ui-metric name="Review" .value={review} tone="amber"></ui-metric>
+  <ui-metric name="Done" .value={done}></ui-metric>
+  <ui-metric name="Team" .value={teamCount}></ui-metric>
+</div>
+
+<script>
+  this.projectLabel = 'Projects'
+</script>
+
+<style>
+  :host{display:block}.metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}@media(max-width:760px){.metrics{grid-template-columns:repeat(2,1fr)}}
+</style>

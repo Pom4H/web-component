@@ -1,0 +1,74 @@
+<script>
+  this.section = 'Overview'
+  this.query = ''
+  this.selectedId = 'T-104'
+  this.activitySeq = 4
+  this.projects = [
+    { id:'P-01', name:'Edge Console', owner:'Mina', progress:72, health:'good' },
+    { id:'P-02', name:'Field Gateway', owner:'Noah', progress:48, health:'watch' },
+    { id:'P-03', name:'Mobile Inspect', owner:'Iris', progress:86, health:'good' }
+  ]
+  this.tasks = [
+    { id:'T-101', project:'P-01', name:'Persist filter state', owner:'Mina', status:'active', priority:'high' },
+    { id:'T-102', project:'P-01', name:'Audit reconnect flow', owner:'Noah', status:'review', priority:'normal' },
+    { id:'T-103', project:'P-02', name:'Map PLC alarms', owner:'Iris', status:'backlog', priority:'normal' },
+    { id:'T-104', project:'P-02', name:'Validate offline queue', owner:'Lio', status:'active', priority:'high' },
+    { id:'T-105', project:'P-03', name:'Polish camera handoff', owner:'Mina', status:'review', priority:'normal' },
+    { id:'T-106', project:'P-03', name:'Ship inspection notes', owner:'Noah', status:'done', priority:'normal' }
+  ]
+  this.team = [
+    { id:'U-1', name:'Mina', role:'Product', initials:'MI' },
+    { id:'U-2', name:'Noah', role:'Runtime', initials:'NO' },
+    { id:'U-3', name:'Iris', role:'Systems', initials:'IR' },
+    { id:'U-4', name:'Lio', role:'Mobile', initials:'LI' }
+  ]
+  this.activity = [
+    { id:'A-1', actor:'Iris', text:'moved Map PLC alarms to backlog', time:'09:42' },
+    { id:'A-2', actor:'Mina', text:'updated Edge Console progress', time:'09:18' },
+    { id:'A-3', actor:'Noah', text:'requested review on reconnect flow', time:'08:55' }
+  ]
+
+  this.visibleTasks = computed(() => {
+    const q = this.query.trim().toLowerCase()
+    return q ? this.tasks.filter(task => `${task.id} ${task.name} ${task.owner} ${task.project}`.toLowerCase().includes(q)) : this.tasks
+  })
+  this.selectedTask = computed(() => this.tasks.find(task => task.id === this.selectedId) || null)
+  this.drawerOpen = computed(() => Boolean(this.selectedTask))
+
+  this.navigate = event => this.section = event.detail.value
+  this.search = event => this.query = event.detail.value
+  this.selectTask = event => this.selectedId = event.detail.id
+  this.closeTask = () => this.selectedId = ''
+  this.moveTask = event => {
+    const task = this.tasks.find(item => item.id === event.detail.id)
+    if (!task || task.status === event.detail.status) return
+    task.status = event.detail.status
+    this.activity.unshift({ id:`A-${++this.activitySeq}`, actor:'You', text:`moved ${task.name} to ${event.detail.status}`, time:'now' })
+  }
+</script>
+
+<workspace-shell>
+  <workspace-sidebar slot="sidebar" .active={section} @navigate={navigate}></workspace-sidebar>
+  <workspace-topbar slot="topbar" .query={query} @search-change={search}></workspace-topbar>
+
+  <workspace-overview
+    .projects={projects}
+    .tasks={visibleTasks}
+    .team={team}
+    .activity={activity}
+    @select-task={selectTask}>
+  </workspace-overview>
+
+  <detail-drawer
+    slot="aside"
+    .task={selectedTask}
+    .open={drawerOpen}
+    @close-task={closeTask}
+    @move-task={moveTask}>
+  </detail-drawer>
+</workspace-shell>
+
+<style>
+  :host { display:block; min-height:100vh; background:#0e100f; color:#f3f0e8; font-family:Inter,ui-sans-serif,system-ui,sans-serif; }
+  * { box-sizing:border-box; }
+</style>

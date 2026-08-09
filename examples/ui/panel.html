@@ -1,0 +1,11 @@
+<section>
+  <header>
+    <strong><slot name="heading"></slot></strong>
+    <small><slot name="actions"></slot></small>
+  </header>
+  <div class="body"><slot></slot></div>
+</section>
+
+<style>
+  :host{display:block}section{height:100%;border:1px solid #2b2f2b;background:#121512}header{min-height:42px;padding:0 13px;border-bottom:1px solid #2b2f2b;display:flex;align-items:center;justify-content:space-between;gap:12px}header strong{font:700 10px ui-monospace,monospace;text-transform:uppercase;letter-spacing:.1em;color:#e9e6dd}header small{font:600 9px ui-monospace,monospace;text-transform:uppercase;color:#666b65}.body{padding:13px}
+</style>

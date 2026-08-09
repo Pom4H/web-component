@@ -33,6 +33,7 @@ Bindings are strict dotted property paths, not JavaScript expressions. Examples:
 <input .value={name}>
 <button ?disabled={saving}>Save</button>
 <button @click={save}>Save</button>
+<reactor-core --load={reactor.load}></reactor-core>
 ```
 
 Meaning:
@@ -40,8 +41,21 @@ Meaning:
 - `.name={path}` → DOM property;
 - `?name={path}` → boolean attribute;
 - `@event={path}` → event listener.
+- `--name={path}` → one CSS custom property through `element.style`.
 
 Special bindings require exactly one path. `<style>` contents are opaque to Skein parsing.
+
+CSS custom-property bindings are fine-grained CSSOM writes. Any value other than `null`, `undefined` or `false` calls `element.style.setProperty('--name', value)` for that property only. Those three removal values call `element.style.removeProperty('--name')`; `0` is retained. Skein does not construct or assign a serialized `style` string. Ordinary static inline declarations and unrelated custom properties on the same element remain untouched. If a static `style` declares the same custom property, the binding targets that declaration and a removal value removes it from the inline style. Do not combine per-property bindings with a reactive whole-`style={path}` binding on the same element because those writes have competing ownership.
+
+```html
+<reactor-core
+  style="display:block; contain:layout"
+  --temperature={reactor.temperature}
+  --load={reactor.load}>
+</reactor-core>
+```
+
+CSS custom properties set on a custom-element host inherit through its Shadow DOM normally, so internal styles can consume `var(--temperature)` and `var(--load)` without a framework-specific input or string style binding.
 
 `in={...}` does not exist. Use explicit full paths outside list item scopes.
 
@@ -201,7 +215,7 @@ Dynamic view teardown force-disposes only nested SkeinElement instances. Third-p
 
 ## Native resources
 
-Prefer ordinary local variables for imperative browser resources such as AudioContext or CanvasRenderingContext. They may be stored in state, but Skein returns them unchanged and does not observe internal mutation.
+Prefer ordinary local variables for imperative browser resources such as AudioContext or CanvasRenderingContext. They may be stored in state, but Skein returns them unchanged and does not observe internal mutation. Feed continuous visual state into native CSS with individual `--name={path}` bindings rather than rebuilding a whole `style` attribute.
 
 ## Public surface
 
@@ -227,7 +241,7 @@ Do not invent `Skein.stats`, `Skein.flush`, `Skein.Signal`, `signal()`, `batch()
 
 `tools/build.mjs` concatenates readable modules and lexically minifies/mangles known internals with zero dependencies. It is not an AST transform; native/public property names must not be carelessly added to its mangle map.
 
-Current 0.6.1 artifact: 15,444 B raw / 5,652 B gzip / 5,061 B Brotli.
+Current 0.6.1 artifact: 15,839 B raw / 5,686 B gzip / 5,123 B Brotli.
 
 Run:
 
@@ -238,7 +252,7 @@ node test/run.mjs
 node test/workspace.mjs
 ```
 
-The main Chrome suite covers readable/generated runtime, keyed identity, invalid keys, mount rollback, native dynamic `for`, third-party Custom Element coexistence, input timing/collisions, shared Proxy identity, native objects, lifecycle, late define and Studio. The Workspace suite is the application-scale production composition regression.
+The main Chrome suite covers readable/generated runtime, fine-grained CSS custom-property set/remove behavior, ordinary inline-style and Shadow DOM interaction, keyed identity, invalid keys, mount rollback, native dynamic `for`, third-party Custom Element coexistence, input timing/collisions, shared Proxy identity, native objects, lifecycle, late define and Studio. The Workspace suite is the application-scale production composition regression.
 
 ## 0.6 migration
 
@@ -253,4 +267,4 @@ The main Chrome suite covers readable/generated runtime, keyed identity, invalid
 + input('value', .5)
 ```
 
-The old input assignment form remains compatible. Skein 0.6.1 adds primitive literal-attribute seeding for matching `input()` declarations.
+The old input assignment form remains compatible. Skein 0.6.1 adds primitive literal-attribute seeding for matching `input()` declarations and fine-grained `--name={path}` CSS custom-property bindings.

@@ -18,6 +18,7 @@ Use `examples/workspace/` as the application-scale composition reference, not on
 - `{...}` bindings are strict property paths compiled once;
 - binding lookup uses own properties only and walks list scopes outward;
 - native dynamic attributes such as `for={inputId}` stay native;
+- CSS custom properties use fine-grained `--name={path}` bindings: direct `style.setProperty`, with null/undefined/false removing only that property;
 - list repetition uses `each={items}`; explicit keys are unique/non-null and validated before reconciliation mutation;
 - synchronous writes share one microtask; render effects settle before user effects;
 - list/branch scopes own disposal;
@@ -66,7 +67,7 @@ Injected component helpers: `input`, `computed`, `effect`, `onCleanup`, `host`, 
 
 Skein has no SSR or hydration. Keep static, semantic and SEO-critical content in ordinary document HTML when possible. Never claim SSR/hydration/suspense/error boundaries exist.
 
-Bind state into CSS custom properties and let CSS render/animate. Keep SVG actual SVG. Keep Canvas/Web Audio imperative. Clean native resources with `onCleanup()` / `abortSignal`.
+Bind state into CSS custom properties with `--name={path}` and let CSS render/animate. Do not replace this with a computed string `style` binding. Keep SVG actual SVG. Keep Canvas/Web Audio imperative. Clean native resources with `onCleanup()` / `abortSignal`.
 
 ## Performance rules
 

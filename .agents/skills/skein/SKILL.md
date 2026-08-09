@@ -40,9 +40,24 @@ External files map from tag names: `<user-card>` → `user/card.html`.
 <input .value={name}>
 <button ?disabled={saving}>Save</button>
 <button @click={save}>Save</button>
+<reactor-core --load={reactor.load}></reactor-core>
 ```
 
 Plain objects/arrays are reactive. Platform/class objects stay native. Braces contain strict property paths; use `computed()` for expressions.
+
+### CSS custom properties
+
+Bind continuous visual values one property at a time:
+
+```html
+<reactor-core
+  style="display:block; contain:layout"
+  --temperature={reactor.temperature}
+  --load={reactor.load}>
+</reactor-core>
+```
+
+`--name={path}` calls `element.style.setProperty('--name', value)` for non-sentinel values. `null`, `undefined` and `false` remove only that declaration with `removeProperty()`; `0` stays set. This binding never rebuilds or assigns a string `style` attribute, so ordinary static inline declarations and unrelated custom properties coexist. Do not combine it with a reactive whole-`style={path}` binding on the same element. A custom property on the host naturally inherits into its Shadow DOM.
 
 ## Composition
 
@@ -124,7 +139,7 @@ Use `each`, not the removed list `for`. Native dynamic `for={inputId}` stays HTM
 
 ## Native APIs and cleanup
 
-Keep SVG as SVG and Canvas/Web Audio imperative. Bind reactive values into CSS custom properties instead of scripting layout/animation.
+Keep SVG as SVG and Canvas/Web Audio imperative. Bind reactive values into CSS custom properties with `--name={path}` instead of scripting layout/animation or assembling a reactive `style` string.
 
 ```js
 window.addEventListener('resize', this.measure, { signal: abortSignal })

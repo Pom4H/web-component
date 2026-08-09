@@ -17,7 +17,10 @@ Core model:
 - arrays and plain/null-prototype objects are recursively reactive;
 - Date/Map/Set/DOM/platform/class instances stay native/opaque;
 - shared raw objects keep one Skein Proxy identity across components;
-- bindings are strict paths: `{user.name}`, `.value={name}`, `?disabled={saving}`, `@click={save}`;
+- bindings are strict paths: `{user.name}`, `.value={name}`, `?disabled={saving}`, `@click={save}`, `--accent={theme.accent}`;
+- `--name={path}` updates that CSS custom property with `element.style.setProperty()`; null/undefined/false remove only that property, while `0` remains valid;
+- CSS custom-property bindings do not serialize or replace `style`; ordinary static inline declarations coexist and host variables inherit through Shadow DOM;
+- do not combine per-property bindings with reactive whole-`style={path}` on the same element because the writes have competing ownership;
 - derived logic belongs in `computed()`;
 - lists use `each={items}` and usually `key={id}`; native `for={inputId}` stays HTML;
 - conditions use `if={visible}`;
@@ -33,4 +36,4 @@ Core model:
 
 Public API: `Skein.version`, `Skein.define(tag, source)`.
 
-Production: 15,444 B raw / 5,652 B gzip / 5,061 B Brotli.
+Production: 15,839 B raw / 5,686 B gzip / 5,123 B Brotli.

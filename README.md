@@ -4,7 +4,7 @@
 
 Skein is a tiny HTML-first Web Components runtime with fine-grained reactivity.
 
-- **15.4 kB raw / 5.7 kB gzip / 5.1 kB Brotli**
+- **15.8 kB raw / 5.7 kB gzip / 5.1 kB Brotli**
 - zero runtime dependencies
 - no virtual DOM
 - no build step required
@@ -96,6 +96,7 @@ Skein tracks actual property reads. Synchronous writes settle in one microtask r
 <input .value={user.name}>
 <button ?disabled={saving}>Save</button>
 <button @click={save}>Save</button>
+<reactor-core --load={reactor.load}></reactor-core>
 ```
 
 Bindings contain **strict dotted property paths**, not JavaScript expressions. Put derived logic in `computed()`.
@@ -107,6 +108,25 @@ attribute   title={title}
 property    .value={value}
 boolean     ?disabled={saving}
 event       @click={save}
+CSS custom  --load={reactor.load}
+```
+
+`--name={path}` is a fine-grained CSS custom-property binding. Skein updates that one declaration with `element.style.setProperty('--name', value)`. When the value is `null`, `undefined` or `false`, it removes only that declaration with `removeProperty()`; `0` remains a valid value.
+
+```html
+<reactor-core
+  data-state={reactor.state}
+  style="display:block; contain:layout"
+  --temperature={reactor.temperature}
+  --load={reactor.load}>
+</reactor-core>
+```
+
+This does not build or replace a serialized `style` attribute. Ordinary static inline declarations and other custom properties remain intact. If static `style` declares the same custom property, the binding owns that declaration; a removal value removes it and lets the normal cascade or fallback apply. Do not also bind the whole `style={path}` attribute on that element: whole-attribute and per-property writes have competing ownership. CSS custom properties also inherit through Shadow DOM, so a binding on the custom-element host can drive its internal styles directly:
+
+```css
+:host { --load: 0; }
+.core { transform: scale(calc(1 + var(--load) * .04)); }
 ```
 
 ## Composition
@@ -336,7 +356,7 @@ The public examples each have one architectural purpose:
 - **Workspace** — 18-component application composition with native slots, properties and events.
 - **Queue Board** — keyed DOM identity and native form behavior.
 - **Field Atlas** — native SVG with exact reactive attribute writes.
-- **Type Machine** — reactive values feeding native CSS custom properties.
+- **Type Machine** — four independent `--name={path}` bindings feeding native CSS while a normal inline style remains intact.
 - **Skein Studio** — multi-file Web Audio/Canvas composition.
 
 ## 0.6 migration

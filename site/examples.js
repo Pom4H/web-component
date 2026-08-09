@@ -21,7 +21,7 @@ export const examples = [
     file: '../examples/type/machine.html',
     title: 'Type Machine',
     kind: 'CSS',
-    blurb: 'Reactive form state collapses into CSS custom properties, leaving layout, transforms and typography to native CSS.'
+    blurb: 'Reactive form state updates four independent CSS custom properties, leaving layout, transforms and typography to native CSS.'
   }
 ];
 

@@ -33,6 +33,7 @@ test/workspace.mjs       generated-runtime 18-component composition regression
 14. One raw object has one Skein Proxy identity across component boundaries.
 15. Component composition uses browser primitives: properties for live data, bubbling+composed events for actions, native Shadow DOM slots for content/layout.
 16. Static primitive input attributes are initialization sugar only, never a second reactive channel.
+17. `--name={path}` is a property-scoped CSSOM write, never a serialized `style` update; null/undefined/false remove only that property.
 
 ## Reactive graph
 
@@ -62,7 +63,9 @@ Root templates read root component state. `each` creates a mutable item scope wh
 
 There is no `in={...}` context chain. Lookup requires own properties at every path segment.
 
-The compiler operates on real DOM and emits compact numeric instructions for text, string attributes, boolean attributes, DOM properties, events, lists and branches. Paths and special `.`, `?`, `@`, `if`, `each`, `key` forms validate at compile time. `<style>` is opaque.
+The compiler operates on real DOM and emits compact numeric instructions for text, string attributes, boolean attributes, DOM properties, CSS custom properties, events, lists and branches. Paths and special `.`, `?`, `@`, `--name`, `if`, `each`, `key` forms validate at compile time. `<style>` is opaque.
+
+A `--name={path}` render effect writes directly through `element.style.setProperty(name, value)`. It uses `element.style.removeProperty(name)` when the resolved value is `null`, `undefined` or `false`; zero must remain writable. Do not route this instruction through the string-attribute updater or assign serialized `style`, because an update owns only its named declaration. Static inline declarations and other custom properties must survive. Setting the property on a Custom Element host relies on normal CSS inheritance to reach its Shadow DOM; the renderer needs no shadow-specific path.
 
 `each` uses a comment anchor, preflights explicit keys, reuses matching views and moves surviving node ranges. `if` uses a comment anchor and owned child Scope.
 
@@ -125,7 +128,7 @@ Component scripts use `AsyncFunction` with injected `input`, `computed`, `effect
 
 `tools/build.mjs` is a lexical minifier/mangler, not an AST transform. A mapped identifier is renamed even after `.`. Native/public property tokens must not be added casually to `internalNames`.
 
-`dispose` is public and must stay unmangled. Native collision cases such as match index / AbortSignal use protected string-key access where needed. Always test generated production output in Chromium.
+`dispose` is public and must stay unmangled. Native names used by CSS custom-property bindings, including `style`, `setProperty` and `removeProperty`, must retain their browser spelling. Native collision cases such as match index / AbortSignal use protected string-key access where needed. Always test generated production output in Chromium.
 
 ## Validation
 
@@ -138,7 +141,7 @@ node test/run.mjs
 node test/workspace.mjs
 ```
 
-The Workspace test must continue to validate all 18 component definitions, native slot assignment, static input attributes, property precedence, deep composed-event propagation, reactive search, mutation and conditional teardown.
+The readable and generated-runtime suites must validate CSS custom-property set/remove behavior without whole-`style` writes, including coexistence with ordinary inline styles and consumption inside Shadow DOM. The Workspace test must continue to validate all 18 component definitions, native slot assignment, static input attributes, property precedence, deep composed-event propagation, reactive search, mutation and conditional teardown.
 
 ## Performance discipline
 

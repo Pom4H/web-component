@@ -15,6 +15,16 @@
   this.lifeBranch = true;
   this.enabled = true;
   this.inputId = 'real-input';
+  this.cssNumber = 12;
+  this.cssZero = 0;
+  this.cssString = 'rgb(1, 2, 3)';
+  this.cssNull = 'null-live';
+  this.cssUndefined = 'undefined-live';
+  this.cssFalse = 'false-live';
+  this.cssOverride = 'binding-wins';
+  this.cssInitialNull = null;
+  this.cssInitialUndefined = undefined;
+  this.cssInitialFalse = false;
   this.total = computed(() => this.count * 2);
   this.increment = () => this.count++;
   effect(() => {
@@ -36,6 +46,25 @@
 <label id="native-for" for={inputId}>Name</label>
 <input id="real-input" .value={count} ?disabled={enabled}>
 <button id="event" @click={increment}>increment</button>
+<div
+  id="css-properties"
+  style="display: block; --static-token: intact; --overridden: static"
+  --number={cssNumber}
+  --zero={cssZero}
+  --string={cssString}
+  --nullable={cssNull}
+  --undefinable={cssUndefined}
+  --falsy={cssFalse}
+  --overridden={cssOverride}
+  --initial-null={cssInitialNull}
+  --initial-undefined={cssInitialUndefined}
+  --initial-false={cssInitialFalse}>
+</div>
+<css-shadow-child
+  id="css-shadow-child"
+  style="display: block; --child-static: intact"
+  --tone={cssString}>
+</css-shadow-child>
 
 <ul id="items">
   <li each={items} key={id} data-id={id}>
@@ -54,5 +83,9 @@
 
 <style id="style-test">
   #title { color: rgb(1 2 3); }
+  #css-properties {
+    width: calc(var(--number) * 1px);
+    color: var(--string);
+  }
   @supports (display: grid) { #title { display: block; } }
 </style>

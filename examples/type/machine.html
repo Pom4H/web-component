@@ -6,18 +6,23 @@
   this.tracking = -8
   this.angle = -4
 
-  this.surface = computed(() => `--size:${this.size}px;--weight:${this.weight};--tracking:${this.tracking}px;--angle:${this.angle}deg`)
   this.wordChange = event => this.word = event.currentTarget.value.toUpperCase().slice(0, 12) || 'SKEIN'
   this.numberChange = event => this[event.currentTarget.name] = Number(event.currentTarget.value)
 </script>
 
-<section class="machine" style={surface}>
-  <header><small>CSS CUSTOM PROPERTIES / NATIVE FORM</small><span>{size}px · {weight} · {tracking}px</span></header>
+<section
+  class="machine"
+  style="--mesh-step:42px"
+  --size={size}
+  --weight={weight}
+  --tracking={tracking}
+  --angle={angle}>
+  <header><small>FINE-GRAINED CSS PROPERTIES / NATIVE FORM</small><span>{size}px · {weight} · {tracking}px</span></header>
 
   <div class="poster">
     <div class="mesh"></div>
     <h1>{word}</h1>
-    <p>HTML state → one style attribute → native CSS layout & transforms</p>
+    <p>HTML state → exact CSSOM properties → native CSS layout & transforms</p>
   </div>
 
   <div class="controls">
@@ -37,8 +42,8 @@
   .machine { min-height:100%; padding:18px; display:grid; grid-template-rows:auto minmax(300px,1fr) auto; gap:12px; }
   header { display:flex; justify-content:space-between; gap:16px; color:#f6f1e7; font:700 9px ui-monospace,monospace; letter-spacing:.11em; text-transform:uppercase; }
   .poster { position:relative; overflow:hidden; display:grid; place-items:center; min-height:330px; border:2px solid #101010; background:#d8ff58; box-shadow:10px 10px 0 #101010; }
-  .mesh { position:absolute; inset:-20%; background:repeating-linear-gradient(90deg,#101010 0 1px,transparent 1px 42px),repeating-linear-gradient(0deg,#101010 0 1px,transparent 1px 42px); opacity:.1; transform:rotate(var(--angle)); }
-  h1 { position:relative; margin:0; max-width:94%; font-family:Arial Black,Impact,sans-serif; font-size:clamp(48px,var(--size),150px); font-weight:var(--weight); letter-spacing:var(--tracking); line-height:.78; transform:rotate(var(--angle)); text-align:center; overflow-wrap:anywhere; }
+  .mesh { position:absolute; inset:-20%; background:repeating-linear-gradient(90deg,#101010 0 1px,transparent 1px var(--mesh-step)),repeating-linear-gradient(0deg,#101010 0 1px,transparent 1px var(--mesh-step)); opacity:.1; transform:rotate(calc(var(--angle) * 1deg)); }
+  h1 { position:relative; margin:0; max-width:94%; font-family:Arial Black,Impact,sans-serif; font-size:clamp(48px,calc(var(--size) * 1px),150px); font-weight:var(--weight); letter-spacing:calc(var(--tracking) * 1px); line-height:.78; transform:rotate(calc(var(--angle) * 1deg)); text-align:center; overflow-wrap:anywhere; }
   .poster p { position:absolute; left:14px; bottom:10px; margin:0; max-width:72%; font:700 8px ui-monospace,monospace; letter-spacing:.08em; text-transform:uppercase; }
   .controls { display:grid; grid-template-columns:auto minmax(120px,1.1fr) repeat(4,minmax(110px,1fr)); gap:10px; align-items:center; padding-top:10px; color:#f6f1e7; }
   .controls>label { font:700 8px ui-monospace,monospace; letter-spacing:.1em; }

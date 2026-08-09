@@ -2,7 +2,7 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Start — Skein</title>
 <meta name="description" content="Start a Skein component in one HTML file, then compose native Web Components with properties, events and slots."><link rel="stylesheet" href="../site/styles.css"><script type="module" src="../site/site.js"></script>
 </head><body><skein-nav><nav class="fallback-nav" aria-label="Primary"><a class="fallback-brand" href="/web-component/"><span class="fallback-mark">S</span><b>Skein</b></a><div class="fallback-links"><a href="/web-component/start/">Start</a><a href="/web-component/examples/">Examples</a><a href="/web-component/docs/">Docs</a><a href="/web-component/ai/">AI</a><a class="fallback-play" href="/web-component/playground/">Play</a><a class="fallback-gh" href="https://github.com/Pom4H/web-component">GitHub ↗</a></div></nav></skein-nav><main>
-<section class="page-hero"><div class="wrap"><p class="eyebrow">Start / 60 seconds</p><h1 class="display">ONE FILE.</h1><p class="lede">The shortest path from an empty folder to reactive Web Components. Split and compose components later without changing the medium.</p><p style="margin-top:18px;font:600 12px ui-monospace,monospace">skein.min.js · 15.4 kB raw · 5.7 kB gzip · 5.1 kB brotli · 0 dependencies</p></div></section>
+<section class="page-hero"><div class="wrap"><p class="eyebrow">Start / 60 seconds</p><h1 class="display">ONE FILE.</h1><p class="lede">The shortest path from an empty folder to reactive Web Components. Split and compose components later without changing the medium.</p><p style="margin-top:18px;font:600 12px ui-monospace,monospace">skein.min.js · 15.8 kB raw · 5.7 kB gzip · 5.1 kB brotli · 0 dependencies</p></div></section>
 <section class="section"><div class="narrow"><div class="steps">
 <article class="step"><div><h2>Create <code>index.html</code>.</h2><p>No package manifest. No scaffold. Any static server or GitHub Pages is enough.</p></div></article>
 <article class="step"><div><h2>Write the element and its inert template.</h2><div class="code-card"><div class="code-top"><span>index.html</span><button data-copy="#start-code">Copy</button></div><pre><code id="start-code" data-highlight>&lt;click-count&gt;&lt;/click-count&gt;
@@ -37,6 +37,11 @@
   tone="lime"
   .value={active}&gt;
 &lt;/ui-metric&gt;</code></pre></div></div></section>
+<section class="section"><div class="wrap split"><div><p class="eyebrow">CSS values</p><h2 style="font-size:clamp(36px,5vw,68px);letter-spacing:-.05em;line-height:.95">One variable at a time.</h2><p class="lede" style="font-size:18px"><code>--name={path}</code> updates one CSS custom property through <code>style.setProperty()</code>. It does not rebuild the inline style, and variables on a component host inherit into its Shadow DOM.</p></div><div class="code-card"><pre><code data-highlight>&lt;reactor-core
+  style="display:block"
+  --temperature={reactor.temperature}
+  --load={reactor.load}&gt;
+&lt;/reactor-core&gt;</code></pre></div></div></section>
 <section class="section"><div class="wrap split"><div><p class="eyebrow">Lists</p><h2 style="font-size:clamp(36px,5vw,68px);letter-spacing:-.05em;line-height:.95">Use <code>each</code>. Keep HTML <code>for</code>.</h2><p class="lede" style="font-size:18px">Skein does not overload the native <code>for</code> attribute for repetition.</p></div><div class="code-card"><pre><code data-highlight>&lt;li each={items} key={id}&gt;
   {index}. {title}
 &lt;/li&gt;

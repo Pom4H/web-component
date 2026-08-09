@@ -63,9 +63,44 @@ Expressions are invalid. Use `computed()` for derived values. Lookup checks own 
 <input .value={name}>             <!-- DOM property -->
 <button ?disabled={saving}>Save</button>
 <button @click={save}>Save</button>
+<reactor-core --load={reactor.load}></reactor-core> <!-- CSS custom property -->
 ```
 
-`.`, `?` and `@` bindings must contain exactly one path.
+`.`, `?`, `@` and `--name` bindings must contain exactly one path.
+
+### CSS custom properties
+
+Use `--name={path}` to update one CSS custom property directly:
+
+```html
+<reactor-core
+  data-state={reactor.state}
+  style="display:block; contain:layout"
+  --temperature={reactor.temperature}
+  --load={reactor.load}>
+</reactor-core>
+```
+
+For every non-sentinel value Skein performs the equivalent of:
+
+```js
+element.style.setProperty('--temperature', value)
+```
+
+For `null`, `undefined` or `false`, it performs:
+
+```js
+element.style.removeProperty('--temperature')
+```
+
+Removal affects only that named custom property. `0` is not a removal value. Skein does not rebuild, serialize or assign the whole `style` attribute, so a static `style` attribute and unrelated inline declarations remain intact. If the static `style` declares the same custom property, the binding owns that same inline declaration and removal removes it, allowing the normal cascade or fallback to apply. Do not combine per-property bindings with a reactive whole-`style={path}` binding on the same element because those writes have competing ownership.
+
+CSS custom properties inherit across Shadow DOM boundaries. An owner can bind a value on a custom-element host and the component can consume it in its own style:
+
+```css
+:host { --load: 0; }
+.core { transform: scale(calc(1 + var(--load) * .04)); }
+```
 
 ## Component composition
 

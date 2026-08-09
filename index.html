@@ -47,7 +47,7 @@
           <p class="eyebrow">02 / start</p>
           <h2 style="font-size:clamp(48px,7vw,96px);letter-spacing:-.065em;line-height:.9;margin:20px 0 24px">One HTML file is enough.</h2>
           <p class="lede" style="font-size:19px">No npm, CLI or config. Prototype inline, then move components into files when the project actually needs boundaries.</p>
-          <p style="margin-top:18px;font:600 12px ui-monospace,monospace;letter-spacing:.04em">skein.min.js · 15.4 kB raw · 5.7 kB gzip · 5.1 kB brotli</p>
+          <p style="margin-top:18px;font:600 12px ui-monospace,monospace;letter-spacing:.04em">skein.min.js · 15.8 kB raw · 5.7 kB gzip · 5.1 kB brotli</p>
           <p style="margin-top:28px"><a class="button" href="start/">See the 60-second start</a></p>
         </div>
         <div class="code-card">
@@ -117,7 +117,7 @@
       <div class="wrap">
         <div class="section-head"><p class="eyebrow">05 / rendering</p><h2>Fine-grained without turning HTML into a programming language.</h2></div>
         <div class="grid-3">
-          <article class="feature"><span class="num">PATHS</span><div><h3>Bindings stay strict.</h3><p><code>{...}</code> contains property paths. Invalid expressions fail early; derived logic belongs in lazy <code>computed()</code>.</p></div></article>
+          <article class="feature"><span class="num">PATHS</span><div><h3>Bindings stay strict.</h3><p><code>{...}</code> contains property paths. <code>--load={reactor.load}</code> updates one CSS custom property without replacing <code>style</code>; derived logic belongs in lazy <code>computed()</code>.</p></div></article>
           <article class="feature"><span class="num">EACH</span><div><h3>Identity survives.</h3><p><code>each={items} key={id}</code> moves real DOM ranges. Native dynamic <code>for={inputId}</code> stays HTML.</p></div></article>
           <article class="feature"><span class="num">SCOPE</span><div><h3>Cleanup has an owner.</h3><p>Branches and lists dispose Skein-owned effects/components without force-disposing external Custom Elements.</p></div></article>
         </div>

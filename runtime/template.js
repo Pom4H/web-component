@@ -2,7 +2,7 @@ import { BindingScope, ReactiveEffect, Ref, compilePath, unwrap } from './reacti
 
 const DYNAMIC = /{([^{}]*)}/g;
 const INITIAL = Symbol();
-const TEXT = 0, ATTR = 1, BOOL = 2, PROP = 3, EVENT = 4, LIST = 5, BRANCH = 6;
+const TEXT = 0, ATTR = 1, BOOL = 2, PROP = 3, EVENT = 4, LIST = 5, BRANCH = 6, CSS_VAR = 7;
 const toText = value => value == null ? '' : String(value);
 
 const parseTokens = value => {
@@ -77,6 +77,18 @@ const bindProperty = (node, name, path, bindingScope, owner) => {
     if (Object.is(value, previous)) return;
     previous = value;
     node[name] = value;
+  });
+};
+
+const bindCustomProperty = (node, name, path, bindingScope, owner) => {
+  let previous = INITIAL;
+  watch(owner, () => {
+    const raw = bindingScope.lookup(path);
+    const value = raw == null || raw === false ? null : raw;
+    if (Object.is(value, previous)) return;
+    previous = value;
+    if (value == null) node.style.removeProperty(name);
+    else node.style.setProperty(name, value);
   });
 };
 
@@ -302,7 +314,11 @@ export class CompiledTemplate {
         const tokenList = parseTokens(node.getAttribute(name));
         const dynamic = tokenList.some(Array.isArray);
         const pathExpression = tokenList.length === 1 && Array.isArray(tokenList[0]) ? tokenList[0] : null;
-        if (name[0] === '.' || name[0] === '?' || name[0] === '@') {
+        if (name.startsWith('--')) {
+          if (!pathExpression) throw new Error('Skein --name must be a single path binding');
+          node.removeAttribute(name);
+          this.instructions.push([CSS_VAR, path, name, pathExpression]);
+        } else if (name[0] === '.' || name[0] === '?' || name[0] === '@') {
           if (!pathExpression) throw new Error('Skein ' + name + ' must be a single path binding');
           node.removeAttribute(name);
           const type = name[0] === '.' ? PROP : name[0] === '?' ? BOOL : EVENT;
@@ -344,6 +360,7 @@ export class CompiledTemplate {
       else if (type === ATTR) bindAttribute(node, instruction[2], instruction[3], bindingScope, owner);
       else if (type === BOOL) bindBoolean(node, instruction[2], instruction[3], bindingScope, owner);
       else if (type === PROP) bindProperty(node, instruction[2], instruction[3], bindingScope, owner);
+      else if (type === CSS_VAR) bindCustomProperty(node, instruction[2], instruction[3], bindingScope, owner);
       else bindEvent(node, instruction[2], instruction[3], bindingScope, owner);
     }
 

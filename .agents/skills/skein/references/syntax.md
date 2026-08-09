@@ -1,4 +1,4 @@
-# Skein 0.6 syntax reference
+# Skein 0.6.1 syntax reference
 
 ## Component source
 
@@ -35,25 +35,14 @@ External files:
 Programmatic registration is mainly for tooling:
 
 ```js
-Skein.define('my-card', '<p>{title}</p>')
+Skein.define('my-card', '<p>{name}</p>')
 ```
 
-A tag is registered once. Redefinition throws. For auto-loaded tags, Skein fetches the matching file before calling `customElements.define`; a 404 leaves the tag available to another Web Components library.
+A tag is registered once. Redefinition throws. Auto-loading fetches the matching file before `customElements.define`; a 404 leaves the tag available to another Web Components library.
 
 ## State
 
-Plain objects and arrays are reactive recursively:
-
-```js
-this.user = { name: 'Ada' }
-this.items = [{ id: 1 }]
-this.user.name = 'Grace'
-this.items.push({ id: 2 })
-```
-
-Date, Map, Set, DOM nodes, AudioContext and class instances stay native/opaque. Mutations inside those objects are not reactive automatically.
-
-Shared plain objects keep one Skein Proxy identity across component state roots and property inputs.
+Plain objects and arrays are recursively reactive. Date, Map, Set, DOM nodes, AudioContext and class instances stay native/opaque. Shared plain objects keep one Skein Proxy identity across component state roots and property inputs.
 
 ## Binding paths
 
@@ -64,77 +53,110 @@ Bindings accept strict dotted property paths only:
 <div title="User {user.name}"></div>
 ```
 
-Whitespace/expression syntax is invalid. Use `computed()` for derived values.
-
-Lookup checks own properties only and walks from the current list item scope through outer list scopes to root component state. A present own property whose value is `undefined` still shadows outer scopes.
-
-`in={...}` does not exist in 0.6. Write the full path.
+Expressions are invalid. Use `computed()` for derived values. Lookup checks own properties only and walks from the current list scope outward to root state.
 
 ## Native bindings
 
-String attribute:
-
 ```html
-<div data-id={id} title="Project {title}"></div>
-<label for={inputId}>Name</label>
-```
-
-A full attribute binding removes the attribute for `null`, `undefined` or `false`.
-
-DOM property:
-
-```html
-<input .value={name}>
-```
-
-Boolean attribute:
-
-```html
+<div data-id={id}></div>          <!-- attribute -->
+<label for={inputId}>Name</label> <!-- native dynamic attribute -->
+<input .value={name}>             <!-- DOM property -->
 <button ?disabled={saving}>Save</button>
-```
-
-Event:
-
-```html
 <button @click={save}>Save</button>
 ```
 
-`.`, `?` and `@` bindings must contain exactly one path. `onclick={save}` is not Skein syntax.
+`.`, `?` and `@` bindings must contain exactly one path.
 
-## Component inputs and outputs
+## Component composition
 
-Properties down, events up.
+Use browser primitives:
+
+```text
+data      -> DOM properties
+/actions/ <- bubbling + composed CustomEvent
+content   -> native <slot>
+```
+
+There is no component event bus, provide/inject system or framework slot API.
+
+### Inputs
 
 Child:
 
 ```html
 <script>
-  input('volume', .5)
-  this.change = event => host.dispatchEvent(new CustomEvent('volume-change', {
-    detail: { volume: Number(event.currentTarget.value) },
-    bubbles: true,
-    composed: true
-  }))
+  input('name', 'Metric')
+  input('value', 0)
 </script>
-<strong>{volume}</strong>
+<strong>{name}: {value}</strong>
+```
+
+Static primitive configuration may use ordinary attributes:
+
+```html
+<ui-metric name="Active" tone="lime"></ui-metric>
+```
+
+Conversion follows the fallback type:
+
+- string/undefined/null fallback: attribute text is a string;
+- number fallback: `Number(attribute)`; NaN throws;
+- boolean fallback: attribute presence means `true`;
+- object/function fallback: an attribute is rejected; use a DOM property.
+
+Initialization precedence:
+
+```text
+pre-mount own property > static attribute > fallback
+```
+
+The attribute is an **initial seed only**. Later `setAttribute()` calls do not update child state. Use a property binding for live values:
+
+```html
+<ui-metric name="Active" .value={active}></ui-metric>
+<task-card .task={task}></task-card>
+```
+
+Later `element.value = x` writes are reactive inside the child. Inputs remain one-way. Input names that collide with HTMLElement/Skein host APIs are rejected.
+
+### Outputs
+
+Use native events:
+
+```js
+host.dispatchEvent(new CustomEvent('value-change', {
+  detail: { value: this.value + 1 },
+  bubbles: true,
+  composed: true
+}))
 ```
 
 Owner:
 
 ```html
-<audio-strip .volume={volume} @volume-change={volumeChange}></audio-strip>
+<value-stepper .value={value} @value-change={changed}></value-stepper>
 ```
 
-`input(name, fallback)`:
+Bubbling + composed events can cross nested Shadow DOM boundaries without relay handlers.
 
-- installs a host property accessor backed by child reactive state;
-- seeds child state with a property value written before upgrade/mount, otherwise `fallback`;
-- makes later `element.volume = value` writes reactive inside the child;
-- returns the initial value for compatibility with `this.volume = input(...)`;
-- rejects names that collide with HTMLElement or Skein host APIs;
-- does not create two-way binding.
+### Slots
 
-Use native `CustomEvent` for child-to-owner requests/notifications.
+Skein uses real Shadow DOM, so default and named slots are native:
+
+```html
+<!-- ui/panel.html -->
+<header><slot name="heading"></slot></header>
+<slot></slot>
+```
+
+```html
+<ui-panel>
+  <span slot="heading">Tasks</span>
+  <task-board .tasks={tasks}></task-board>
+</ui-panel>
+```
+
+`slotchange` and `assignedElements()` are also ordinary browser APIs.
 
 ## Lists
 
@@ -144,11 +166,7 @@ Use native `CustomEvent` for child-to-owner requests/notifications.
 </li>
 ```
 
-List locals are `index` and `$index`. Stable unique keys preserve DOM identity. Explicit keys that resolve to `null`/`undefined` or duplicate another key throw before reconciliation mutates DOM.
-
-When `key` is omitted, object items use object identity; repeated primitive values use occurrence identity. Prefer explicit stable keys for application records.
-
-The old `for={items}` list directive was removed so native dynamic `for={inputId}` remains ordinary HTML.
+List locals are `index`, `$index` and `$value`. Stable unique keys preserve DOM identity. Explicit null/undefined or duplicate keys throw before reconciliation mutates DOM. Without `key`, object identity is used for objects and occurrence identity for primitives.
 
 ## Conditions
 
@@ -156,7 +174,7 @@ The old `for={items}` list directive was removed so native dynamic `for={inputId
 <section if={visible}>...</section>
 ```
 
-`if` accepts one path. Hiding a branch disposes its child reactive scope, nested Skein components and DOM range. Third-party custom elements are only disconnected; Skein never calls arbitrary external `dispose()` methods.
+Hiding a branch disposes its child reactive scope, nested Skein components and DOM range. Third-party custom elements are disconnected normally; Skein never calls arbitrary external `dispose()` methods.
 
 ## Computed and effects
 
@@ -177,11 +195,15 @@ window.addEventListener('resize', this.resize, { signal: abortSignal })
 fetch(url, { signal: abortSignal })
 ```
 
-`abortSignal` is lazily allocated. Disconnect pauses the component scope; reconnect resumes dirty work. `host.dispose()` is permanent.
+`abortSignal` is lazily allocated. Disconnect pauses; reconnect resumes dirty work. `host.dispose()` is permanent.
+
+## Application-scale reference
+
+`examples/workspace/` contains 18 component types composed only with properties, composed events and native slots. `test/workspace.mjs` runs that graph against generated `skein.min.js` in Chromium.
 
 ## Errors and failed mounts
 
-Compiler mistakes such as malformed paths/directives throw with Skein-specific messages. If mount/instantiation throws, Skein disposes the new scope and clears partial shadow DOM before reporting the error event.
+Malformed paths/directives throw Skein-specific errors. Failed template instantiation disposes the fresh scope and clears partial shadow DOM.
 
 ## Public API
 

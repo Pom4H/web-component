@@ -4,7 +4,7 @@
     {
       "id": "one-file-counter",
       "prompt": "Build the smallest Skein counter example I can paste into one HTML file.",
-      "expected": "Uses <template skein>, skein.js, ordinary this.count state, an event binding, and no npm/build tooling."
+      "expected": "Uses <template skein>, skein.js, ordinary this.count state, an @event binding, and no npm/build tooling."
     },
     {
       "id": "seo-landing",
@@ -14,7 +14,22 @@
     {
       "id": "keyed-reorder",
       "prompt": "Render an editable project list that can be reordered without losing typed input values.",
-      "expected": "Uses for={projects} with stable key={id}; relies on keyed identity rather than rebuilding innerHTML."
+      "expected": "Uses each={projects} with stable key={id}; relies on keyed identity rather than rebuilding innerHTML; duplicate keys are treated as an error."
+    },
+    {
+      "id": "primitive-list",
+      "prompt": "Render a Skein list of primitive tag strings with their indexes.",
+      "expected": "Uses each={tags}, {$value} for the current primitive value, and index or $index for the list position."
+    },
+    {
+      "id": "native-dynamic-for",
+      "prompt": "Create a label whose for attribute reactively follows an input id.",
+      "expected": "Uses native for={inputId}; does not confuse it with list rendering, which uses each={...}."
+    },
+    {
+      "id": "component-input",
+      "prompt": "Create a child Skein volume control that accepts volume from its parent and asks the parent to change it.",
+      "expected": "Declares input('volume', fallback), receives .volume={volume} as a DOM property, and dispatches a bubbling composed CustomEvent upward; does not create two-way binding or an event bus."
     },
     {
       "id": "creative-svg",

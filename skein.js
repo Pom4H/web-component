@@ -1,7 +1,7 @@
-import { registerComponent, defineElement } from './runtime/component.js';
+import { registerComponent, loadElement } from './runtime/component.js';
 
 export const Skein = {
-  version: '0.5.0',
+  version: '0.6.0',
   define: registerComponent,
 };
 
@@ -14,7 +14,7 @@ const bootstrap = () => {
     template.remove();
   }
   for (const element of document.querySelectorAll(':not(:defined)')) {
-    if (element.localName.includes('-')) defineElement(element.localName);
+    if (element.localName.includes('-')) loadElement(element.localName);
   }
 };
 

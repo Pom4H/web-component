@@ -1,0 +1,78 @@
+<script>
+  this.searchId = 'queue-filter'
+  this.query = ''
+  this.jobs = [
+    { id:'A-17', title:'Pressure drop / north loop', owner:'Mina', priority:'hot', eta:'04m' },
+    { id:'C-04', title:'Validate camera calibration', owner:'Iris', priority:'normal', eta:'12m' },
+    { id:'B-29', title:'Deploy edge ruleset', owner:'Noah', priority:'normal', eta:'18m' },
+    { id:'F-08', title:'Inspect vibration spike', owner:'Lio', priority:'hot', eta:'27m' }
+  ]
+
+  this.visible = computed(() => {
+    const q = this.query.trim().toLowerCase()
+    return q ? this.jobs.filter(job => `${job.id} ${job.title} ${job.owner}`.toLowerCase().includes(q)) : this.jobs
+  })
+  this.count = computed(() => `${this.visible.length}/${this.jobs.length}`)
+  this.search = event => this.query = event.currentTarget.value
+  this.rotate = () => {
+    if (this.jobs.length > 1) this.jobs.unshift(this.jobs.pop())
+  }
+  this.raise = event => {
+    const index = this.jobs.findIndex(job => job.id === event.currentTarget.dataset.id)
+    if (index < 1) return
+    const [job] = this.jobs.splice(index, 1)
+    this.jobs.splice(index - 1, 0, job)
+  }
+</script>
+
+<section class="board">
+  <header>
+    <div><small>KEYED DOM / NATIVE FORM</small><h1>QUEUE</h1></div>
+    <div class="tools">
+      <label for={searchId}>FILTER</label>
+      <input id={searchId} .value={query} @input={search} placeholder="id, task, owner">
+      <button @click={rotate}>rotate ↓</button>
+    </div>
+  </header>
+
+  <div class="summary"><span>ACTIVE {count}</span><span>type a local note, then reorder</span></div>
+
+  <div class="jobs">
+    <article each={visible} key={id} data-priority={priority}>
+      <div class="rank"><b>{index}</b><span>{id}</span></div>
+      <div class="copy"><strong>{title}</strong><small>{owner} · ETA {eta}</small></div>
+      <input class="note" placeholder="local DOM note…">
+      <button class="up" data-id={id} @click={raise}>↑</button>
+    </article>
+  </div>
+</section>
+
+<style>
+  :host { display:block; min-height:100%; background:#101110; color:#f3f0e7; font-family:system-ui,sans-serif; }
+  * { box-sizing:border-box; }
+  .board { min-height:100%; padding:22px; background:radial-gradient(circle at 80% 5%,#d8ff5818,transparent 34%),#101110; }
+  header { display:flex; align-items:end; justify-content:space-between; gap:24px; }
+  h1 { margin:2px 0 0; font:900 clamp(44px,9vw,86px)/.78 Arial Black,sans-serif; letter-spacing:-.075em; }
+  small,label,.summary { font:700 9px ui-monospace,monospace; letter-spacing:.11em; text-transform:uppercase; }
+  header small { color:#d8ff58; }
+  .tools { width:min(460px,56%); display:grid; grid-template-columns:auto 1fr auto; gap:8px; align-items:center; }
+  .tools label { color:#8d8f88; }
+  input,button { font:inherit; }
+  .tools input,.note { min-width:0; border:1px solid #454740; background:#171917; color:inherit; outline:none; padding:10px 11px; }
+  .tools input:focus,.note:focus { border-color:#d8ff58; }
+  button { border:1px solid #6b6e65; background:transparent; color:inherit; padding:10px 12px; cursor:pointer; }
+  button:hover { border-color:#d8ff58; color:#d8ff58; }
+  .summary { margin:22px 0 8px; padding:9px 0; border-bottom:1px solid #343630; color:#8d8f88; display:flex; justify-content:space-between; gap:12px; }
+  .jobs { display:grid; }
+  article { display:grid; grid-template-columns:74px minmax(180px,1.3fr) minmax(120px,.8fr) 44px; gap:14px; align-items:center; min-height:78px; border-bottom:1px solid #343630; }
+  article[data-priority="hot"] { background:linear-gradient(90deg,#ff604514,transparent 34%); }
+  .rank { display:grid; grid-template-columns:25px 1fr; align-items:center; gap:8px; }
+  .rank b { color:#d8ff58; font:900 22px/1 Arial Black,sans-serif; }
+  .rank span { color:#8d8f88; font:700 9px ui-monospace,monospace; }
+  .copy { display:grid; gap:5px; }
+  .copy strong { font-size:15px; letter-spacing:-.01em; }
+  .copy small { color:#8d8f88; }
+  .note { width:100%; padding:8px 9px; }
+  .up { width:36px; height:36px; padding:0; }
+  @media(max-width:700px){header{align-items:start;flex-direction:column}.tools{width:100%}.summary span:last-child{display:none}article{grid-template-columns:64px 1fr 40px;padding:10px 0}.note{grid-column:2/4}.up{grid-column:3;grid-row:1}}
+</style>

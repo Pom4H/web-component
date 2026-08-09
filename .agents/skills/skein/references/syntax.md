@@ -1,6 +1,4 @@
-# Skein syntax reference
-
-Use this file when generating or reviewing Skein 0.5 application code.
+# Skein 0.6 syntax reference
 
 ## Component source
 
@@ -11,61 +9,74 @@ A component is HTML containing optional top-level `<script>`, markup and `<style
   this.count = 0
   this.inc = () => this.count++
 </script>
-
 <button @click={inc}>{count}</button>
-
-<style>
-  button { font: inherit; }
-</style>
+<style>button { font: inherit; }</style>
 ```
 
-The component script runs with `this` bound to a deep reactive state Proxy.
+`this` is component reactive state.
 
 ## Registration
 
-Inline one-file form:
+Inline:
 
 ```html
 <my-card></my-card>
-
-<template skein="my-card">
-  ...component source...
-</template>
-
-<script type="module"
-  src="https://cdn.jsdelivr.net/gh/Pom4H/web-component@main/skein.min.js">
-</script>
+<template skein="my-card">...</template>
+<script type="module" src="https://cdn.jsdelivr.net/gh/Pom4H/web-component@main/skein.min.js"></script>
 ```
 
-Programmatic registration is intended mainly for playgrounds/generated source:
-
-```js
-Skein.define('my-card', `
-  <script>this.count = 0<\/script>
-  <p>{count}</p>
-`)
-```
-
-External files map directly from custom-element names:
+External files:
 
 ```text
 <foo-bar> -> foo/bar.html
 <app-home-card> -> app/home/card.html
 ```
 
-## Bindings
+Programmatic registration is mainly for tooling:
 
-Text:
-
-```html
-<h1>{title}</h1>
-<p>{user.profile.name}</p>
+```js
+Skein.define('my-card', '<p>{title}</p>')
 ```
 
-String attributes:
+A tag is registered once. Redefinition throws. For auto-loaded tags, Skein fetches the matching file before calling `customElements.define`; a 404 leaves the tag available to another Web Components library.
+
+## State
+
+Plain objects and arrays are reactive recursively:
+
+```js
+this.user = { name: 'Ada' }
+this.items = [{ id: 1 }]
+this.user.name = 'Grace'
+this.items.push({ id: 2 })
+```
+
+Date, Map, Set, DOM nodes, AudioContext and class instances stay native/opaque. Mutations inside those objects are not reactive automatically.
+
+Shared plain objects keep one Skein Proxy identity across component state roots and property inputs.
+
+## Binding paths
+
+Bindings accept strict dotted property paths only:
+
+```html
+<h1>{user.profile.name}</h1>
+<div title="User {user.name}"></div>
+```
+
+Whitespace/expression syntax is invalid. Use `computed()` for derived values.
+
+Lookup checks own properties only and walks from the current list item scope through outer list scopes to root component state. A present own property whose value is `undefined` still shadows outer scopes.
+
+`in={...}` does not exist in 0.6. Write the full path.
+
+## Native bindings
+
+String attribute:
 
 ```html
 <div data-id={id} title="Project {title}"></div>
+<label for={inputId}>Name</label>
 ```
 
 A full attribute binding removes the attribute for `null`, `undefined` or `false`.
@@ -88,76 +99,56 @@ Event:
 <button @click={save}>Save</button>
 ```
 
-Use `@event={handler}`. `onclick={save}` is not Skein 0.5 syntax.
+`.`, `?` and `@` bindings must contain exactly one path. `onclick={save}` is not Skein syntax.
 
 ## Component inputs and outputs
 
-Skein composition follows native Custom Element semantics: **properties down, events up**.
+Properties down, events up.
 
-A child declares a reactive host-property input in its script:
+Child:
 
 ```html
 <script>
-  this.volume = input('volume', .5)
+  input('volume', .5)
+  this.change = event => host.dispatchEvent(new CustomEvent('volume-change', {
+    detail: { volume: Number(event.currentTarget.value) },
+    bubbles: true,
+    composed: true
+  }))
 </script>
-
 <strong>{volume}</strong>
 ```
 
-The owner binds the ordinary DOM property:
+Owner:
 
 ```html
-<audio-strip .volume={volume}></audio-strip>
+<audio-strip .volume={volume} @volume-change={volumeChange}></audio-strip>
 ```
 
 `input(name, fallback)`:
 
-- returns a property value already written to the custom element before the child mounts, otherwise `fallback`;
-- installs a host property accessor backed by the child's reactive state;
+- installs a host property accessor backed by child reactive state;
+- seeds child state with a property value written before upgrade/mount, otherwise `fallback`;
 - makes later `element.volume = value` writes reactive inside the child;
-- does not create two-way state binding.
+- returns the initial value for compatibility with `this.volume = input(...)`;
+- rejects names that collide with HTMLElement or Skein host APIs;
+- does not create two-way binding.
 
-For child-to-owner communication, dispatch a native event:
-
-```js
-host.dispatchEvent(new CustomEvent('volume-change', {
-  detail: { volume: this.volume },
-  bubbles: true,
-  composed: true
-}))
-```
-
-The owner listens with the normal Skein event binding:
-
-```html
-<audio-strip
-  .volume={volume}
-  @volume-change={volumeChange}>
-</audio-strip>
-```
-
-Do not invent a framework event bus or mutate owner state through an input object as a substitute for an explicit event contract.
-
-## Context
-
-```html
-<section in={user}>
-  <h2>{name}</h2>
-  <p>{email}</p>
-</section>
-```
-
-Lookup walks lexical contexts outward to root state. A present local property whose value is `undefined` still shadows an outer property.
+Use native `CustomEvent` for child-to-owner requests/notifications.
 
 ## Lists
 
 ```html
-<li for={items} key={id}>
+<li each={items} key={id}>
   {index}: {title}
 </li>
 ```
 
-List locals are `index` and `$index`. Use stable unique keys for durable application identity. Objects use object identity when `key` is omitted. Normal HTML such as `<label for="email">` remains unchanged; only exact `for={...}` is structural.
+List locals are `index` and `$index`. Stable unique keys preserve DOM identity. Explicit keys that resolve to `null`/`undefined` or duplicate another key throw before reconciliation mutates DOM.
+
+When `key` is omitted, object items use object identity; repeated primitive values use occurrence identity. Prefer explicit stable keys for application records.
+
+The old `for={items}` list directive was removed so native dynamic `for={inputId}` remains ordinary HTML.
 
 ## Conditions
 
@@ -165,65 +156,38 @@ List locals are `index` and `$index`. Use stable unique keys for durable applica
 <section if={visible}>...</section>
 ```
 
-The branch owns a child scope and is disposed when hidden.
+`if` accepts one path. Hiding a branch disposes its child reactive scope, nested Skein components and DOM range. Third-party custom elements are only disconnected; Skein never calls arbitrary external `dispose()` methods.
 
-## Computed
+## Computed and effects
 
 ```js
 this.fullName = computed(() => `${this.first} ${this.last}`)
+effect(() => console.log(this.fullName))
 ```
 
-Bind normally:
-
-```html
-<strong>{fullName}</strong>
-```
-
-## Effects
-
-```js
-effect(() => console.log(this.count))
-```
-
-Render work settles before user effects. Synchronous writes already share one microtask flush; there is no public `batch()` helper.
+Computed values are lazy/cached. Render effects settle before user effects. Synchronous writes already batch into one microtask.
 
 ## Cleanup
 
 ```js
 const timer = setInterval(this.tick, 1000)
 onCleanup(() => clearInterval(timer))
-```
 
-Prefer `abortSignal` where the platform supports it:
-
-```js
 window.addEventListener('resize', this.resize, { signal: abortSignal })
 fetch(url, { signal: abortSignal })
 ```
 
-`abortSignal` is lazily allocated.
+`abortSignal` is lazily allocated. Disconnect pauses the component scope; reconnect resumes dirty work. `host.dispose()` is permanent.
 
-## Host
+## Errors and failed mounts
 
-`host` is the current Skein custom element. Use it for real host/shadow-root access and native event dispatch. Permanent teardown is `host.dispose()`.
+Compiler mistakes such as malformed paths/directives throw with Skein-specific messages. If mount/instantiation throws, Skein disposes the new scope and clears partial shadow DOM before reporting the error event.
 
-## Public module API
+## Public API
 
 ```js
 Skein.version
 Skein.define(tag, source)
 ```
 
-Do not generate `Skein.stats`, `Skein.flush`, `Skein.Signal`, `signal()`, `untrack()` or `batch()`; these are not public v0.5 APIs.
-
-## Static page content
-
-Do not wrap static page copy in a component only for consistency:
-
-```html
-<h1>Native creative web experiences.</h1>
-<p>This text exists before JavaScript runs.</p>
-<interactive-art></interactive-art>
-```
-
-Skein can own the interactive region while the document remains meaningful without JavaScript.
+No public `batch`, `signal`, `untrack`, `Skein.stats` or `Skein.flush`.

@@ -1,7 +1,8 @@
 <!doctype html><html><body>
+<third-party-box></third-party-box>
 <test-runtime></test-runtime>
 <inline-boot></inline-boot>
-<template skein="inline-boot"><script>this.word='woven'<\/script><b id="boot-word">{word}</b></template>
+<template skein="inline-boot"><script>this.word='woven'</script><b id="boot-word">{word}</b></template>
 <pre id="results">Running…</pre>
 <script id="browser-tests">
 const tests=[];
@@ -9,34 +10,71 @@ const test=(n,f)=>tests.push([n,f]);
 const equal=(a,b,m='')=>{if(!Object.is(a,b))throw new Error(`${m?m+': ':''}expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`)};
 const ok=(v,m='expected truthy')=>{if(!v)throw new Error(m)};
 const tick=async()=>{await Promise.resolve();await Promise.resolve()};
+const wait=async fn=>{for(let i=0;i<100;i++){const value=fn();if(value)return value;await new Promise(r=>setTimeout(r,0))}throw new Error('wait timeout')};
 
+test('fetch-before-define leaves third-party elements unclaimed',()=>{
+  equal(customElements.get('third-party-box'),undefined);
+  customElements.define('third-party-box',class extends HTMLElement{});
+  ok(customElements.get('third-party-box'));
+});
 test('initial bindings',({root})=>{equal(root.querySelector('#title').textContent,'Hello 1');equal(root.querySelector('#computed').textContent,'2')});
 test('fine-grained update and computed',async({root,state})=>{state.count=2;await tick();equal(root.querySelector('#title').textContent,'Hello 2');equal(root.querySelector('#computed').textContent,'4');equal(root.querySelector('#real-input').value,'2')});
 test('missing property becomes reactive',async({root,state})=>{equal(root.querySelector('#later').textContent,'');state.later='now';await tick();equal(root.querySelector('#later').textContent,'now')});
-test('nested contexts and attributes',async({root,state})=>{state.user.name='Jane';state.user.address.city='Rotterdam';await tick();equal(root.querySelector('#nested').textContent,'Jane');equal(root.querySelector('#nested').getAttribute('data-name'),'user-Jane');equal(root.querySelector('#city').textContent,'Rotterdam');equal(root.querySelector('#city').getAttribute('data-city'),'Rotterdam')});
+test('full property paths replace in-context',async({root,state})=>{state.user.name='Jane';state.user.address.city='Rotterdam';await tick();equal(root.querySelector('#nested').textContent,'Jane');equal(root.querySelector('#nested').getAttribute('data-name'),'user-Jane');equal(root.querySelector('#city').textContent,'Rotterdam');equal(root.querySelector('#city').getAttribute('data-city'),'Rotterdam')});
+test('prototype properties do not leak into binding lookup',({root})=>{equal(root.querySelector('#proto').textContent,'');equal(root.querySelector('#nested-proto').textContent,'')});
 test('undefined local shadows root',({root})=>equal(root.querySelectorAll('#items>li')[2].querySelector('.item-name').textContent,''));
-test('native for stays native',({root})=>equal(root.querySelector('#native-for').getAttribute('for'),'real-input'));
+test('dynamic native for stays native',async({root,state})=>{equal(root.querySelector('#native-for').getAttribute('for'),'real-input');state.inputId='other-input';await tick();equal(root.querySelector('#native-for').getAttribute('for'),'other-input')});
 test('boolean and property bindings',async({root,state})=>{ok(root.querySelector('#real-input').disabled);state.enabled=false;await tick();equal(root.querySelector('#real-input').disabled,false)});
 test('@event binding',async({root,state})=>{const n=state.count;root.querySelector('#event').click();await tick();equal(state.count,n+1)});
 test('sync writes share one microtask',async({root,state})=>{const runs=window.__effectRuns;state.count=10;state.count=11;state.count=12;await tick();equal(root.querySelector('#title').textContent,'Hello 12');equal(window.__effectRuns-runs,1)});
+test('primitive lists expose $value and occurrence identity',async({root,state})=>{equal(root.querySelector('#primitives').textContent,'A:0;A:1;B:2;');state.primitives.reverse();await tick();equal(root.querySelector('#primitives').textContent,'B:0;A:1;A:2;')});
 test('keyed push preserves rows',async({root,state})=>{const old=[...root.querySelectorAll('#items>li')];state.items.push({id:4,name:'D'});await tick();const rows=[...root.querySelectorAll('#items>li')];equal(rows.length,4);equal(rows[0],old[0]);equal(rows[1],old[1]);equal(rows[2],old[2]);equal(rows[3].dataset.id,'4')});
 test('keyed reorder preserves local DOM',async({root,state})=>{const first=root.querySelector('[data-id="1"]');const input=first.querySelector('.item-input');input.value='typed';state.items.reverse();await tick();equal([...root.querySelectorAll('#items>li')].at(-1),first);equal(first.querySelector('.item-input'),input);equal(input.value,'typed')});
 test('index updates without row recreation',async({root,state})=>{state.items.reverse();await tick();equal([...root.querySelectorAll('.item-index')].map(n=>n.textContent).join(','),'0,1,2,3')});
 test('removed keyed view disposes nested component',async({state})=>{const before=window.__rowDisposals||0;state.lifeItems.length=0;await tick();equal((window.__rowDisposals||0)-before,1)});
 test('hidden branch disposes nested component',async({state})=>{const before=window.__rowDisposals||0;state.lifeBranch=false;await tick();equal((window.__rowDisposals||0)-before,1)});
-test('nested list resolves root state',async({root,state})=>{state.statuses[0].title='Running';await tick();for(const option of root.querySelectorAll('option'))equal(option.textContent,'Running')});
+test('nested list resolves root state',async({root,state})=>{state.rootLabel='ROOT-2';state.statuses[0].title='Running';await tick();for(const option of root.querySelectorAll('option'))equal(option.textContent,'Running/ROOT-2')});
 test('branch disposes and recreates range',async({root,state})=>{const branch=root.querySelector('#branch');state.show=false;await tick();equal(root.querySelector('#branch'),null);state.show=true;await tick();ok(root.querySelector('#branch'));ok(root.querySelector('#branch')!==branch)});
 test('1000 keyed rows stay incremental',async({root,state})=>{const m={};let t=performance.now();state.items=Array.from({length:1000},(_,i)=>({id:i,name:`Row ${i}`}));await tick();m.create1000=performance.now()-t;equal(root.querySelectorAll('#items>li').length,1000);const row0=root.querySelector('[data-id="0"]'),row999=root.querySelector('[data-id="999"]');t=performance.now();for(let i=0;i<state.items.length;i+=10)state.items[i].name=`Updated ${i}`;await tick();m.update100=performance.now()-t;equal(root.querySelector('[data-id="0"]'),row0);t=performance.now();state.items.reverse();await tick();m.reverse1000=performance.now()-t;equal(root.querySelectorAll('#items>li')[0],row999);equal(root.querySelectorAll('#items>li')[999],row0);t=performance.now();state.items.length=0;await tick();m.clear1000=performance.now()-t;equal(root.querySelectorAll('#items>li').length,0);window.__benchmark=m});
+test('duplicate explicit keys fail loudly and mount rolls back',async()=>{
+  window.__dupeCleanup=0;
+  Skein.define('duplicate-list','<script>this.items=[{id:1},{id:1}];onCleanup(()=>window.__dupeCleanup++)<\/script><i each={items} key={id}>{id}</i>');
+  const el=document.createElement('duplicate-list');
+  let message='';el.addEventListener('error',event=>message=event.message);document.body.append(el);
+  await wait(()=>message);
+  ok(message.includes('Duplicate Skein list key'),message);
+  equal(window.__dupeCleanup,1,'failed mount disposes scope');
+  equal(el.shadowRoot.childNodes.length,0,'failed mount leaves no partial DOM');
+  el.dispose();el.remove();
+});
+test('missing explicit keys fail loudly',async()=>{
+  Skein.define('missing-key-list','<script>this.items=[{}]<\/script><i each={items} key={id}>x</i>');
+  const el=document.createElement('missing-key-list');
+  let message='';el.addEventListener('error',event=>message=event.message);document.body.append(el);
+  await wait(()=>message);
+  ok(message.includes('key resolved to undefined'),message);
+  el.dispose();el.remove();
+});
+test('nested third-party elements are disconnected but never force-disposed',async()=>{
+  window.__thirdDispose=0;window.__thirdDisconnect=0;
+  customElements.define('external-owned',class extends HTMLElement{disconnectedCallback(){window.__thirdDisconnect++}dispose(){window.__thirdDispose++}});
+  Skein.define('external-parent','<script>this.show=true<\/script><external-owned if={show}></external-owned>');
+  const el=document.createElement('external-parent');document.body.append(el);await wait(()=>el.shadowRoot?.querySelector('external-owned'));
+  el.state.show=false;await tick();
+  equal(window.__thirdDisconnect,1);equal(window.__thirdDispose,0);
+  el.dispose();el.remove();
+});
 test('style blocks stay native CSS',({root})=>{const css=root.querySelector('#style-test').textContent;ok(css.includes('#title { color: rgb(1 2 3); }'));ok(css.includes('@supports (display: grid) { #title { display: block; } }'))});
 test('public API stays tiny',()=>{equal(Object.keys(Skein).sort().join(','),'define,version');equal(Skein.stats,undefined);equal(Skein.flush,undefined);equal(Skein.Signal,undefined)});
-test('rendered nodes are not polluted with legacy helpers',({root})=>{const button=root.querySelector('#event');equal('$' in button,false);equal('open' in button,false);equal('replace' in button,false)});
-test('inline template bootstraps',async()=>{const el=document.querySelector('inline-boot');while(!el.shadowRoot?.querySelector('#boot-word'))await new Promise(r=>setTimeout(r,0));equal(el.shadowRoot.querySelector('#boot-word').textContent,'woven');equal(document.querySelector('template[skein]'),null)});
-test('Skein.define avoids fetch',async()=>{Skein.define('inline-defined','<script>this.value=41;this.up=()=>this.value++<\/script><button id="b" @click={up}>{value}</button>');const el=document.createElement('inline-defined');document.body.append(el);while(!el.shadowRoot?.querySelector('#b'))await new Promise(r=>setTimeout(r,0));const b=el.shadowRoot.querySelector('#b');equal(b.textContent,'41');b.click();await tick();equal(b.textContent,'42');el.dispose();el.remove()});
-test('component inputs use properties down and CustomEvent up',async()=>{
-  Skein.define('input-child','<script>this.value=input("value","fallback");this.raise=()=>host.dispatchEvent(new CustomEvent("value-change",{detail:{value:Number(this.value)+1},bubbles:true,composed:true}))<\/script><button id="raise" @click={raise}>{value}</button>');
+test('rendered nodes are not polluted with helpers',({root})=>{const button=root.querySelector('#event');equal('$' in button,false);equal('open' in button,false);equal('replace' in button,false)});
+test('inline template bootstraps',async()=>{const el=document.querySelector('inline-boot');await wait(()=>el.shadowRoot?.querySelector('#boot-word'));equal(el.shadowRoot.querySelector('#boot-word').textContent,'woven');equal(document.querySelector('template[skein]'),null)});
+test('Skein.define avoids fetch',async()=>{Skein.define('inline-defined','<script>this.value=41;this.up=()=>this.value++<\/script><button id="b" @click={up}>{value}</button>');const el=document.createElement('inline-defined');document.body.append(el);await wait(()=>el.shadowRoot?.querySelector('#b'));const b=el.shadowRoot.querySelector('#b');equal(b.textContent,'41');b.click();await tick();equal(b.textContent,'42');el.dispose();el.remove()});
+test('Skein.define rejects redefinition clearly',()=>{let message='';try{Skein.define('inline-defined','<b>again</b>')}catch(error){message=error.message}ok(message.includes('already defined by Skein'),message)});
+test('input shorthand seeds reactive child state',async()=>{
+  Skein.define('input-child','<script>input("value","fallback");this.raise=()=>host.dispatchEvent(new CustomEvent("value-change",{detail:{value:Number(this.value)+1},bubbles:true,composed:true}))<\/script><button id="raise" @click={raise}>{value}</button>');
   Skein.define('input-parent','<script>this.value=3;this.changed=event=>this.value=event.detail.value<\/script><input-child id="child" .value={value} @value-change={changed}></input-child><b id="parent">{value}</b>');
   const parent=document.createElement('input-parent');document.body.append(parent);
-  while(!parent.shadowRoot?.querySelector('#child')?.shadowRoot?.querySelector('#raise'))await new Promise(r=>setTimeout(r,0));
+  await wait(()=>parent.shadowRoot?.querySelector('#child')?.shadowRoot?.querySelector('#raise'));
   const child=parent.shadowRoot.querySelector('#child'),button=child.shadowRoot.querySelector('#raise');
   equal(button.textContent,'3','pre-mount property becomes initial input');
   button.click();await tick();equal(parent.shadowRoot.querySelector('#parent').textContent,'4','event updates parent');equal(button.textContent,'4','parent writes new input down');
@@ -44,14 +82,22 @@ test('component inputs use properties down and CustomEvent up',async()=>{
   child.value=11;await tick();equal(button.textContent,'11','direct host property assignment updates child');equal(parent.shadowRoot.querySelector('#parent').textContent,'8','input remains one-way');
   parent.dispose();parent.remove();
 });
-test('input fallback is used when no property was supplied',async()=>{Skein.define('input-fallback','<script>this.label=input("label","ready")<\/script><b id="label">{label}</b>');const el=document.createElement('input-fallback');document.body.append(el);while(!el.shadowRoot?.querySelector('#label'))await new Promise(r=>setTimeout(r,0));equal(el.shadowRoot.querySelector('#label').textContent,'ready');el.dispose();el.remove()});
-test('abortSignal is lazy and aborts on dispose',async()=>{Skein.define('abort-life','<script>window.__browserAbort=abortSignal<\/script><i>abort</i>');const el=document.createElement('abort-life');document.body.append(el);while(!window.__browserAbort)await new Promise(r=>setTimeout(r,0));equal(window.__browserAbort.aborted,false);el.dispose();equal(window.__browserAbort.aborted,true);el.remove();window.__browserAbort=null});
+test('legacy input assignment remains compatible',async()=>{Skein.define('input-legacy','<script>this.label=input("label","ready")<\/script><b id="label">{label}</b>');const el=document.createElement('input-legacy');document.body.append(el);await wait(()=>el.shadowRoot?.querySelector('#label'));equal(el.shadowRoot.querySelector('#label').textContent,'ready');el.dispose();el.remove()});
+test('reserved input names fail loudly',async()=>{Skein.define('input-conflict','<script>input("state",1)<\/script><i>x</i>');const el=document.createElement('input-conflict');let message='';el.addEventListener('error',event=>message=event.message);document.body.append(el);await wait(()=>message);ok(message.includes('conflicts with host property'),message);el.dispose();el.remove()});
+test('native host properties cannot be shadowed by inputs',async()=>{Skein.define('input-title-conflict','<script>input("title","x")<\/script><i>x</i>');const el=document.createElement('input-title-conflict');let message='';el.addEventListener('error',event=>message=event.message);document.body.append(el);await wait(()=>message);ok(message.includes('conflicts with host property'),message);el.dispose();el.remove()});
+test('shared object inputs keep one proxy identity',async()=>{Skein.define('object-child','<script>input("data",null)<\/script><b>{data.value}</b>');Skein.define('object-parent','<script>this.data={value:1}<\/script><object-child id="c" .data={data}></object-child>');const parent=document.createElement('object-parent');document.body.append(parent);const child=await wait(()=>parent.shadowRoot?.querySelector('#c')?.shadowRoot&&parent.shadowRoot.querySelector('#c'));equal(child.data,parent.state.data);parent.state.data.value=2;await tick();equal(child.shadowRoot.querySelector('b').textContent,'2');parent.dispose();parent.remove()});
+test('Date Map and class instances stay native',async()=>{Skein.define('native-state','<script>this.date=new Date(0);this.map=new Map([["x",7]]);this.time=computed(()=>this.date.getTime());this.mapValue=computed(()=>this.map.get("x"))<\/script><b id="date">{time}</b><i id="map">{mapValue}</i>');const el=document.createElement('native-state');document.body.append(el);await wait(()=>el.shadowRoot?.querySelector('#date'));equal(el.shadowRoot.querySelector('#date').textContent,'0');equal(el.shadowRoot.querySelector('#map').textContent,'7');el.dispose();el.remove()});
+test('removed in directive fails with migration hint',()=>{let message='';try{Skein.define('old-context','<p in={user}>{name}</p>')}catch(error){message=error.message}ok(message.includes('was removed'),message)});
+test('invalid binding paths fail at compile time',()=>{let message='';try{Skein.define('bad-path','<b>{user name}</b>')}catch(error){message=error.message}ok(message.includes('Invalid Skein binding path'),message)});
+test('malformed special binding fails at compile time',()=>{let message='';try{Skein.define('bad-binding','<input .value="x {name}">')}catch(error){message=error.message}ok(message.includes('must be a single path binding'),message)});
+test('malformed each fails at compile time',()=>{let message='';try{Skein.define('bad-each','<i each="items">x</i>')}catch(error){message=error.message}ok(message.includes('each must be a single path binding'),message)});
+test('abortSignal is lazy and aborts on dispose',async()=>{Skein.define('abort-life','<script>window.__browserAbort=abortSignal<\/script><i>abort</i>');const el=document.createElement('abort-life');document.body.append(el);await wait(()=>window.__browserAbort);equal(window.__browserAbort.aborted,false);el.dispose();equal(window.__browserAbort.aborted,true);el.remove();window.__browserAbort=null});
 test('disconnect pauses and reconnect resumes',async({host,state})=>{const parent=host.parentNode,title=host.shadowRoot.querySelector('#title');host.remove();state.count=30;await tick();equal(title.textContent,'Hello 12');parent.prepend(host);await tick();equal(title.textContent,'Hello 30')});
-test('dispose tears down cleanup, nested components and DOM',async({host})=>{const before=window.__rowDisposals||0;host.dispose();await tick();equal(window.__cleanupRuns,1);equal((window.__rowDisposals||0)-before,1);equal(host.shadowRoot.childNodes.length,0)});
+test('dispose tears down cleanup nested components and DOM',async({host})=>{const before=window.__rowDisposals||0;host.dispose();await tick();equal(window.__cleanupRuns,1);equal((window.__rowDisposals||0)-before,1);equal(host.shadowRoot.childNodes.length,0)});
 
 (async()=>{
  const host=document.querySelector('test-runtime');
- while(!host.shadowRoot?.querySelector('#title')||!window.__state)await new Promise(r=>setTimeout(r,0));
+ await wait(()=>host.shadowRoot?.querySelector('#title')&&window.__state);
  const ctx={host,root:host.shadowRoot,state:window.__state};
  const lines=[];let failed=0;
  for(const [name,fn] of tests){try{await fn(ctx);lines.push(`✓ ${name}`)}catch(e){failed++;lines.push(`✗ ${name}\n  ${e.stack||e}`)}}

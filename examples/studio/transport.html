@@ -1,6 +1,6 @@
 <script>
-  this.playing = input('playing', false)
-  this.bpm = input('bpm', 112)
+  input('playing', false)
+  input('bpm', 112)
   const emit = (type, detail={}) => host.dispatchEvent(new CustomEvent(type, { detail, bubbles:true, composed:true }))
   this.toggle = () => emit('transport-change', { playing:!this.playing })
   this.changeTempo = event => emit('tempo-change', { bpm:Number(event.currentTarget.value) })
@@ -12,10 +12,7 @@
     elapsed += now - last
     last = now
     const beat = 60000 / Math.max(40, Number(this.bpm) || 112) / 2
-    if (elapsed >= beat) {
-      elapsed %= beat
-      emit('tick')
-    }
+    if (elapsed >= beat) { elapsed %= beat; emit('tick') }
   }, 24)
   onCleanup(() => clearInterval(timer))
 </script>

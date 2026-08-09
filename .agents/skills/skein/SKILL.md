@@ -1,48 +1,31 @@
 ---
 name: skein-web
-description: Build, modify, review, or debug websites and Web Components using the Skein HTML-first reactive runtime. Use for Skein bindings, component composition, component files, creative CSS/SVG/Canvas/Web Audio, keyed lists, lifecycle/cleanup, SEO, playground examples, or changes to the runtime itself.
+description: Build, modify, review, or debug websites and Web Components using the Skein HTML-first reactive runtime. Use for Skein bindings, composition, component files, CSS/SVG/Canvas/Web Audio, keyed lists, lifecycle/cleanup, SEO, examples, or runtime changes.
 license: MIT
-compatibility: Browser projects using Skein 0.5+ or the Skein repository. Core work should remain zero-dependency and runnable without a build step.
+compatibility: Browser projects using Skein 0.6+ or the Skein repository. Core work remains zero-dependency and runnable without a user build step.
 metadata:
   author: Pom4H
-  version: "0.3.0"
+  version: "0.4.0"
 ---
 
 # Skein Web
 
 Use Skein as a thin reactive layer over native HTML, CSS, SVG, Canvas, Web Audio and Custom Elements.
 
-## Choose the smallest shape
-
-For a tiny demo, prefer one file:
+## Smallest shape
 
 ```html
 <hello-card></hello-card>
-
 <template skein="hello-card">
   <script>this.name = 'world'</script>
   <h2>Hello {name}</h2>
 </template>
-
-<script type="module"
-  src="https://cdn.jsdelivr.net/gh/Pom4H/web-component@main/skein.min.js">
-</script>
+<script type="module" src="https://cdn.jsdelivr.net/gh/Pom4H/web-component@main/skein.min.js"></script>
 ```
 
-For larger projects, external files map from tag names:
+External files map from tag names: `<user-card>` → `user/card.html`.
 
-```text
-<user-card> -> user/card.html
-<studio-mixer> -> studio/mixer.html
-```
-
-Read `references/syntax.md` for the full application API.
-
-## Keep content as HTML
-
-Skein has no SSR today. Static, semantic, linkable or SEO-critical content should stay in the original document. Use Skein for interactive regions; if a server must compute HTML, do that outside Skein and enhance the result.
-
-## Write ordinary state
+## State
 
 ```html
 <script>
@@ -53,90 +36,73 @@ Skein has no SSR today. Static, semantic, linkable or SEO-critical content shoul
 </script>
 ```
 
-Braces contain property paths, not arbitrary JavaScript expressions.
+Plain objects/arrays are reactive. Date, Map, Set, DOM/platform objects and class instances stay native. Do not wrap native objects just to put them in Skein state.
 
-## Bind native DOM semantics
+## Bindings
 
 ```html
-<h1>{title}</h1>
+<h1>{user.name}</h1>
+<label for={inputId}>Name</label>
 <input .value={name}>
 <button ?disabled={saving}>Save</button>
 <button @click={save}>Save</button>
 ```
 
-Use `@event={handler}`. Do not generate the removed `onclick={handler}` alias.
+Braces contain strict property paths. Use `computed()` for expressions. `in={...}` was removed in 0.6; write full paths.
 
-## Compose with properties down and events up
+## Composition
 
 Child:
 
 ```html
 <script>
-  this.value = input('value', 0)
+  input('value', 0)
   this.raise = () => host.dispatchEvent(new CustomEvent('value-change', {
-    detail: { value: this.value + 1 },
-    bubbles: true,
-    composed: true
+    detail: { value: this.value + 1 }, bubbles: true, composed: true
   }))
 </script>
-
 <button @click={raise}>{value}</button>
 ```
 
 Owner:
 
 ```html
-<value-stepper
-  .value={value}
-  @value-change={changed}>
-</value-stepper>
+<value-stepper .value={value} @value-change={changed}></value-stepper>
 ```
 
-`input(name, fallback)` declares a reactive host property. It preserves a property written before the child file finishes loading. Inputs are one-way; use native `CustomEvent` for child-to-owner requests/notifications. Do not add framework stores, provide/inject or an event bus merely to connect Skein components.
+Input values written before child mount are adopted. Input host-name collisions throw. Inputs are one-way; outputs are native events. Do not invent stores/provide-inject/event buses merely for component communication.
 
-Use `examples/studio/` as the reference for non-trivial composition.
-
-## Preserve list identity
+## Lists
 
 ```html
-<article for={projects} key={id}>
+<article each={projects} key={id}>
   <b>{index}. {title}</b>
   <input>
 </article>
 ```
 
-Do not replace keyed reconciliation with `innerHTML`, full-list cloning or index identity.
+Use `each`, not the removed list `for`. Native dynamic `for={inputId}` stays HTML. Explicit keys must be stable, non-null and unique; Skein validates before reconciling.
 
-## Let native media do their jobs
+## Native APIs and cleanup
 
-Bind values into CSS custom properties and let CSS animate/layout. Keep SVG as SVG. Keep Canvas/Web Audio imperative and use Skein for state, controls, component boundaries and lifecycle.
-
-## Own resources
+Keep SVG as SVG and Canvas/Web Audio imperative. Bind state into CSS custom properties instead of scripting layout/animation.
 
 ```js
 window.addEventListener('resize', this.measure, { signal: abortSignal })
 fetch(url, { signal: abortSignal })
-
 const id = setInterval(this.tick, 1000)
 onCleanup(() => clearInterval(id))
 ```
 
-The injected component helpers are:
+Injected names: `input`, `computed`, `effect`, `onCleanup`, `host`, `abortSignal`.
 
-```text
-input
-computed
-effect
-onCleanup
-host
-abortSignal
-```
+## Custom Element coexistence
 
-Synchronous state writes already share a microtask wave. Do not invent `batch()`.
+Skein fetches a tag's matching HTML file before defining the custom element. A missing source leaves the tag unclaimed. Never restore eager claiming of every undefined custom element. Nested third-party custom elements must not be force-disposed; only nested `SkeinElement`s receive permanent `dispose()` on renderer-owned removal.
 
-## When modifying Skein itself
+## Runtime work
 
-Read `references/architecture.md` first. Preserve zero dependencies, no virtual DOM, exact dependency tracking, keyed identity, scoped cleanup, composition timing guarantees, render-before-user-effect scheduling, reconnect semantics and production runtime correctness.
+Read `references/architecture.md` first. Preserve zero dependencies, no virtual DOM, exact dependency tracking, shared Proxy identity, native opaque objects, keyed identity, transactional mount rollback, scoped cleanup, render-before-user-effect scheduling, reconnect semantics and minified production correctness.
 
 Run:
 
@@ -145,12 +111,8 @@ node tools/build.mjs
 node test/run.mjs
 ```
 
-The repository tests the generated `skein.min.js` and the multi-file composition path in real Chrome. Do not add a test framework or bundler just for runtime work.
+The suite drives readable and generated production runtimes in real Chrome and includes the multi-file Studio path.
 
 ## Avoid
 
-Do not invent JSX/template expressions, rebuild full lists, use JS for CSS layout/animation, wrap SVG in a framework object model, make Canvas declarative pixel-by-pixel, silently add dependencies, expose scheduler internals, add a second component communication system, or claim SSR/hydration/suspense/error boundaries exist.
-
-## Repository context
-
-When working inside the Skein repository also read `AGENTS.md`, `llms-full.txt`, `references/syntax.md`, `references/architecture.md` and `README.md`.
+Do not invent JSX/template expressions, full-list rerenders, `in` contexts, framework-specific component buses, public scheduler internals, SSR/hydration claims, arbitrary external-element disposal or dependencies that duplicate browser APIs.

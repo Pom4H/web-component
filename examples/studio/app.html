@@ -31,34 +31,13 @@
     <div class="readout"><span>{note}</span><b>{bpm} BPM</b></div>
   </header>
 
-  <studio-transport
-    .playing={playing}
-    .bpm={bpm}
-    @transport-change={transport}
-    @tempo-change={tempo}
-    @tick={tick}>
-  </studio-transport>
-
-  <studio-sequencer
-    .pattern={pattern}
-    .step={step}
-    @pattern-change={patternChange}>
-  </studio-sequencer>
+  <studio-transport .playing={playing} .bpm={bpm} @transport-change={transport} @tempo-change={tempo} @tick={tick}></studio-transport>
+  <studio-sequencer .pattern={pattern} .step={step} @pattern-change={patternChange}></studio-sequencer>
 
   <div class="lower">
-    <pocket-synth
-      .wave={wave}
-      .volume={volume}
-      @wave-change={waveChange}
-      @note={noteOn}>
-    </pocket-synth>
-
+    <pocket-synth .wave={wave} .volume={volume} @wave-change={waveChange} @note={noteOn}></pocket-synth>
     <aside>
-      <studio-mixer
-        .wave={wave}
-        .volume={volume}
-        @mix-change={mix}>
-      </studio-mixer>
+      <studio-mixer .wave={wave} .volume={volume} @mix-change={mix}></studio-mixer>
       <studio-scope .level={level} .note={note}></studio-scope>
     </aside>
   </div>

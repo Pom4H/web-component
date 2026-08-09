@@ -1,6 +1,7 @@
 <script>
   this.count = 1;
   this.name = 'ROOT';
+  this.rootLabel = 'ROOT-LABEL';
   this.user = { name: 'John', address: { city: 'Amsterdam' } };
   this.items = [
     { id: 1, name: 'A' },
@@ -8,10 +9,12 @@
     { id: 3, name: undefined },
   ];
   this.statuses = [{ id: 'ready', title: 'Ready' }];
+  this.primitives = ['A', 'A', 'B'];
   this.show = true;
   this.lifeItems = [{ id: 1 }];
   this.lifeBranch = true;
   this.enabled = true;
+  this.inputId = 'real-input';
   this.total = computed(() => this.count * 2);
   this.increment = () => this.count++;
   effect(() => {
@@ -26,23 +29,26 @@
 <h1 id="title">Hello {count}</h1>
 <p id="computed">{total}</p>
 <p id="later">{later}</p>
-<p id="nested" data-name="user-{name}" in={user}>{name}</p>
-<div in={user}><p id="city" in={address} data-city="{city}">{city}</p></div>
-<label id="native-for" for="real-input">Name</label>
+<p id="nested" data-name="user-{user.name}">{user.name}</p>
+<p id="city" data-city={user.address.city}>{user.address.city}</p>
+<p id="proto">{toString}</p>
+<p id="nested-proto">{user.toString}</p>
+<label id="native-for" for={inputId}>Name</label>
 <input id="real-input" .value={count} ?disabled={enabled}>
 <button id="event" @click={increment}>increment</button>
 
 <ul id="items">
-  <li for={items} key={id} data-id={id}>
+  <li each={items} key={id} data-id={id}>
     <input class="item-input" .value={name}>
     <span class="item-name">{name}</span>
     <span class="item-index">{index}</span>
-    <select><option for={statuses} key={id} value={id}>{title}</option></select>
+    <select><option each={statuses} key={id} value={id}>{title}/{rootLabel}</option></select>
   </li>
 </ul>
+<div id="primitives"><span each={primitives}>{$value}:{index};</span></div>
 
 <section id="branch" if={show}>Visible {count}</section>
-<div id="life-list"><row-life for={lifeItems} key={id}></row-life></div>
+<div id="life-list"><row-life each={lifeItems} key={id}></row-life></div>
 <section id="life-branch" if={lifeBranch}><row-life></row-life></section>
 <row-life id="root-life"></row-life>
 

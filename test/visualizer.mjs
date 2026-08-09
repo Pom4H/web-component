@@ -49,10 +49,15 @@ try {
   const defined=await evaluate(`(${JSON.stringify(tags)}).filter(tag=>customElements.get(tag)).length`);
   if(defined!==tags.length) throw new Error(`Expected ${tags.length} component types, got ${defined}`);
 
-  const state=await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),shell=app.shadowRoot.querySelector('visualizer-shell'),root=shell.shadowRoot,scene=app.shadowRoot.querySelector('visualizer-scene');return{slots:['mast','scene','controls','inspector'].map(name=>root.querySelector('slot[name="'+name+'"]').assignedElements()[0]?.getAttribute('slot')||root.querySelector('slot[name="'+name+'"]').assignedElements()[0]?.localName),labels:scene.shadowRoot.querySelectorAll('.labels button').length,status:scene.state.status,webgl:!!scene.shadowRoot.querySelector('canvas').getContext('webgl2'),energy:scene.style.getPropertyValue('--energy')}})()`);
-  if(state.labels!==8||!state.webgl||state.status!=='WebGL2 live'||!state.energy) throw new Error(`WebGL scene failed: ${JSON.stringify(state)}`);
+  let state={};
+  for(let i=0;i<160;i++){
+    await sleep(25);
+    state=await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),shell=app.shadowRoot.querySelector('visualizer-shell'),root=shell.shadowRoot,scene=app.shadowRoot.querySelector('visualizer-scene');return{slots:['mast','scene','controls','inspector'].map(name=>root.querySelector('slot[name="'+name+'"]').assignedElements()[0]?.getAttribute('slot')||root.querySelector('slot[name="'+name+'"]').assignedElements()[0]?.localName),labels:scene.shadowRoot.querySelectorAll('.labels button').length,properties:scene.shadowRoot.querySelectorAll('.properties button').length,status:scene.state.status,webgl:!!scene.shadowRoot.querySelector('canvas').getContext('webgl2'),energy:scene.style.getPropertyValue('--energy'),count:scene.state.count}})()`);
+    if(state.status==='WebGL2 live') break;
+  }
+  if(state.labels!==8||state.properties!==4||!state.webgl||state.status!=='WebGL2 live'||!state.energy||state.count<41) throw new Error(`WebGL field failed: ${JSON.stringify(state)}`);
 
-  await evaluate(`document.querySelector('visualizer-app').shadowRoot.querySelector('visualizer-controls').shadowRoot.querySelector('button').click()`);
+  await evaluate(`document.querySelector('visualizer-app').shadowRoot.querySelector('visualizer-controls').shadowRoot.querySelector('button[data-action="run"]').click()`);
   await sleep(30);
   let interaction=await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),scene=app.shadowRoot.querySelector('visualizer-scene');return{app:app.state.running,scene:scene.running}})()`);
   if(interaction.app!==false||interaction.scene!==false) throw new Error(`Composed run event/property flow failed: ${JSON.stringify(interaction)}`);
@@ -62,10 +67,21 @@ try {
   interaction=await evaluate(`(()=>{const app=document.querySelector('visualizer-app');return{app:app.state.speed,scene:app.shadowRoot.querySelector('visualizer-scene').speed,inspector:app.shadowRoot.querySelector('visualizer-inspector').speed}})()`);
   if(interaction.app!==1.5||interaction.scene!==1.5||interaction.inspector!==1.5) throw new Error(`Speed property flow failed: ${JSON.stringify(interaction)}`);
 
-  await evaluate(`document.querySelector('visualizer-app').shadowRoot.querySelector('visualizer-scene').shadowRoot.querySelector('button[data-index="3"]').click()`);
+  const beforeBurst=await evaluate(`document.querySelector('visualizer-app').state.burst`);
+  await evaluate(`document.querySelector('visualizer-app').shadowRoot.querySelector('visualizer-controls').shadowRoot.querySelector('button[data-action="write"]').click()`);
   await sleep(30);
-  interaction=await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),scene=app.shadowRoot.querySelector('visualizer-scene'),inspector=app.shadowRoot.querySelector('visualizer-inspector');return{selected:app.state.selected,scene:scene.selected,step:inspector.step.id,accent:scene.shadowRoot.querySelector('button[data-index="3"]').style.getPropertyValue('--accent')}})()`);
+  interaction=await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),scene=app.shadowRoot.querySelector('visualizer-scene');return{burst:app.state.burst,sceneBurst:scene.burst,selected:app.state.selected}})()`);
+  if(interaction.burst!==beforeBurst+1||interaction.sceneBurst!==interaction.burst||interaction.selected!==5) throw new Error(`Write event/property flow failed: ${JSON.stringify(interaction)}`);
+
+  await evaluate(`document.querySelector('visualizer-app').shadowRoot.querySelector('visualizer-scene').shadowRoot.querySelector('.labels button[data-index="3"]').click()`);
+  await sleep(30);
+  interaction=await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),scene=app.shadowRoot.querySelector('visualizer-scene'),inspector=app.shadowRoot.querySelector('visualizer-inspector');return{selected:app.state.selected,scene:scene.selected,step:inspector.step.id,accent:scene.shadowRoot.querySelector('.labels button[data-index="3"]').style.getPropertyValue('--accent')}})()`);
   if(interaction.selected!==3||interaction.scene!==3||interaction.step!==4||!interaction.accent) throw new Error(`Stage selection flow failed: ${JSON.stringify(interaction)}`);
+
+  await evaluate(`document.querySelector('visualizer-app').shadowRoot.querySelector('visualizer-scene').shadowRoot.querySelector('.properties button[data-index="2"]').click()`);
+  await sleep(30);
+  interaction=await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),scene=app.shadowRoot.querySelector('visualizer-scene');return{selected:app.state.selected,source:scene.state.source,accent:scene.shadowRoot.querySelector('.properties button[data-index="2"]').style.getPropertyValue('--accent')}})()`);
+  if(interaction.selected!==5||interaction.source!==2||!interaction.accent) throw new Error(`Property-node write failed: ${JSON.stringify(interaction)}`);
 
   if(exceptions.length) throw new Error(`Browser exceptions:\n${exceptions.join('\n')}`);
   console.log('visualizer-webgl: passed');
@@ -73,6 +89,7 @@ try {
   console.log('visualizer-composed-events: passed');
   console.log('visualizer-property-flow: passed');
   console.log('visualizer-css-properties: passed');
+  console.log('visualizer-reactive-matter: passed');
 } finally {
   socket.close(); browser.kill('SIGTERM'); await Promise.race([once(browser,'exit'),sleep(1000)]); await rm(profile,{recursive:true,force:true,maxRetries:5,retryDelay:50});
 }

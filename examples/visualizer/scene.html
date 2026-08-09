@@ -188,7 +188,7 @@
         const selected = index === Number(this.selected)
         const pulse = index === active ? .08*Math.sin(now*.008)+.08 : 0
         const color=hex(this.steps[index]?.color)
-        cube(triangles,center,(selected?.48:.34)+pulse,color,selected?1:.72)
+        cube(triangles,center,(selected ? .48 : .34)+pulse,color,selected ? 1 : .72)
         if(selected) cube(triangles,center,.60+pulse,mix(color,[1,1,1],.35),.10)
       })
 

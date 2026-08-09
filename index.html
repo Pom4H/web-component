@@ -4,8 +4,10 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#f4f0e6" />
-  <meta name="description" content="Skein is a tiny zero-dependency HTML-first Web Components runtime with fine-grained reactivity, native composition and a browser Playground." />
-  <title>Skein — native web, tightly woven</title>
+  <meta name="description" content="Reactive Web Components in plain HTML files — no npm or compiler. Build browser-side SVG, Canvas and Web Audio widgets for static sites." />
+  <meta property="og:title" content="Skein — Reactive Web Components in plain HTML files" />
+  <meta property="og:description" content="Build browser-side interactive widgets with native Custom Elements, Shadow DOM, SVG, Canvas and Web Audio — no npm or compiler." />
+  <title>Skein — Reactive Web Components in plain HTML files</title>
   <link rel="stylesheet" href="site/styles.css" />
   <script type="module" src="site/site.js"></script>
 </head>
@@ -14,29 +16,29 @@
   <main>
     <section class="hero">
       <skein-threads></skein-threads>
-      <div class="badge-row"><span class="badge">0 dependencies</span><span class="badge">5,123 B brotli</span><span class="badge">no build</span></div>
+      <div class="badge-row"><span class="badge">0 dependencies</span><span class="badge">5,123 B brotli</span><span class="badge">no compiler</span></div>
       <div class="wrap hero-copy">
-        <p class="eyebrow">HTML-first reactive web components</p>
+        <p class="eyebrow">Reactive Web Components / plain HTML files</p>
         <h1 class="display">SKEIN</h1>
         <div class="subrow">
-          <p class="lede">Fine-grained reactive state over the browser you already have. HTML composes components; Shadow DOM, CSS, SVG, Canvas and Web Audio stay native.</p>
-          <div class="actions"><a class="button" href="playground/?example=counter">Open Playground →</a><a class="button ghost" href="start/">Start in one file</a></div>
+          <p class="lede">Build interactive widgets for static sites directly in HTML. Skein adds fine-grained state while Custom Elements, Shadow DOM, CSS, SVG, Canvas and Web Audio stay native.</p>
+          <div class="actions"><a class="button" href="playground/?example=counter">Try one HTML file →</a><a class="button ghost" href="examples/">Explore native demos</a></div>
         </div>
       </div>
     </section>
 
     <div class="ticker" aria-hidden="true"><div class="ticker-track">
-      <span>custom elements</span><span>properties down</span><span>events up</span><span>native slots</span><span>keyed ranges</span><span>css</span><span>svg</span><span>canvas</span>
-      <span>custom elements</span><span>properties down</span><span>events up</span><span>native slots</span><span>keyed ranges</span><span>css</span><span>svg</span><span>canvas</span>
+      <span>plain html files</span><span>static sites</span><span>custom elements</span><span>shadow dom</span><span>svg</span><span>canvas</span><span>web audio</span><span>no compiler</span>
+      <span>plain html files</span><span>static sites</span><span>custom elements</span><span>shadow dom</span><span>svg</span><span>canvas</span><span>web audio</span><span>no compiler</span>
     </div></div>
 
     <section class="section">
       <div class="wrap">
-        <div class="section-head"><p class="eyebrow">01 / the premise</p><h2>The browser is already a rendering engine and a component model.</h2></div>
+        <div class="section-head"><p class="eyebrow">01 / the fit</p><h2>Keep a static site static. Add real interactive components where they belong.</h2></div>
         <div class="grid-3">
-          <article class="feature"><span class="num">DOM</span><div><h3>Create once.</h3><p>Templates compile once. State writes update exact DOM parts instead of rebuilding a virtual tree.</p></div></article>
-          <article class="feature"><span class="num">COMPONENTS</span><div><h3>Compose as HTML.</h3><p>Tag names load HTML files. Properties carry data, composed events carry actions, native slots carry content.</p></div></article>
-          <article class="feature"><span class="num">WEB APIs</span><div><h3>Keep the medium native.</h3><p>Date, Map, Shadow DOM, CSS, SVG, Canvas and Web Audio remain real browser objects instead of framework wrappers.</p></div></article>
+          <article class="feature"><span class="num">FILES</span><div><h3>Author in HTML.</h3><p>Each tag can load one ordinary HTML file containing its script, markup and style. No JavaScript component class or generated application bundle.</p></div></article>
+          <article class="feature"><span class="num">DOM</span><div><h3>Update exact parts.</h3><p>Deep state mutations update the text, attribute, property or CSS variable that read them while keyed DOM identity survives reorder.</p></div></article>
+          <article class="feature"><span class="num">MEDIA</span><div><h3>Use the browser directly.</h3><p>Build instruments and visualizations with real CSS, SVG, Canvas and Web Audio instead of rendering those APIs through a framework abstraction.</p></div></article>
         </div>
       </div>
     </section>
@@ -44,9 +46,9 @@
     <section class="section">
       <div class="wrap split">
         <div>
-          <p class="eyebrow">02 / start</p>
+          <p class="eyebrow">02 / one-file start</p>
           <h2 style="font-size:clamp(48px,7vw,96px);letter-spacing:-.065em;line-height:.9;margin:20px 0 24px">One HTML file is enough.</h2>
-          <p class="lede" style="font-size:19px">No npm, CLI or config. Prototype inline, then move components into files when the project actually needs boundaries.</p>
+          <p class="lede" style="font-size:19px">Save the page, serve the folder and open it. No npm, compiler, CLI or config. Prototype inline, then move the component into its own HTML file when you want a reusable boundary.</p>
           <p style="margin-top:18px;font:600 12px ui-monospace,monospace;letter-spacing:.04em">skein.min.js · 15,839 B raw · 5,686 B gzip · 5,123 B brotli</p>
           <p style="margin-top:28px"><a class="button" href="start/">See the 60-second start</a></p>
         </div>
@@ -95,7 +97,7 @@ draft              saved per example</code></pre>
 
     <section class="section">
       <div class="wrap">
-        <div class="section-head"><p class="eyebrow">04 / application composition</p><h2>18 component types. Still browser primitives.</h2></div>
+        <div class="section-head"><p class="eyebrow">04 / composition proof</p><h2>Start with one widget. The same browser contract scales to 18 component types.</h2></div>
         <div class="split">
           <div class="code-card">
             <div class="code-top"><span>workspace/overview.html</span><a href="examples/workspace/" style="color:inherit">open app ↗</a></div>
@@ -158,7 +160,7 @@ draft              saved per example</code></pre>
 
     <section class="section">
       <div class="wrap split">
-        <div><p class="eyebrow">08 / content</p><h2 style="font-size:clamp(42px,6vw,80px);letter-spacing:-.06em;line-height:.92">Static content can just be HTML.</h2><p class="lede" style="font-size:18px">Skein has no SSR today. If a heading, article or navigation matters before JavaScript, put it directly in the document and use Skein for interactive regions.</p></div>
+        <div><p class="eyebrow">08 / scope</p><h2 style="font-size:clamp(42px,6vw,80px);letter-spacing:-.06em;line-height:.92">Keep content in HTML. Use Skein for the interactive region.</h2><p class="lede" style="font-size:18px">Skein has no SSR or hydration. Put headings, articles and navigation directly in the document, then add browser-side instruments, visualizations and controls where JavaScript is appropriate. Component scripts execute dynamically, so a strict CSP must permit dynamic evaluation.</p></div>
         <div class="code-card"><pre><code data-highlight>&lt;main&gt;
   &lt;h1&gt;Native creative web experiences.&lt;/h1&gt;
   &lt;p&gt;Already present in the HTML response.&lt;/p&gt;

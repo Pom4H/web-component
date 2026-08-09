@@ -5,7 +5,7 @@ export const examples = [
     file: '../examples/hello/counter.html',
     title: 'Hello Counter',
     kind: 'START',
-    blurb: 'A first reactive component: two native click handlers update one text binding and one fine-grained CSS custom property.',
+    blurb: 'The smallest complete HTML component: native click events update one text binding and one fine-grained CSS custom property.',
     link: 'Edit in Playground →'
   },
   {
@@ -14,7 +14,7 @@ export const examples = [
     file: '../examples/queue/board.html',
     title: 'Queue Board',
     kind: 'KEYED',
-    blurb: 'Editable rows keep their browser-local input state while the underlying records reorder through keyed DOM identity.',
+    blurb: 'A plain HTML component whose editable rows keep browser-local input state while keyed DOM ranges reorder.',
     link: 'Edit in Playground →'
   },
   {
@@ -23,7 +23,7 @@ export const examples = [
     file: '../examples/field/atlas.html',
     title: 'Field Atlas',
     kind: 'SVG',
-    blurb: 'A real SVG network where list-scoped nodes stay intact and pointer state updates only exact line and cursor attributes.',
+    blurb: 'An interactive native SVG network where list-scoped nodes stay intact and pointer state updates only exact attributes.',
     link: 'Edit in Playground →'
   },
   {
@@ -32,7 +32,7 @@ export const examples = [
     file: '../examples/type/machine.html',
     title: 'Type Machine',
     kind: 'CSS',
-    blurb: 'Reactive form state updates four independent CSS custom properties, leaving layout, transforms and typography to native CSS.',
+    blurb: 'Reactive form state updates four CSS custom properties while native CSS owns layout, transforms and typography.',
     link: 'Edit in Playground →'
   }
 ];

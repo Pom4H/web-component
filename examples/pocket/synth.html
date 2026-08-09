@@ -13,79 +13,182 @@
     { id:'c5', label:'C', key:'K', freq:523.25, active:false }
   ]
   this.playing = computed(() => this.notes.filter(note => note.active).map(note => note.label).join(' · ') || 'ready')
-  let audio
+  let audio, audioReady, pointerReset, pointerSequence = false, disposed = false
   const voices = new Map()
+  const held = new Set()
+  const starting = new Set()
+  const pendingRelease = new Set()
+  const releaseTimers = new Map()
   const Audio = globalThis.AudioContext || globalThis.webkitAudioContext
 
   const emit = (type, detail) => host.dispatchEvent(new CustomEvent(type, { detail, bubbles:true, composed:true }))
   const syncAudioState = () => {
-    if (!audio) return
+    if (!audio || disposed) return
     this.audioState = audio.state === 'running' ? 'audio on' : audio.state === 'suspended' ? 'tap a key to enable audio' : 'audio ' + audio.state
   }
-  const context = () => {
+  const audioError = error => {
+    if (disposed) return null
+    this.audioState = 'audio blocked'
+    emit('audio-error', { message:error?.message || String(error) })
+    return null
+  }
+  const context = async () => {
     if (!Audio) {
       this.audioState = 'Web Audio unavailable'
       return null
     }
     if (!audio) {
-      audio = new Audio()
+      try { audio = new Audio({ latencyHint:'interactive' }) }
+      catch (error) { return audioError(error) }
       audio.addEventListener('statechange', syncAudioState, { signal:abortSignal })
     }
-    if (audio.state === 'suspended') {
-      audio.resume().then(syncAudioState).catch(error => {
-        this.audioState = 'audio blocked'
-        emit('audio-error', { message:error?.message || String(error) })
-      })
+    if (audio.state !== 'running') {
+      this.audioState = 'enabling audio…'
+      if (!audioReady) {
+        try {
+          // Calling resume here is synchronous with pointerdown/keydown. Oscillators
+          // are created only after the browser confirms that the context is running.
+          audioReady = audio.resume().then(() => {
+            audioReady = null
+            if (audio.state !== 'running') throw new Error('AudioContext did not start')
+            syncAudioState()
+            return audio
+          }, error => {
+            audioReady = null
+            throw error
+          })
+        } catch (error) {
+          audioReady = null
+          return audioError(error)
+        }
+      }
+      try { return await audioReady }
+      catch (error) { return audioError(error) }
     }
     syncAudioState()
     return audio
   }
-  const start = note => {
-    if (!note || voices.has(note.id)) return
-    const ctx = context()
-    if (!ctx) return
-    const osc = ctx.createOscillator()
-    const gain = ctx.createGain()
-    const level = Math.max(.001, Math.min(.6, Number(this.volume) || 0))
-    osc.type = this.wave
-    osc.frequency.value = note.freq
-    gain.gain.setValueAtTime(.0001, ctx.currentTime)
-    gain.gain.exponentialRampToValueAtTime(level, ctx.currentTime + .018)
-    osc.connect(gain).connect(ctx.destination)
-    osc.start()
-    voices.set(note.id, { osc, gain })
-    note.active = true
-    emit('note', { note:note.label, id:note.id, frequency:note.freq, velocity:level })
+  const start = async note => {
+    if (!note) return
+    held.add(note.id)
+    pendingRelease.delete(note.id)
+    const releaseTimer = releaseTimers.get(note.id)
+    if (releaseTimer) {
+      clearTimeout(releaseTimer)
+      releaseTimers.delete(note.id)
+    }
+    if (voices.has(note.id) || starting.has(note.id)) return
+    starting.add(note.id)
+    const ctx = await context()
+    starting.delete(note.id)
+    const releaseAfterStart = pendingRelease.delete(note.id)
+    if (!ctx || disposed || abortSignal.aborted || voices.has(note.id) || (!held.has(note.id) && !releaseAfterStart)) {
+      held.delete(note.id)
+      return
+    }
+    try {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      const level = Math.max(.001, Math.min(.6, Number(this.volume) || 0))
+      osc.type = this.wave
+      osc.frequency.value = note.freq
+      gain.gain.setValueAtTime(.0001, ctx.currentTime)
+      gain.gain.exponentialRampToValueAtTime(level, ctx.currentTime + .018)
+      osc.connect(gain).connect(ctx.destination)
+      osc.addEventListener?.('ended', () => {
+        try { osc.disconnect(); gain.disconnect() }
+        catch {}
+      }, { once:true })
+      osc.start()
+      voices.set(note.id, { osc, gain })
+      note.active = true
+      emit('note', { note:note.label, id:note.id, frequency:note.freq, velocity:level })
+      if (releaseAfterStart) {
+        // A quick first tap commonly ends before AudioContext.resume() resolves.
+        // Play a short audible note instead of consuming that gesture silently.
+        const timer = setTimeout(() => {
+          releaseTimers.delete(note.id)
+          stop(note)
+        }, 20)
+        releaseTimers.set(note.id, timer)
+      }
+    } catch (error) {
+      held.delete(note.id)
+      starting.delete(note.id)
+      pendingRelease.delete(note.id)
+      audioError(error)
+    }
   }
   const stop = note => {
-    const voice = note && voices.get(note.id)
-    if (!voice) return
+    if (!note) return
+    held.delete(note.id)
+    const voice = voices.get(note.id)
+    if (!voice) {
+      if (starting.has(note.id)) pendingRelease.add(note.id)
+      return
+    }
     const now = audio.currentTime
-    voice.gain.gain.cancelScheduledValues(now)
-    voice.gain.gain.setValueAtTime(Math.max(voice.gain.gain.value,.0001), now)
-    voice.gain.gain.exponentialRampToValueAtTime(.0001, now + .08)
-    voice.osc.stop(now + .09)
+    try {
+      voice.gain.gain.cancelScheduledValues(now)
+      voice.gain.gain.setValueAtTime(Math.max(voice.gain.gain.value,.0001), now)
+      voice.gain.gain.exponentialRampToValueAtTime(.0001, now + .08)
+      voice.osc.stop(now + .09)
+    } catch {}
     voices.delete(note.id)
     note.active = false
   }
   const byId = event => this.notes.find(note => note.id === event.currentTarget.dataset.id)
-  this.down = event => { event.currentTarget.setPointerCapture?.(event.pointerId); start(byId(event)) }
-  this.up = event => stop(byId(event))
+  this.down = event => {
+    pointerSequence = true
+    clearTimeout(pointerReset)
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+    start(byId(event))
+  }
+  this.up = event => {
+    stop(byId(event))
+    clearTimeout(pointerReset)
+    pointerReset = setTimeout(() => pointerSequence = false, 0)
+  }
+  this.activate = event => {
+    // Native keyboard/assistive button activation emits click without pointer
+    // events. Pointer clicks already used down/up and must not retrigger here.
+    if (pointerSequence) {
+      pointerSequence = false
+      clearTimeout(pointerReset)
+      return
+    }
+    const note = byId(event)
+    start(note)
+    stop(note)
+  }
   this.changeWave = event => {
     this.wave = event.currentTarget.value
     emit('wave-change', { wave:this.wave })
   }
 
   window.addEventListener('keydown', event => {
-    if (event.repeat) return
-    start(this.notes.find(note => note.key === event.key.toUpperCase()))
+    const target = event.target
+    if (event.repeat || event.metaKey || event.ctrlKey || event.altKey || target?.matches?.('input,select,textarea') || target?.isContentEditable) return
+    const note = this.notes.find(note => note.key === event.key.toUpperCase())
+    if (!note) return
+    event.preventDefault()
+    start(note)
   }, { signal:abortSignal })
   window.addEventListener('keyup', event => {
-    stop(this.notes.find(note => note.key === event.key.toUpperCase()))
+    const note = this.notes.find(note => note.key === event.key.toUpperCase())
+    if (note) stop(note)
   }, { signal:abortSignal })
   onCleanup(() => {
+    disposed = true
+    clearTimeout(pointerReset)
+    held.clear()
+    starting.clear()
+    pendingRelease.clear()
+    for (const timer of releaseTimers.values()) clearTimeout(timer)
+    releaseTimers.clear()
     for (const note of this.notes) stop(note)
-    audio?.close()
+    try { audio?.close()?.catch(() => {}) }
+    catch {}
   })
 </script>
 
@@ -102,7 +205,7 @@
   <div class="display"><i></i><span>{playing}</span><em>{audioState}</em></div>
   <div class="keys">
     <button each={notes} key={id} data-id={id} data-active={active}
-      @pointerdown={down} @pointerup={up} @pointercancel={up} @pointerleave={up}>
+      @pointerdown={down} @pointerup={up} @pointercancel={up} @lostpointercapture={up} @click={activate}>
       <kbd>{key}</kbd><strong>{label}</strong><small>{freq}</small>
     </button>
   </div>

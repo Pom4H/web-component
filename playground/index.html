@@ -1,9 +1,58 @@
-<!doctype html><html lang="en"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#0d0d0c"><title>Playground — Skein</title><meta name="description" content="A tiny one-file Skein editor with live preview and syntax highlighting."><link rel="stylesheet" href="../site/styles.css"><link rel="stylesheet" href="./playground.css"><script type="module" src="./playground.js"></script>
-</head><body class="play-body">
-<header class="play-head"><a class="play-brand" href="../"><span>S</span><b>Skein</b></a><div class="play-actions"><select id="example" aria-label="Example"></select><label class="auto"><input id="autorun" type="checkbox" checked> auto</label><button id="share">Share</button><button id="run" class="run">Run ↗</button></div></header>
-<main class="workspace">
-<section class="editor-pane"><div class="pane-head"><div><span class="dot"></span><strong>component.html</strong></div><div class="metrics"><span id="lines">0 lines</span><span id="bytes">0 B</span></div></div><div class="editor-wrap"><pre id="highlight" aria-hidden="true"><code></code></pre><textarea id="source" aria-label="Component source" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea></div><div class="editor-foot"><span>Tab inserts 2 spaces</span><span id="state">ready</span></div></section>
-<section class="preview-pane"><div class="pane-head"><div><span class="dot hot"></span><strong>live DOM</strong></div><div><button id="reload" class="icon" aria-label="Reload preview">↻</button><button id="fullscreen" class="icon" aria-label="Fullscreen preview">↗</button></div></div><iframe id="preview" title="Skein preview" sandbox="allow-scripts" allow="autoplay"></iframe><div id="error" class="error" hidden></div></section>
-</main>
-</body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0d0d0c">
+  <title>Playground — Skein</title>
+  <meta name="description" content="A zero-dependency Skein editor with local drafts, live preview and syntax highlighting.">
+  <link rel="stylesheet" href="../site/styles.css">
+  <link rel="stylesheet" href="./playground.css">
+  <script type="module" src="./playground.js"></script>
+</head>
+<body class="play-body">
+  <header class="play-head">
+    <a class="play-brand" href="../" aria-label="Skein home"><span>S</span><b>Skein</b></a>
+    <div class="play-actions">
+      <select id="example" aria-label="Example"></select>
+      <label class="auto"><input id="autorun" type="checkbox" checked><span>Auto</span></label>
+      <button id="share" type="button">Share</button>
+      <button id="run" class="run" type="button" aria-keyshortcuts="Control+Enter Meta+Enter" title="Run (Cmd/Ctrl+Enter)">Run ↗</button>
+    </div>
+  </header>
+
+  <main id="workspace" class="workspace">
+    <section id="editor-pane" class="editor-pane" aria-label="Code editor">
+      <div class="pane-head">
+        <div class="file-name"><span class="dot"></span><strong>component.html</strong><span id="draft-state" class="draft-state">Original</span></div>
+        <div class="metrics"><span id="lines">0 lines</span><span id="bytes">0 B</span><button id="reset" class="text-button" type="button" title="Restore the original example">Reset</button></div>
+      </div>
+      <div id="editor-wrap" class="editor-wrap">
+        <pre id="line-numbers" class="line-numbers" aria-hidden="true"><code></code></pre>
+        <pre id="highlight" aria-hidden="true"><code></code></pre>
+        <textarea id="source" aria-label="Component source" aria-describedby="editor-help cursor-status" aria-keyshortcuts="Control+S Meta+S Control+Enter Meta+Enter" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" wrap="off"></textarea>
+      </div>
+      <div class="editor-foot">
+        <span id="editor-help">Tab indent · ⌘/Ctrl+S save · ⌘/Ctrl+Enter run</span>
+        <span id="cursor-status">Ln 1, Col 1</span>
+      </div>
+    </section>
+
+    <div id="splitter" class="splitter" role="separator" aria-label="Resize editor and preview" aria-controls="editor-pane preview-pane" aria-orientation="vertical" aria-valuemin="0" aria-valuemax="100" aria-valuenow="45" tabindex="0"></div>
+
+    <section id="preview-pane" class="preview-pane" aria-label="Preview">
+      <div class="pane-head">
+        <div><span id="preview-dot" class="dot hot"></span><strong>live DOM</strong><span id="state" class="run-state" role="status" aria-live="polite">Loading…</span></div>
+        <div><button id="reload" class="icon" type="button" aria-label="Reload preview" title="Reload preview">↻</button><button id="fullscreen" class="icon" type="button" aria-label="Fullscreen preview" title="Fullscreen preview">↗</button></div>
+      </div>
+      <iframe id="preview" title="Skein preview" sandbox="allow-scripts" allow="autoplay"></iframe>
+      <div id="error" class="error" role="alert" hidden>
+        <div class="error-head"><strong>Preview error</strong><button id="dismiss-error" type="button">Dismiss</button></div>
+        <pre id="error-message"></pre>
+      </div>
+    </section>
+  </main>
+
+  <span id="action-feedback" class="sr-only" role="status" aria-live="polite"></span>
+</body>
+</html>

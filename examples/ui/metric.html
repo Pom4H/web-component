@@ -1,0 +1,14 @@
+<script>
+  input('name', 'Metric')
+  input('value', '—')
+  input('tone', '')
+</script>
+
+<div class="metric" data-tone={tone}>
+  <span>{name}</span>
+  <strong>{value}</strong>
+</div>
+
+<style>
+  :host{display:block}.metric{min-height:82px;border:1px solid #2b2f2b;background:#131613;padding:12px;display:grid;align-content:space-between}.metric span{color:#747a73;font:700 9px ui-monospace,monospace;text-transform:uppercase;letter-spacing:.08em}.metric strong{font:800 28px/1 system-ui}.metric[data-tone="lime"] strong{color:#d7ff58}.metric[data-tone="amber"] strong{color:#ffcb66}
+</style>

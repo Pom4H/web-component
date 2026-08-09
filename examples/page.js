@@ -3,13 +3,24 @@ import { examples } from '../site/examples.js';
 const gallery = document.querySelector('#gallery');
 const runtimeURL = new URL('../skein.min.js', location.href).href;
 const examplesBase = new URL('./', location.href).href;
-const studio = {
-  tag: 'studio-app',
-  title: 'Skein Studio',
-  kind: 'COMPOSE',
-  blurb: 'Five file-loaded Web Components coordinate through reactive DOM properties down and native CustomEvents up.',
-  source: 'https://github.com/Pom4H/web-component/tree/main/examples/studio'
-};
+const compositions = [
+  {
+    tag: 'workspace-app',
+    title: 'Workspace',
+    kind: 'APP / 18',
+    blurb: 'A product-style UI built from 18 component types with native slots, DOM properties and composed events — no store or component bus.',
+    href: './workspace/',
+    link: 'Open application →'
+  },
+  {
+    tag: 'studio-app',
+    title: 'Skein Studio',
+    kind: 'COMPOSE',
+    blurb: 'Five file-loaded Web Components coordinate through reactive DOM properties down and native CustomEvents up.',
+    href: 'https://github.com/Pom4H/web-component/tree/main/examples/studio',
+    link: 'Open composition →'
+  }
+];
 
 const srcdoc = example => `<!doctype html>
 <html>
@@ -26,12 +37,12 @@ const srcdoc = example => `<!doctype html>
 </html>`;
 
 gallery.replaceChildren();
-for (const example of [studio, ...examples]) {
+for (const example of [...compositions, ...examples]) {
   const card = document.createElement('article');
-  const sourceHref = example.source || `../playground/?example=${example.id}`;
-  const sourceLabel = example.source ? 'Open composition →' : 'Open source →';
+  const href = example.href || `../playground/?example=${example.id}`;
+  const label = example.link || 'Open source →';
   card.className = 'demo-card';
-  card.innerHTML = `<iframe class="demo-frame" title="${example.title}" allow="autoplay"></iframe><div class="demo-meta"><div><h2>${example.title}</h2><p>${example.blurb}</p><a class="demo-link" href="${sourceHref}">${sourceLabel}</a></div><span class="pill">${example.kind}</span></div>`;
+  card.innerHTML = `<iframe class="demo-frame" title="${example.title}" allow="autoplay"></iframe><div class="demo-meta"><div><h2>${example.title}</h2><p>${example.blurb}</p><a class="demo-link" href="${href}">${label}</a></div><span class="pill">${example.kind}</span></div>`;
   card.querySelector('iframe').srcdoc = srcdoc(example);
   gallery.append(card);
 }

@@ -1,0 +1,27 @@
+<script>
+  input('task', null)
+  input('open', false)
+  this.statuses = ['backlog','active','review','done']
+  this.close = () => host.dispatchEvent(new CustomEvent('close-task', { bubbles:true, composed:true }))
+  this.move = event => {
+    if (!this.task) return
+    host.dispatchEvent(new CustomEvent('move-task', { detail:{ id:this.task.id, status:event.currentTarget.dataset.status }, bubbles:true, composed:true }))
+  }
+</script>
+
+<section if={open}>
+  <header><small>INSPECTOR</small><button @click={close}>×</button></header>
+  <div class="body">
+    <span class="id">{task.id} / {task.project}</span>
+    <h2>{task.name}</h2>
+    <dl><dt>Owner</dt><dd>{task.owner}</dd><dt>Priority</dt><dd>{task.priority}</dd><dt>Status</dt><dd>{task.status}</dd></dl>
+    <div class="moves">
+      <small>MOVE TO</small>
+      <button each={statuses} data-status={$value} @click={move}>{$value}</button>
+    </div>
+  </div>
+</section>
+
+<style>
+  :host{display:block;height:100%}section{min-height:100%;padding:16px}header{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #2b2f2b;padding-bottom:12px}header small,.id,dt,.moves small{font:700 9px ui-monospace,monospace;letter-spacing:.09em;text-transform:uppercase;color:#737873}header button{border:0;background:transparent;color:#eee;font-size:22px;cursor:pointer}.body{padding-top:22px}.id{color:#d7ff58}h2{font:750 22px/1.1 system-ui;letter-spacing:-.03em;margin:10px 0 24px}dl{display:grid;grid-template-columns:70px 1fr;gap:10px;margin:0 0 26px}dt{color:#666c66}dd{margin:0;font-size:11px}.moves{display:grid;gap:7px}.moves button{border:1px solid #323732;background:#151815;color:#d9d6cf;padding:9px;text-align:left;text-transform:uppercase;font:700 9px ui-monospace,monospace;cursor:pointer}.moves button:hover{border-color:#d7ff58;color:#d7ff58}
+</style>

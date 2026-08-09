@@ -1,9 +1,10 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
-import { createServer } from 'node:net';
+import { createServer as createHttpServer } from 'node:http';
+import { createServer as createNetServer } from 'node:net';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { extname, join, resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
 
@@ -22,7 +23,7 @@ const browserPath = [process.env.CHROME_BIN, which('chromium'), which('chromium-
 if (!browserPath) throw new Error('Chrome/Chromium not found');
 
 const port = await new Promise((resolvePort, reject) => {
-  const server = createServer();
+  const server = createNetServer();
   server.on('error', reject);
   server.listen(0, '127.0.0.1', () => {
     const { port } = server.address();
@@ -115,11 +116,36 @@ const marker = '<script id="browser-tests">';
 const harness = testIndex.slice(testIndex.indexOf(marker) + marker.length, testIndex.lastIndexOf('</script>'));
 const { socket, send, exceptions } = await connect();
 
+const contentTypes = new Map([
+  ['.css', 'text/css; charset=utf-8'],
+  ['.html', 'text/html; charset=utf-8'],
+  ['.js', 'text/javascript; charset=utf-8'],
+]);
+const siteServer = createHttpServer(async (request, response) => {
+  try {
+    const pathname = decodeURIComponent(new URL(request.url, 'http://127.0.0.1').pathname);
+    const relative = pathname === '/playground' || pathname === '/playground/' ? 'playground/index.html' : pathname.slice(1);
+    const allowed = relative === 'skein.min.js' || ['examples/', 'playground/', 'site/'].some(prefix => relative.startsWith(prefix));
+    if (!allowed || relative.includes('..')) throw new Error('Not found');
+    const body = await readFile(join(root, relative));
+    response.writeHead(200, { 'cache-control': 'no-store', 'content-type': contentTypes.get(extname(relative)) || 'application/octet-stream' });
+    response.end(body);
+  } catch {
+    response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+    response.end('Not found');
+  }
+});
+await new Promise((resolveServer, reject) => {
+  siteServer.once('error', reject);
+  siteServer.listen(0, '127.0.0.1', resolveServer);
+});
+const siteOrigin = `http://127.0.0.1:${siteServer.address().port}`;
+
 try {
   await newDocument(send, '<third-party-box></third-party-box><test-runtime></test-runtime><inline-boot></inline-boot><template skein="inline-boot"><script>this.word="woven"</script><b id="boot-word">{word}</b></template><pre id="results">Running…</pre>');
   await evaluate(send, `window.fetch=async url=>String(url).endsWith('test/runtime.html')?new Response(${JSON.stringify(runtimeFixture)},{status:200}):new Response('',{status:404})`);
   await loadReadable(send);
-  await evaluate(send, `Skein.define('row-life','<script>onCleanup(()=>window.__rowDisposals=(window.__rowDisposals||0)+1)<\\/script><i>life</i>')`);
+  await evaluate(send, `Skein.define('row-life','<script>onCleanup(()=>window.__rowDisposals=(window.__rowDisposals||0)+1)<\\/script><i>life</i>');Skein.define('css-shadow-child','<span id="inherited">inherited</span><style>#inherited{color:var(--tone)}</style>')`);
   await evaluate(send, harness);
 
   let result = {};
@@ -167,6 +193,24 @@ try {
   if (contract.parent !== '8' || contract.child !== '8') throw new Error(`Production composition failed: ${JSON.stringify(contract)}`);
   console.log('min-composition: passed');
 
+  await newDocument(send, '<prod-css-properties></prod-css-properties>');
+  await evaluate(send, `window.fetch=async()=>new Response('',{status:404})`);
+  await loadMin(send, `Skein.define('prod-css-child','<span id="inherited">inherited</span><style>#inherited{color:var(--tone)}</style>');Skein.define('prod-css-properties','<script>this.size=7;this.zero=0;this.tone="rgb(7, 8, 9)";this.nullable="null-live";this.undefinable="undefined-live";this.falsy="false-live";this.initialNull=null;this.initialUndefined=undefined;this.initialFalse=false<\/script><div id="target" style="display:block;--static-token:fixed" --size={size} --zero={zero} --tone={tone} --nullable={nullable} --undefinable={undefinable} --falsy={falsy} --initial-null={initialNull} --initial-undefined={initialUndefined} --initial-false={initialFalse}></div><prod-css-child id="child" style="display:block;--child-static:fixed" --tone={tone}></prod-css-child><style>#target{width:calc(var(--size) * 1px);color:var(--tone)}</style>')`);
+  let cssProperties;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    await sleep(20);
+    cssProperties = await evaluate(send, `(()=>{const root=document.querySelector('prod-css-properties')?.shadowRoot,node=root?.querySelector('#target'),child=root?.querySelector('#child'),inherited=child?.shadowRoot?.querySelector('#inherited');if(!node||!inherited)return null;const style=getComputedStyle(node);return{size:node.style.getPropertyValue('--size'),zero:node.style.getPropertyValue('--zero'),tone:node.style.getPropertyValue('--tone'),nullable:node.style.getPropertyValue('--nullable'),undefinable:node.style.getPropertyValue('--undefinable'),falsy:node.style.getPropertyValue('--falsy'),initialNull:node.style.getPropertyValue('--initial-null'),initialUndefined:node.style.getPropertyValue('--initial-undefined'),initialFalse:node.style.getPropertyValue('--initial-false'),bindingAttribute:node.getAttribute('--size'),display:node.style.display,staticToken:node.style.getPropertyValue('--static-token'),width:style.width,color:style.color,childDisplay:child.style.display,childStatic:child.style.getPropertyValue('--child-static'),inheritedColor:getComputedStyle(inherited).color}})()`);
+    if (cssProperties) break;
+  }
+  if (cssProperties?.size !== '7' || cssProperties.zero !== '0' || cssProperties.tone !== 'rgb(7, 8, 9)' || cssProperties.nullable !== 'null-live' || cssProperties.undefinable !== 'undefined-live' || cssProperties.falsy !== 'false-live' || cssProperties.initialNull !== '' || cssProperties.initialUndefined !== '' || cssProperties.initialFalse !== '' || cssProperties.bindingAttribute !== null || cssProperties.display !== 'block' || cssProperties.staticToken !== 'fixed' || cssProperties.width !== '7px' || cssProperties.color !== 'rgb(7, 8, 9)' || cssProperties.childDisplay !== 'block' || cssProperties.childStatic !== 'fixed' || cssProperties.inheritedColor !== 'rgb(7, 8, 9)') throw new Error(`Minified CSS property mount failed: ${JSON.stringify(cssProperties)}`);
+
+  cssProperties = await evaluate(send, `(async()=>{const host=document.querySelector('prod-css-properties'),node=host.shadowRoot.querySelector('#target'),child=host.shadowRoot.querySelector('#child'),inherited=child.shadowRoot.querySelector('#inherited'),writes=[],removals=[],styleAttributes=[];const setProperty=CSSStyleDeclaration.prototype.setProperty,removeProperty=CSSStyleDeclaration.prototype.removeProperty,setAttribute=Element.prototype.setAttribute;CSSStyleDeclaration.prototype.setProperty=function(name,value,priority){if(this===node.style)writes.push([name,String(value)]);return setProperty.call(this,name,value,priority)};CSSStyleDeclaration.prototype.removeProperty=function(name){if(this===node.style)removals.push(name);return removeProperty.call(this,name)};Element.prototype.setAttribute=function(name,value){if(this===node&&name==='style')styleAttributes.push(String(value));return setAttribute.call(this,name,value)};try{host.state.size=19;host.state.tone='rgb(10, 11, 12)';host.state.nullable=null;host.state.undefinable=undefined;host.state.falsy=false;await Promise.resolve();await Promise.resolve();const style=getComputedStyle(node);return{size:node.style.getPropertyValue('--size'),tone:node.style.getPropertyValue('--tone'),nullable:node.style.getPropertyValue('--nullable'),undefinable:node.style.getPropertyValue('--undefinable'),falsy:node.style.getPropertyValue('--falsy'),display:node.style.display,staticToken:node.style.getPropertyValue('--static-token'),width:style.width,color:style.color,childDisplay:child.style.display,childStatic:child.style.getPropertyValue('--child-static'),inheritedColor:getComputedStyle(inherited).color,writes,removals,styleAttributes}}finally{CSSStyleDeclaration.prototype.setProperty=setProperty;CSSStyleDeclaration.prototype.removeProperty=removeProperty;Element.prototype.setAttribute=setAttribute}})()`, { awaitPromise: true });
+  const wroteSize = cssProperties.writes.some(([name, value]) => name === '--size' && value === '19');
+  const wroteTone = cssProperties.writes.some(([name, value]) => name === '--tone' && value === 'rgb(10, 11, 12)');
+  const removedValues = ['--nullable', '--undefinable', '--falsy'].every(name => cssProperties.removals.includes(name) && cssProperties[name.slice(2)] === '');
+  if (cssProperties.size !== '19' || cssProperties.tone !== 'rgb(10, 11, 12)' || !wroteSize || !wroteTone || !removedValues || cssProperties.styleAttributes.length || cssProperties.display !== 'block' || cssProperties.staticToken !== 'fixed' || cssProperties.width !== '19px' || cssProperties.color !== 'rgb(10, 11, 12)' || cssProperties.childDisplay !== 'block' || cssProperties.childStatic !== 'fixed' || cssProperties.inheritedColor !== 'rgb(10, 11, 12)') throw new Error(`Minified CSS property update failed: ${JSON.stringify(cssProperties)}`);
+  console.log('min-css-properties: passed');
+
   await newDocument(send, '<studio-app></studio-app>');
   await evaluate(send, `window.fetch=async url=>{const path=new URL(String(url)).pathname.slice(1);const source=${JSON.stringify(studioFixtures)}[path];return source===undefined?new Response('',{status:404}):new Response(source,{status:200})}`);
   await loadMin(send);
@@ -207,10 +251,93 @@ try {
   if (late !== 'ready') throw new Error(`Late define failed: ${late}`);
   console.log('late-define: passed');
 
+  await send('Emulation.setDeviceMetricsOverride', { width: 1200, height: 800, deviceScaleFactor: 1, mobile: false });
+  await send('Page.navigate', { url: `${siteOrigin}/playground/` });
+  await sleep(40);
+
+  let playground;
+  for (let attempt = 0; attempt < 300; attempt++) {
+    try {
+      playground = await evaluate(send, `(()=>{const source=document.querySelector('#source'),preview=document.querySelector('#preview'),numbers=document.querySelector('#line-numbers code');return{example:document.querySelector('#example')?.value,state:document.querySelector('#state')?.dataset.state,draft:document.querySelector('#draft-state')?.dataset.state,sandbox:preview?.getAttribute('sandbox'),sameOrigin:preview?.sandbox.contains('allow-same-origin'),source:source?.value,lineCount:source?.value.split('\\n').length,gutterCount:numbers?.textContent.split('\\n').length}})()`);
+    } catch {}
+    if (playground?.state === 'live') break;
+    await sleep(25);
+  }
+  if (playground?.example !== 'counter' || playground.state !== 'live' || playground.draft !== 'original' || playground.sandbox !== 'allow-scripts' || playground.sameOrigin || !playground.source?.includes('this.count = 0') || playground.gutterCount !== playground.lineCount) {
+    throw new Error(`Playground initial state failed: ${JSON.stringify(playground)}`);
+  }
+
+  const sandboxSource = `<script>
+  let dom = 'allowed'
+  let storage = 'allowed'
+  try { parent.document.body.dataset.sandboxEscape = 'yes' } catch (error) { dom = error.name }
+  try { parent.localStorage.setItem('skein.sandbox.escape', 'yes') } catch (error) { storage = error.name }
+  parent.postMessage({ type: 'skein-error', message: 'stale sandbox error', runId: -1 }, '*')
+  parent.postMessage({ type: 'sandbox-probe', dom, storage }, '*')
+</script>
+<p>Sandbox probe</p>`;
+
+  let editor = await evaluate(send, `(()=>{const source=document.querySelector('#source'),auto=document.querySelector('#autorun'),preview=document.querySelector('#preview');window.__playgroundOriginal=source.value;window.__sandboxProbe=null;addEventListener('message',event=>{if(event.source===preview.contentWindow&&event.data?.type==='sandbox-probe')window.__sandboxProbe=event.data});auto.checked=false;auto.dispatchEvent(new Event('change',{bubbles:true}));source.value=${JSON.stringify(sandboxSource)};source.setSelectionRange(source.value.length,source.value.length);source.dispatchEvent(new Event('input',{bubbles:true}));const lines=source.value.split('\\n').length;return{lines,label:document.querySelector('#lines').textContent,gutter:document.querySelector('#line-numbers code').textContent.split('\\n').length,cursor:document.querySelector('#cursor-status').textContent,draft:document.querySelector('#draft-state').dataset.state,state:document.querySelector('#state').dataset.state,highlighted:!!document.querySelector('#highlight code .tok-keyword')}})()`);
+  if (editor.lines !== editor.gutter || editor.label !== `${editor.lines} lines` || !editor.cursor.startsWith(`Ln ${editor.lines}, Col `) || editor.draft !== 'edited' || editor.state !== 'manual' || !editor.highlighted) {
+    throw new Error(`Playground editor paint failed: ${JSON.stringify(editor)}`);
+  }
+
+  await sleep(650);
+  let draft = await evaluate(send, `(()=>{const source=document.querySelector('#source');return{stored:localStorage.getItem('skein.playground.draft.counter'),value:source.value,state:document.querySelector('#draft-state').dataset.state}})()`);
+  if (draft.stored !== draft.value || draft.state !== 'saved') throw new Error(`Playground draft autosave failed: ${JSON.stringify(draft)}`);
+
+  draft = await evaluate(send, `(()=>{const source=document.querySelector('#source');source.value+='\\n<!-- immediate save -->';source.setSelectionRange(source.value.length,source.value.length);source.dispatchEvent(new Event('input',{bubbles:true}));document.dispatchEvent(new KeyboardEvent('keydown',{key:'s',ctrlKey:true,bubbles:true,cancelable:true}));return{stored:localStorage.getItem('skein.playground.draft.counter'),value:source.value,state:document.querySelector('#draft-state').dataset.state}})()`);
+  if (draft.stored !== draft.value || draft.state !== 'saved') throw new Error(`Playground keyboard save failed: ${JSON.stringify(draft)}`);
+
+  await evaluate(send, `document.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',ctrlKey:true,bubbles:true,cancelable:true}))`);
+  let sandbox;
+  for (let attempt = 0; attempt < 200; attempt++) {
+    await sleep(25);
+    sandbox = await evaluate(send, `({probe:window.__sandboxProbe,state:document.querySelector('#state').dataset.state,errorHidden:document.querySelector('#error').hidden,parentTouched:document.body.dataset.sandboxEscape||null,storageTouched:localStorage.getItem('skein.sandbox.escape')})`);
+    if (sandbox.probe && sandbox.state === 'live') break;
+  }
+  if (!sandbox?.probe || sandbox.probe.dom === 'allowed' || sandbox.probe.storage === 'allowed' || sandbox.parentTouched || sandbox.storageTouched || !sandbox.errorHidden || sandbox.state !== 'live') {
+    throw new Error(`Playground sandbox isolation failed: ${JSON.stringify(sandbox)}`);
+  }
+
+  const errorSource = `<script>send('skein-error', 'Expected preview error')</script>\n<p>Error probe</p>`;
+  await evaluate(send, `(()=>{const source=document.querySelector('#source');source.value=${JSON.stringify(errorSource)};source.dispatchEvent(new Event('input',{bubbles:true}));document.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',ctrlKey:true,bubbles:true,cancelable:true}))})()`);
+  let previewError;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    await sleep(20);
+    previewError = await evaluate(send, `({state:document.querySelector('#state').dataset.state,hidden:document.querySelector('#error').hidden,message:document.querySelector('#error-message').textContent})`);
+    if (previewError.state === 'error') break;
+  }
+  await sleep(80);
+  previewError = await evaluate(send, `({state:document.querySelector('#state').dataset.state,hidden:document.querySelector('#error').hidden,message:document.querySelector('#error-message').textContent})`);
+  if (previewError.state !== 'error' || previewError.hidden || !previewError.message.includes('Expected preview error')) throw new Error(`Playground error state failed: ${JSON.stringify(previewError)}`);
+  const dismissed = await evaluate(send, `(()=>{document.querySelector('#dismiss-error').click();return document.querySelector('#error').hidden})()`);
+  if (!dismissed) throw new Error('Playground error dismissal failed');
+
+  const reset = await evaluate(send, `(()=>{window.confirm=()=>true;document.querySelector('#reset').click();const source=document.querySelector('#source');return{original:source.value===window.__playgroundOriginal,stored:localStorage.getItem('skein.playground.draft.counter'),draft:document.querySelector('#draft-state').dataset.state,state:document.querySelector('#state').dataset.state}})()`);
+  if (!reset.original || reset.stored !== null || reset.draft !== 'original' || reset.state !== 'manual') throw new Error(`Playground reset failed: ${JSON.stringify(reset)}`);
+
+  const split = await evaluate(send, `(()=>{const splitter=document.querySelector('#splitter'),before=Number(splitter.getAttribute('aria-valuenow'));splitter.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true,cancelable:true}));return{before,after:Number(splitter.getAttribute('aria-valuenow')),stored:Number(localStorage.getItem('skein.playground.editorRatio')),text:splitter.getAttribute('aria-valuetext')}})()`);
+  if (!(split.after > split.before) || !(split.stored > split.before / 100) || split.text !== `Editor ${split.after} percent`) throw new Error(`Playground keyboard splitter failed: ${JSON.stringify(split)}`);
+
+  await evaluate(send, `(()=>{window.__copiedShare='';Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async value=>{window.__copiedShare=value}}});document.querySelector('#share').click()})()`);
+  let share;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    await sleep(20);
+    share = await evaluate(send, `(()=>{if(!window.__copiedShare)return null;const source=document.querySelector('#source').value,url=new URL(window.__copiedShare),binary=atob(url.hash.slice(6)),decoded=new TextDecoder().decode(Uint8Array.from(binary,char=>char.charCodeAt(0)));return{example:url.searchParams.get('example'),decoded,matches:decoded===source,label:document.querySelector('#share').textContent}})()`);
+    if (share) break;
+  }
+  if (share?.example !== 'counter' || !share.matches || !share.label.includes('Copied')) throw new Error(`Playground share link failed: ${JSON.stringify(share)}`);
+
+  console.log('playground-dx: passed');
+  console.log('playground-sandbox: passed');
+
   if (exceptions.length) throw new Error(`Browser exceptions:\n${exceptions.join('\n')}`);
 } finally {
   socket.close();
   browser.kill('SIGTERM');
   await Promise.race([once(browser, 'exit'), sleep(1000)]);
+  siteServer.closeAllConnections?.();
+  await new Promise(resolveServer => siteServer.close(resolveServer));
   await rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 }

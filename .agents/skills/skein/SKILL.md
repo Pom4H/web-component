@@ -1,16 +1,16 @@
 ---
 name: skein-web
-description: Build, modify, review, or debug websites and Web Components using the Skein HTML-first reactive runtime. Use for Skein bindings, composition, component files, CSS/SVG/Canvas/Web Audio, keyed lists, lifecycle/cleanup, SEO, examples, or runtime changes.
+description: Build, modify, review, or debug websites and Web Components using the Skein HTML-first reactive runtime. Use for Skein bindings, composition, component files, native slots, CSS/SVG/Canvas/Web Audio, keyed lists, lifecycle/cleanup, SEO, examples, or runtime changes.
 license: MIT
-compatibility: Browser projects using Skein 0.6+ or the Skein repository. Core work remains zero-dependency and runnable without a user build step.
+compatibility: Browser projects using Skein 0.6.1+ or the Skein repository. Core work remains zero-dependency and runnable without a user build step.
 metadata:
   author: Pom4H
-  version: "0.4.0"
+  version: "0.5.0"
 ---
 
 # Skein Web
 
-Use Skein as a thin reactive layer over native HTML, CSS, SVG, Canvas, Web Audio and Custom Elements.
+Use Skein as a thin reactive layer over native HTML, CSS, Shadow DOM, SVG, Canvas, Web Audio and Custom Elements.
 
 ## Smallest shape
 
@@ -25,7 +25,7 @@ Use Skein as a thin reactive layer over native HTML, CSS, SVG, Canvas, Web Audio
 
 External files map from tag names: `<user-card>` → `user/card.html`.
 
-## State
+## State and bindings
 
 ```html
 <script>
@@ -34,43 +34,97 @@ External files map from tag names: `<user-card>` → `user/card.html`.
   this.increment = () => this.count++
   this.total = computed(() => this.price * this.quantity)
 </script>
-```
 
-Plain objects/arrays are reactive. Date, Map, Set, DOM/platform objects and class instances stay native. Do not wrap native objects just to put them in Skein state.
-
-## Bindings
-
-```html
 <h1>{user.name}</h1>
 <label for={inputId}>Name</label>
 <input .value={name}>
 <button ?disabled={saving}>Save</button>
 <button @click={save}>Save</button>
+<reactor-core --load={reactor.load}></reactor-core>
 ```
 
-Braces contain strict property paths. Use `computed()` for expressions. `in={...}` was removed in 0.6; write full paths.
+Plain objects/arrays are reactive. Platform/class objects stay native. Braces contain strict property paths; use `computed()` for expressions.
+
+### CSS custom properties
+
+Bind continuous visual values one property at a time:
+
+```html
+<reactor-core
+  style="display:block; contain:layout"
+  --temperature={reactor.temperature}
+  --load={reactor.load}>
+</reactor-core>
+```
+
+`--name={path}` calls `element.style.setProperty('--name', value)` for non-sentinel values. `null`, `undefined` and `false` remove only that declaration with `removeProperty()`; `0` stays set. This binding never rebuilds or assigns a string `style` attribute, so ordinary static inline declarations and unrelated custom properties coexist. Do not combine it with a reactive whole-`style={path}` binding on the same element. A custom property on the host naturally inherits into its Shadow DOM.
 
 ## Composition
 
-Child:
+Prefer exactly three browser mechanisms:
+
+```text
+data      → DOM properties
+/actions/ ← bubbling + composed CustomEvent
+content   → native <slot>
+```
+
+Do not add a store, provide/inject system, component event bus or framework slot abstraction merely to connect components.
+
+### Inputs
 
 ```html
 <script>
+  input('name', 'Metric')
   input('value', 0)
-  this.raise = () => host.dispatchEvent(new CustomEvent('value-change', {
-    detail: { value: this.value + 1 }, bubbles: true, composed: true
-  }))
 </script>
-<button @click={raise}>{value}</button>
 ```
 
-Owner:
+Static primitive configuration can use literal attributes:
 
 ```html
-<value-stepper .value={value} @value-change={changed}></value-stepper>
+<ui-metric name="Active" tone="lime"></ui-metric>
 ```
 
-Input values written before child mount are adopted. Input host-name collisions throw. Inputs are one-way; outputs are native events. Do not invent stores/provide-inject/event buses merely for component communication.
+Live values and non-primitives use DOM properties:
+
+```html
+<ui-metric name="Active" .value={active}></ui-metric>
+<task-card .task={task}></task-card>
+```
+
+Input initialization order is pre-mount property → static attribute → fallback. Attribute conversion follows the fallback type. A static attribute is only an initial seed; later attribute changes do not update child state. Objects/functions must use properties. Host-name collisions such as `title`, `state` and `dispose` throw.
+
+### Outputs
+
+```js
+host.dispatchEvent(new CustomEvent('value-change', {
+  detail: { value: this.value + 1 },
+  bubbles: true,
+  composed: true
+}))
+```
+
+A composed event can cross nested Shadow DOM boundaries directly. Do not relay it through intermediate Skein components unless that component intentionally changes the domain event.
+
+### Content
+
+Use browser slots:
+
+```html
+<!-- ui/panel.html -->
+<header><slot name="heading"></slot></header>
+<slot></slot>
+```
+
+```html
+<ui-panel>
+  <span slot="heading">Tasks</span>
+  <task-board .tasks={tasks}></task-board>
+</ui-panel>
+```
+
+Use native `slotchange` / `assignedElements()` when needed.
 
 ## Lists
 
@@ -81,38 +135,41 @@ Input values written before child mount are adopted. Input host-name collisions 
 </article>
 ```
 
-Use `each`, not the removed list `for`. Native dynamic `for={inputId}` stays HTML. Explicit keys must be stable, non-null and unique; Skein validates before reconciling.
+Use `each`, not the removed list `for`. Native dynamic `for={inputId}` stays HTML. Explicit keys must be stable, non-null and unique.
 
 ## Native APIs and cleanup
 
-Keep SVG as SVG and Canvas/Web Audio imperative. Bind state into CSS custom properties instead of scripting layout/animation.
+Keep SVG as SVG and Canvas/Web Audio imperative. Bind reactive values into CSS custom properties with `--name={path}` instead of scripting layout/animation or assembling a reactive `style` string.
 
 ```js
 window.addEventListener('resize', this.measure, { signal: abortSignal })
-fetch(url, { signal: abortSignal })
 const id = setInterval(this.tick, 1000)
 onCleanup(() => clearInterval(id))
 ```
 
 Injected names: `input`, `computed`, `effect`, `onCleanup`, `host`, `abortSignal`.
 
+## Application-scale reference
+
+Use `examples/workspace/` when judging composition ergonomics. It contains 18 component types and intentionally uses no framework communication primitive beyond inputs plus browser events/slots. `test/workspace.mjs` validates it against generated `skein.min.js` in Chromium.
+
 ## Custom Element coexistence
 
-Skein fetches a tag's matching HTML file before defining the custom element. A missing source leaves the tag unclaimed. Never restore eager claiming of every undefined custom element. Nested third-party custom elements must not be force-disposed; only nested `SkeinElement`s receive permanent `dispose()` on renderer-owned removal.
+Skein fetches a matching HTML file before defining an unknown custom tag. A missing source leaves the tag unclaimed. Never eagerly claim all undefined custom elements or force-dispose third-party elements.
 
 ## Runtime work
 
-Read `references/architecture.md` first. Preserve zero dependencies, no virtual DOM, exact dependency tracking, shared Proxy identity, native opaque objects, keyed identity, transactional mount rollback, scoped cleanup, render-before-user-effect scheduling, reconnect semantics and minified production correctness.
+Read `references/architecture.md` first. Preserve zero dependencies, no virtual DOM, exact dependency tracking, shared Proxy identity, native opaque objects, keyed identity, transactional mount rollback, scoped cleanup, render-before-user-effect scheduling and generated-production correctness.
 
 Run:
 
 ```bash
 node tools/build.mjs
+node tools/build.mjs --check
 node test/run.mjs
+node test/workspace.mjs
 ```
-
-The suite drives readable and generated production runtimes in real Chrome and includes the multi-file Studio path.
 
 ## Avoid
 
-Do not invent JSX/template expressions, full-list rerenders, `in` contexts, framework-specific component buses, public scheduler internals, SSR/hydration claims, arbitrary external-element disposal or dependencies that duplicate browser APIs.
+Do not invent JSX/template expressions, full-list rerenders, `in` contexts, framework-specific buses/slots, public scheduler internals, SSR/hydration claims, arbitrary external-element disposal or dependencies that duplicate browser APIs.

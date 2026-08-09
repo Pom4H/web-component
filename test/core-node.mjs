@@ -1,5 +1,6 @@
 const { ReactiveState, Scope, ReactiveEffect, ComputedRef, Scheduler } = await import('../runtime/reactive.js');
 const { highlight } = await import('../site/highlight.js');
+const { cursorLabel, indentSelection, insertIndentedNewline } = await import('../playground/editor.js');
 
 const assert = (value, message) => { if (!value) throw new Error(message); };
 const equal = (actual, expected, message) => {
@@ -104,6 +105,29 @@ assert(highlighted.includes('<span class="tok-attr">skein</span>='), 'attribute 
 assert(highlighted.includes('<span class="tok-bind">{up}</span>'), 'bindings inside tags should be highlighted');
 assert(!highlighted.includes('<class='), 'highlighter must not corrupt its own span markup');
 assert(!highlighted.includes('</class='), 'highlighter must not emit fake closing tags');
+
+let edit = indentSelection('alpha', 2, 2);
+equal(edit.value, 'al  pha', 'Tab inserts two spaces at the caret');
+equal(edit.start, 4, 'Tab advances the caret');
+equal(edit.end, 4, 'Tab keeps a collapsed selection');
+
+edit = indentSelection('one\n  two\nthree\n', 0, 16);
+equal(edit.value, '  one\n    two\n  three\n', 'Tab indents every selected line once');
+equal(edit.start, 2, 'multiline indent preserves the selection start');
+equal(edit.end, 22, 'multiline indent preserves the selected lines');
+
+edit = indentSelection('\tone\n  two\nthree', 0, 16, true);
+equal(edit.value, 'one\ntwo\nthree', 'Shift+Tab removes one tab or indent width per line');
+equal(edit.start, 0, 'multiline outdent keeps the first line selected');
+equal(edit.end, 13, 'multiline outdent maps the selection end');
+
+edit = insertIndentedNewline('  <div>value</div>', 7, 12);
+equal(edit.value, '  <div>\n  </div>', 'Enter replaces the selection with an indented newline');
+equal(edit.start, 10, 'Enter places the caret after inherited indentation');
+equal(edit.end, 10, 'Enter leaves a collapsed selection');
+
+equal(cursorLabel('first\nsecond', 8, 8), 'Ln 2, Col 3', 'cursor label reports line and column');
+equal(cursorLabel('first\nsecond', 6, 10), 'Ln 2, Col 5 · 4 selected', 'cursor label reports selection length');
 
 let cleanup = 0;
 const abortSignal = scope.signal;

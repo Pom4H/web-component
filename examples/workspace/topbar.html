@@ -1,0 +1,18 @@
+<script>
+  input('query', '')
+  this.searchId = 'workspace-search'
+  this.change = event => host.dispatchEvent(new CustomEvent('search-change', { detail:{ value:event.currentTarget.value }, bubbles:true, composed:true }))
+</script>
+
+<div class="bar">
+  <div><small>OPERATIONS / LIVE</small><strong>Product workspace</strong></div>
+  <div class="search">
+    <label for={searchId}>Search</label>
+    <input id={searchId} .value={query} @input={change} placeholder="task, owner, project">
+  </div>
+  <span class="presence">4 online</span>
+</div>
+
+<style>
+  :host{display:block;height:100%}.bar{height:100%;padding:0 20px;display:flex;align-items:center;gap:20px}.bar>div:first-child{display:grid;gap:2px;min-width:180px}small,label{font:700 9px ui-monospace,monospace;letter-spacing:.1em;text-transform:uppercase;color:#747a73}strong{font-size:13px}.search{margin-left:auto;width:min(420px,45vw);position:relative}.search label{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:#d7ff58}.search input{width:100%;border:1px solid #30342f;background:#151815;color:#f4f1e8;padding:10px 12px 10px 72px;outline:none;font:12px system-ui}.search input:focus{border-color:#d7ff58}.presence{font:600 10px ui-monospace,monospace;color:#91968f;white-space:nowrap}@media(max-width:640px){.bar{padding:0 12px}.bar>div:first-child,.presence{display:none}.search{margin:0;width:100%}}
+</style>

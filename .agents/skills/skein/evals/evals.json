@@ -37,6 +37,11 @@
       "expected": "Keeps actual SVG markup, binds only dynamic attributes/CSS variables, uses native CSS/SVG features, and avoids a graphics framework."
     },
     {
+      "id": "css-custom-properties",
+      "prompt": "Drive several animated CSS variables on a Skein custom element without rebuilding its inline style, and clear one optional value when it is absent.",
+      "expected": "Uses separate --name={path} bindings, keeps ordinary static style declarations independent, relies on CSS custom-property inheritance through Shadow DOM, and uses null/undefined/false to remove only the optional declaration; does not assemble a reactive style string."
+    },
+    {
       "id": "canvas-cleanup",
       "prompt": "Create a Canvas animation component in Skein that stops cleanly when disposed.",
       "expected": "Keeps Canvas imperative, uses Skein for reactive controls/state, and cancels animation/timers via onCleanup or abortSignal where applicable."

@@ -9,7 +9,7 @@ For user-level installation, copy the `skein` directory into the skill directory
 The skill uses progressive disclosure:
 
 - `SKILL.md` — activation metadata and core workflow;
-- `references/syntax.md` — application syntax and API;
+- `references/syntax.md` — application syntax and API, including fine-grained CSS custom-property bindings;
 - `references/architecture.md` — runtime internals, only for framework work;
 - `evals/evals.json` — representative prompts and expected behavior.
 

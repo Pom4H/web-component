@@ -25,6 +25,67 @@ test('prototype properties do not leak into binding lookup',({root})=>{equal(roo
 test('undefined local shadows root',({root})=>equal(root.querySelectorAll('#items>li')[2].querySelector('.item-name').textContent,''));
 test('dynamic native for stays native',async({root,state})=>{equal(root.querySelector('#native-for').getAttribute('for'),'real-input');state.inputId='other-input';await tick();equal(root.querySelector('#native-for').getAttribute('for'),'other-input')});
 test('boolean and property bindings',async({root,state})=>{ok(root.querySelector('#real-input').disabled);state.enabled=false;await tick();equal(root.querySelector('#real-input').disabled,false)});
+test('CSS custom properties update through fine-grained CSSOM bindings',async({root,state})=>{
+  const node=root.querySelector('#css-properties');
+  const shadowChild=await wait(()=>root.querySelector('#css-shadow-child')?.shadowRoot?.querySelector('#inherited')&&root.querySelector('#css-shadow-child'));
+  const inherited=shadowChild.shadowRoot.querySelector('#inherited');
+  equal(node.getAttribute('--number'),null,'binding attribute is removed');
+  equal(node.style.getPropertyValue('--number'),'12','initial number');
+  equal(node.style.getPropertyValue('--zero'),'0','zero is not treated as false');
+  equal(node.style.getPropertyValue('--string'),'rgb(1, 2, 3)','initial string');
+  equal(node.style.getPropertyValue('--nullable'),'null-live','initial nullable value');
+  equal(node.style.getPropertyValue('--undefinable'),'undefined-live','initial undefinable value');
+  equal(node.style.getPropertyValue('--falsy'),'false-live','initial falsy value');
+  for(const name of ['--initial-null','--initial-undefined','--initial-false'])equal(node.style.getPropertyValue(name),'',name+' starts removed');
+  equal(node.style.display,'block','static style coexists');
+  equal(node.style.getPropertyValue('--static-token'),'intact','static custom property coexists');
+  equal(node.style.getPropertyValue('--overridden'),'binding-wins','binding overrides the same static declaration');
+  equal(getComputedStyle(node).width,'12px','binding applies inside Shadow DOM');
+  equal(getComputedStyle(node).color,'rgb(1, 2, 3)','string binding reaches Shadow DOM CSS');
+  equal(shadowChild.style.display,'block','static style coexists on a custom-element host');
+  equal(shadowChild.style.getPropertyValue('--child-static'),'intact','unrelated host custom property coexists');
+  equal(getComputedStyle(inherited).color,'rgb(1, 2, 3)','host custom property inherits into a child shadow root');
+
+  const writes=[],removals=[],styleAttributes=[];
+  const setProperty=CSSStyleDeclaration.prototype.setProperty;
+  const removeProperty=CSSStyleDeclaration.prototype.removeProperty;
+  const setAttribute=Element.prototype.setAttribute;
+  CSSStyleDeclaration.prototype.setProperty=function(name,value,priority){if(this===node.style)writes.push([name,String(value)]);return setProperty.call(this,name,value,priority)};
+  CSSStyleDeclaration.prototype.removeProperty=function(name){if(this===node.style)removals.push(name);return removeProperty.call(this,name)};
+  Element.prototype.setAttribute=function(name,value){if(this===node&&name==='style')styleAttributes.push(String(value));return setAttribute.call(this,name,value)};
+  try{
+    state.cssNumber=24;
+    state.cssString='rgb(4, 5, 6)';
+    state.cssNull=null;
+    state.cssUndefined=undefined;
+    state.cssFalse=false;
+    state.cssOverride=null;
+    await tick();
+  }finally{
+    CSSStyleDeclaration.prototype.setProperty=setProperty;
+    CSSStyleDeclaration.prototype.removeProperty=removeProperty;
+    Element.prototype.setAttribute=setAttribute;
+  }
+
+  ok(writes.some(([name,value])=>name==='--number'&&value==='24'),'number uses style.setProperty');
+  ok(writes.some(([name,value])=>name==='--string'&&value==='rgb(4, 5, 6)'),'string uses style.setProperty');
+  for(const name of ['--nullable','--undefinable','--falsy']){
+    equal(node.style.getPropertyValue(name),'',name+' is removed');
+    ok(removals.includes(name),name+' uses style.removeProperty');
+  }
+  equal(node.style.getPropertyValue('--overridden'),'','sentinel removal removes the binding-owned same-name declaration');
+  ok(removals.includes('--overridden'),'same-name declaration uses style.removeProperty');
+  equal(styleAttributes.length,0,'updates do not rewrite the style attribute');
+  equal(node.style.getPropertyValue('--number'),'24','number updates');
+  equal(node.style.getPropertyValue('--string'),'rgb(4, 5, 6)','string updates');
+  equal(node.style.display,'block','static style survives updates');
+  equal(node.style.getPropertyValue('--static-token'),'intact','static custom property survives updates');
+  equal(getComputedStyle(node).width,'24px','updated number applies inside Shadow DOM');
+  equal(getComputedStyle(node).color,'rgb(4, 5, 6)','updated string applies inside Shadow DOM');
+  equal(shadowChild.style.display,'block','host static style survives updates');
+  equal(shadowChild.style.getPropertyValue('--child-static'),'intact','host unrelated custom property survives updates');
+  equal(getComputedStyle(inherited).color,'rgb(4, 5, 6)','updated host property reaches the child shadow root');
+});
 test('@event binding',async({root,state})=>{const n=state.count;root.querySelector('#event').click();await tick();equal(state.count,n+1)});
 test('sync writes share one microtask',async({root,state})=>{const runs=window.__effectRuns;state.count=10;state.count=11;state.count=12;await tick();equal(root.querySelector('#title').textContent,'Hello 12');equal(window.__effectRuns-runs,1)});
 test('primitive lists expose $value and occurrence identity',async({root,state})=>{equal(root.querySelector('#primitives').textContent,'A:0;A:1;B:2;');state.primitives.reverse();await tick();equal(root.querySelector('#primitives').textContent,'B:0;A:1;A:2;')});
@@ -90,6 +151,7 @@ test('Date Map and class instances stay native',async()=>{Skein.define('native-s
 test('removed in directive fails with migration hint',()=>{let message='';try{Skein.define('old-context','<p in={user}>{name}</p>')}catch(error){message=error.message}ok(message.includes('was removed'),message)});
 test('invalid binding paths fail at compile time',()=>{let message='';try{Skein.define('bad-path','<b>{user name}</b>')}catch(error){message=error.message}ok(message.includes('Invalid Skein binding path'),message)});
 test('malformed special binding fails at compile time',()=>{let message='';try{Skein.define('bad-binding','<input .value="x {name}">')}catch(error){message=error.message}ok(message.includes('must be a single path binding'),message)});
+test('CSS custom property binding requires one exact path',()=>{let message='';try{Skein.define('bad-css-binding','<i --size="calc({size} * 1px)"></i>')}catch(error){message=error.message}ok(message.includes('--name must be a single path binding'),message)});
 test('malformed each fails at compile time',()=>{let message='';try{Skein.define('bad-each','<i each="items">x</i>')}catch(error){message=error.message}ok(message.includes('each must be a single path binding'),message)});
 test('abortSignal is lazy and aborts on dispose',async()=>{Skein.define('abort-life','<script>window.__browserAbort=abortSignal<\/script><i>abort</i>');const el=document.createElement('abort-life');document.body.append(el);await wait(()=>window.__browserAbort);equal(window.__browserAbort.aborted,false);el.dispose();equal(window.__browserAbort.aborted,true);el.remove();window.__browserAbort=null});
 test('disconnect pauses and reconnect resumes',async({host,state})=>{const parent=host.parentNode,title=host.shadowRoot.querySelector('#title');host.remove();state.count=30;await tick();equal(title.textContent,'Hello 12');parent.prepend(host);await tick();equal(title.textContent,'Hello 30')});

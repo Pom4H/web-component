@@ -1,46 +1,61 @@
 <!doctype html><html lang="en"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Docs — Skein</title><meta name="description" content="Skein 0.6 reference: strict path bindings, native component composition, keyed each lists, lifecycle and browser APIs."><link rel="stylesheet" href="../site/styles.css"><script type="module" src="../site/site.js"></script>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Docs — Skein</title><meta name="description" content="Skein 0.6.1 reference: strict bindings, native component composition, lifecycle and the zero-dependency browser Playground."><link rel="stylesheet" href="../site/styles.css"><script type="module" src="../site/site.js"></script>
 </head><body><skein-nav><nav class="fallback-nav" aria-label="Primary"><a class="fallback-brand" href="/web-component/"><span class="fallback-mark">S</span><b>Skein</b></a><div class="fallback-links"><a href="/web-component/start/">Start</a><a href="/web-component/examples/">Examples</a><a href="/web-component/docs/">Docs</a><a href="/web-component/ai/">AI</a><a class="fallback-play" href="/web-component/playground/">Play</a><a class="fallback-gh" href="https://github.com/Pom4H/web-component">GitHub ↗</a></div></nav></skein-nav><main>
-<section class="page-hero"><div class="wrap"><p class="eyebrow">Reference / Skein 0.6</p><h1 class="display">SMALL<br>API.</h1><p class="lede">Strict path bindings, native component contracts and scoped lifecycle without a virtual DOM.</p></div></section>
-<section class="section"><div class="wrap docs-layout"><nav class="docs-nav"><a href="#component">Component</a><a href="#state">State</a><a href="#bindings">Bindings</a><a href="#composition">Composition</a><a href="#lists">Lists</a><a href="#conditions">Conditions</a><a href="#computed">Computed & effects</a><a href="#lifecycle">Lifecycle</a><a href="#api">API</a><a href="#migration">0.6 migration</a><a href="#build">Build</a></nav><div class="docs-content">
-<section id="component"><h2>Component files</h2><p>A custom-element name maps directly to an HTML file by replacing hyphens with slashes.</p><div class="code-card"><pre><code data-highlight>&lt;user-card&gt;&lt;/user-card&gt;      → user/card.html
-&lt;studio-mixer&gt;&lt;/studio-mixer&gt;  → studio/mixer.html</code></pre></div><p>Skein fetches an unknown tag's source before registering it. A missing file leaves the tag undefined instead of stealing a Custom Element that may belong to another library.</p></section>
+<section class="page-hero"><div class="wrap"><p class="eyebrow">Reference / Skein 0.6.1</p><h1 class="display">SMALL<br>API.</h1><p class="lede">Strict path bindings and browser-native composition without a virtual DOM.</p></div></section>
+<section class="section"><div class="wrap docs-layout"><nav class="docs-nav"><a href="#component">Component</a><a href="#state">State</a><a href="#bindings">Bindings</a><a href="#composition">Composition</a><a href="#slots">Slots</a><a href="#lists">Lists</a><a href="#conditions">Conditions</a><a href="#computed">Computed & effects</a><a href="#lifecycle">Lifecycle</a><a href="#api">API</a><a href="#playground">Playground</a><a href="#build">Build</a></nav><div class="docs-content">
+<section id="component"><h2>Component files</h2><p>A custom-element name maps directly to an HTML file by replacing hyphens with slashes.</p><div class="code-card"><pre><code data-highlight>&lt;user-card&gt;&lt;/user-card&gt;          → user/card.html
+&lt;workspace-shell&gt;&lt;/workspace-shell&gt; → workspace/shell.html</code></pre></div><p>Skein fetches an unknown tag's source before registering it. A missing file leaves the tag undefined instead of stealing a Custom Element that may belong to another library.</p></section>
 <section id="state"><h2>Reactive state</h2><p>Inside a component script, <code>this</code> is reactive state. Plain objects and arrays are proxied recursively and a shared raw object keeps one Skein Proxy identity across components.</p><div class="code-card"><pre><code data-highlight>&lt;script&gt;
   this.count = 0
   this.user = { name: 'Ada' }
   this.up = () =&gt; this.count++
-&lt;/script&gt;</code></pre></div><p><code>Date</code>, <code>Map</code>, <code>Set</code>, DOM/platform objects and class instances stay native and opaque, so internal-slot methods keep valid receivers. Their internal mutations are not reactive automatically.</p></section>
+&lt;/script&gt;</code></pre></div><p><code>Date</code>, <code>Map</code>, <code>Set</code>, DOM/platform objects and class instances stay native and opaque.</p></section>
 <section id="bindings"><h2>Bindings</h2><div class="code-card"><pre><code data-highlight>&lt;h1&gt;Hello {user.name}&lt;/h1&gt;
 &lt;div title="User {user.name}"&gt;&lt;/div&gt;
 &lt;label for={inputId}&gt;Name&lt;/label&gt;
 &lt;input .value={user.name}&gt;
 &lt;button ?disabled={saving}&gt;Save&lt;/button&gt;
-&lt;button @click={save}&gt;Save&lt;/button&gt;</code></pre></div><p>Braces contain strict property paths, not JavaScript expressions. Invalid paths and malformed <code>.</code>/<code>?</code>/<code>@</code> bindings fail during component compilation. <code>in={...}</code> was removed; outside list item scopes, use full paths.</p></section>
-<section id="composition"><h2>Component composition</h2><p>Skein uses native Custom Element contracts: <strong>properties down, events up</strong>.</p><div class="code-card"><div class="code-top"><span>child / volume-control.html</span></div><pre><code data-highlight>&lt;script&gt;
-  input('value', .5)
-  this.change = event =&gt; host.dispatchEvent(
-    new CustomEvent('value-change', {
-      detail: { value: Number(event.currentTarget.value) },
-      bubbles: true,
-      composed: true
-    })
-  )
+&lt;button @click={save}&gt;Save&lt;/button&gt;
+&lt;reactor-core --load={reactor.load}&gt;&lt;/reactor-core&gt;</code></pre></div><p>Braces contain strict property paths, not JavaScript expressions. Invalid paths and malformed special bindings fail during component compilation.</p><h3>CSS custom properties</h3><div class="code-card"><pre><code data-highlight>&lt;reactor-core
+  style="display:block; contain:layout"
+  --temperature={reactor.temperature}
+  --load={reactor.load}&gt;
+&lt;/reactor-core&gt;
+
+/* reactor-core's Shadow DOM */
+:host { --load: 0; }
+.core { transform: scale(calc(1 + var(--load) * .04)); }</code></pre></div><p><code>--name={path}</code> updates exactly one declaration with <code>element.style.setProperty('--name', value)</code>. A <code>null</code>, <code>undefined</code> or <code>false</code> value removes only that custom property; zero remains valid.</p><p>This is not a serialized <code>style</code> binding. Ordinary static inline declarations and other custom properties stay intact. If static <code>style</code> contains the same property, the binding owns that declaration and removal exposes the normal cascade or fallback. Do not combine it with a reactive whole-<code>style={path}</code> binding on the same element. A custom property set on a component host inherits naturally into its Shadow DOM.</p></section>
+<section id="composition"><h2>Component composition</h2><p>The complete composition contract is browser-shaped:</p><div class="code-card"><pre><code data-highlight>data      → DOM properties
+/actions/ ← bubbling + composed CustomEvent
+content   → native &lt;slot&gt;</code></pre></div><p>There is no component event bus, provide/inject system or framework slot API.</p><h3>Inputs</h3><div class="code-card"><pre><code data-highlight>&lt;script&gt;
+  input('name', 'Metric')
+  input('value', 0)
 &lt;/script&gt;
 
-&lt;input .value={value} @input={change}&gt;</code></pre></div><div class="code-card"><div class="code-top"><span>owner</span></div><pre><code data-highlight>&lt;volume-control
-  .value={volume}
-  @value-change={volumeChange}&gt;
-&lt;/volume-control&gt;</code></pre></div><p><code>input(name, fallback)</code> installs and seeds a reactive host property. Pre-upgrade property writes are adopted. Later <code>element.value = ...</code> writes remain reactive. Host API collisions such as <code>state</code>, <code>title</code> or <code>dispose</code> throw instead of being shadowed.</p></section>
+&lt;ui-metric name="Active" .value={active}&gt;&lt;/ui-metric&gt;</code></pre></div><p>Literal primitive attributes can seed matching inputs. Conversion follows the fallback type. Live values, objects and functions use <code>.property={path}</code>. Initialization precedence is pre-mount property → static attribute → fallback.</p><p>A static attribute is only the initial value. Later attribute changes do not update child state; use a DOM property when the input must stay live. Host API collisions such as <code>state</code>, <code>title</code> or <code>dispose</code> throw.</p><h3>Outputs</h3><div class="code-card"><pre><code data-highlight>host.dispatchEvent(new CustomEvent('task-select', {
+  detail: { id: this.task.id },
+  bubbles: true,
+  composed: true
+}))</code></pre></div><p>Composed bubbling events cross nested Shadow DOM boundaries. Intermediate components do not need relay handlers.</p></section>
+<section id="slots"><h2>Native slots</h2><div class="code-card"><pre><code data-highlight>&lt;!-- ui/panel.html --&gt;
+&lt;header&gt;&lt;slot name="heading"&gt;&lt;/slot&gt;&lt;/header&gt;
+&lt;slot&gt;&lt;/slot&gt;
+
+&lt;!-- owner --&gt;
+&lt;ui-panel&gt;
+  &lt;span slot="heading"&gt;Tasks&lt;/span&gt;
+  &lt;task-board .tasks={tasks}&gt;&lt;/task-board&gt;
+&lt;/ui-panel&gt;</code></pre></div><p>Skein uses real Shadow DOM, so default slots, named slots, <code>slotchange</code> and <code>assignedElements()</code> are native browser behavior.</p><p><a href="../examples/workspace/">Workspace</a> uses this contract across 18 component types.</p></section>
 <section id="lists"><h2>Keyed lists</h2><div class="code-card"><pre><code data-highlight>&lt;article each={projects} key={id}&gt;
   &lt;b&gt;{index}. {title}&lt;/b&gt;
   &lt;input placeholder="DOM state survives reorder"&gt;
-&lt;/article&gt;</code></pre></div><p><code>each</code> leaves native HTML <code>for={inputId}</code> available. Explicit keys must be non-null and unique; Skein validates them before reconciliation changes views. Existing keys move real node ranges rather than rebuilding them.</p><p>Primitive lists expose the current item as <code>{$value}</code>; list locals also include <code>index</code> and <code>$index</code>.</p></section>
-<section id="conditions"><h2>Conditions</h2><div class="code-card"><pre><code data-highlight>&lt;section if={inspectorOpen}&gt;...&lt;/section&gt;</code></pre></div><p>A branch owns a child scope. Hiding it disposes effects/listeners and nested Skein components. Third-party Custom Elements are only disconnected; Skein never calls an arbitrary external <code>dispose()</code>.</p></section>
+&lt;/article&gt;</code></pre></div><p><code>each</code> leaves native HTML <code>for={inputId}</code> available. Explicit keys must be non-null and unique; existing keys move real node ranges rather than rebuilding them. List locals include <code>index</code>, <code>$index</code> and <code>$value</code>.</p></section>
+<section id="conditions"><h2>Conditions</h2><div class="code-card"><pre><code data-highlight>&lt;section if={inspectorOpen}&gt;...&lt;/section&gt;</code></pre></div><p>A branch owns a child scope. Hiding it disposes effects/listeners and nested Skein components. Third-party Custom Elements are only disconnected.</p></section>
 <section id="computed"><h2>Computed values and effects</h2><div class="code-card"><pre><code data-highlight>&lt;script&gt;
   this.total = computed(() =&gt; this.price * this.quantity)
   effect(() =&gt; console.log(this.total))
 &lt;/script&gt;</code></pre></div><p><code>computed()</code> is lazy/cached. Synchronous state writes share one microtask, and user effects run after pending render work settles.</p></section>
-<section id="lifecycle"><h2>Lifecycle</h2><p>Disconnect pauses reactive work; reconnect resumes dirty bindings without rebuilding. Permanent teardown is <code>host.dispose()</code>. If mount fails during template instantiation, Skein disposes the fresh scope and clears partial shadow DOM before reporting the error.</p><div class="code-card"><pre><code data-highlight>window.addEventListener('resize', this.measure, { signal: abortSignal })
+<section id="lifecycle"><h2>Lifecycle</h2><p>Disconnect pauses reactive work; reconnect resumes dirty bindings without rebuilding. Permanent teardown is <code>host.dispose()</code>. Failed template mounts roll back their fresh scope and partial shadow DOM.</p><div class="code-card"><pre><code data-highlight>window.addEventListener('resize', this.measure, { signal: abortSignal })
 const frame = requestAnimationFrame(this.draw)
 onCleanup(() =&gt; cancelAnimationFrame(frame))</code></pre></div></section>
 <section id="api"><h2>API</h2><p>Injected component helpers:</p><div class="code-card"><pre><code data-highlight>input(name, fallback)
@@ -49,16 +64,13 @@ effect(fn)
 onCleanup(fn)
 host
 abortSignal</code></pre></div><p>Public module/global surface:</p><div class="code-card"><pre><code data-highlight>Skein.version
-Skein.define(tag, source)</code></pre></div><p><code>Skein.define()</code> defines once. Production hot-reload instance/reload machinery is intentionally absent; Playground recreates its iframe/runtime for edited source.</p></section>
-<section id="migration"><h2>0.6 migration</h2><div class="code-card"><pre><code data-highlight>- &lt;li for={items} key={id}&gt;...&lt;/li&gt;
-+ &lt;li each={items} key={id}&gt;...&lt;/li&gt;
-
-- &lt;address in={user.address}&gt;{city}&lt;/address&gt;
-+ &lt;address&gt;{user.address.city}&lt;/address&gt;
-
-- this.value = input('value', .5)
-+ input('value', .5)</code></pre></div><p>The input assignment form remains compatible. The list/context changes are intentional API simplifications.</p></section>
-<section id="build"><h2>Production artifact</h2><p><code>skein.min.js</code> is currently <strong>15.0 kB raw / 5.5 kB gzip / 4.9 kB Brotli</strong>, with zero runtime dependencies.</p><div class="code-card"><pre><code data-highlight>node tools/build.mjs
+Skein.define(tag, source)</code></pre></div></section>
+<section id="playground"><h2>Browser Playground</h2><p><a href="../playground/?example=counter">The Playground</a> is a zero-dependency editing workspace built from browser primitives rather than an embedded editor package. It keeps syntax-highlighted source, synchronized line numbers, cursor/selection position and the isolated preview together.</p><p>Every built-in example has its own auto-saved local draft. <strong>Reset</strong> reloads its repository source, and <strong>Share</strong> copies a URL containing the current source. On desktop, drag the divider or focus it and use the arrow, Home and End keys to resize the editor; mobile keeps a fixed stacked split.</p><div class="code-card"><pre><code data-highlight>Ctrl/Cmd + Enter   run
+Ctrl/Cmd + S       save now
+Tab / Shift+Tab    indent / outdent
+Enter              continue current indentation</code></pre></div><p>Loading, queued, running, live, manual, edited and error states are visible. Runtime errors can be dismissed, and save/share actions provide explicit feedback.</p></section>
+<section id="build"><h2>Production artifact</h2><p><code>skein.min.js</code> is currently <strong>15,839 B raw / 5,686 B gzip / 5,123 B Brotli</strong>, with zero runtime dependencies.</p><div class="code-card"><pre><code data-highlight>node tools/build.mjs
 node tools/build.mjs --check
-node test/run.mjs</code></pre></div><p>The suite executes readable and generated minified runtimes plus the real multi-file Studio composition in Chrome/Chromium.</p></section>
+node test/run.mjs
+node test/workspace.mjs</code></pre></div><p>The main suite exercises readable/generated runtimes and Studio. The Workspace regression drives the generated production runtime through an 18-component application flow in Chromium.</p></section>
 </div></div></section></main><skein-footer></skein-footer></body></html>

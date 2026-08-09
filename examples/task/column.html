@@ -1,0 +1,17 @@
+<script>
+  input('status', '')
+  input('label', '')
+  input('tasks', [])
+  this.count = computed(() => this.tasks.length)
+</script>
+
+<section data-status={status}>
+  <header><strong>{label}</strong><span>{count}</span></header>
+  <div class="cards">
+    <task-card each={tasks} key={id} .task={$value}></task-card>
+  </div>
+</section>
+
+<style>
+  :host{display:block}section{min-height:230px;background:#0f120f;border:1px solid #252925}header{height:38px;padding:0 10px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #252925}header strong,header span{font:700 9px ui-monospace,monospace;text-transform:uppercase;letter-spacing:.08em}header span{color:#737871}.cards{padding:8px;display:grid;gap:7px;align-content:start}
+</style>

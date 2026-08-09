@@ -1,0 +1,17 @@
+<script>
+  input('tasks', [])
+  this.columns = computed(() => [
+    { id:'backlog', label:'Backlog', items:this.tasks.filter(task => task.status === 'backlog') },
+    { id:'active', label:'Active', items:this.tasks.filter(task => task.status === 'active') },
+    { id:'review', label:'Review', items:this.tasks.filter(task => task.status === 'review') },
+    { id:'done', label:'Done', items:this.tasks.filter(task => task.status === 'done') }
+  ])
+</script>
+
+<div class="board">
+  <task-column each={columns} key={id} .status={id} .label={label} .tasks={items}></task-column>
+</div>
+
+<style>
+  :host{display:block;overflow:auto}.board{display:grid;grid-template-columns:repeat(4,minmax(190px,1fr));gap:10px;min-width:780px}
+</style>

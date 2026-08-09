@@ -111,8 +111,20 @@ export class SkeinElement extends HTMLElement {
     if (this.#inputs?.has(name)) return this.state[name];
 
     const pending = Object.hasOwn(this, name);
-    const initial = pending ? this[name] : fallback;
-    if (pending) delete this[name];
+    let initial;
+    if (pending) {
+      initial = this[name];
+      delete this[name];
+    } else if (this.hasAttribute(name)) {
+      const value = this.getAttribute(name);
+      if (typeof fallback === 'boolean') initial = true;
+      else if (typeof fallback === 'number') {
+        initial = Number(value);
+        if (Number.isNaN(initial)) throw new TypeError('Skein numeric input attribute must be a number: ' + name);
+      } else if (fallback !== null && (typeof fallback === 'object' || typeof fallback === 'function')) {
+        throw new TypeError('Skein non-primitive input requires a DOM property: ' + name);
+      } else initial = value;
+    } else initial = fallback;
 
     Object.defineProperty(this, name, {
       configurable: true,

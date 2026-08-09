@@ -1,0 +1,18 @@
+<div class="shell">
+  <aside class="sidebar"><slot name="sidebar"></slot></aside>
+  <header class="topbar"><slot name="topbar"></slot></header>
+  <main class="main"><slot></slot></main>
+  <aside class="aside"><slot name="aside"></slot></aside>
+</div>
+
+<style>
+  :host { display:block; min-height:100vh; }
+  .shell { min-height:100vh; display:grid; grid-template-columns:184px minmax(0,1fr) 300px; grid-template-rows:64px minmax(0,1fr); background:#0e100f; }
+  .sidebar { grid-row:1/3; border-right:1px solid #2a2d2a; }
+  .topbar { grid-column:2/4; border-bottom:1px solid #2a2d2a; }
+  .main { min-width:0; padding:20px; }
+  .aside { border-left:1px solid #2a2d2a; background:#111412; }
+  slot { display:contents; }
+  @media(max-width:1000px){.shell{grid-template-columns:72px minmax(0,1fr)}.topbar{grid-column:2}.aside{display:none}}
+  @media(max-width:640px){.shell{display:block}.sidebar{display:none}.topbar{position:sticky;top:0;z-index:3}.main{padding:12px}}
+</style>

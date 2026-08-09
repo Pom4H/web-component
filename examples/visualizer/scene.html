@@ -1,0 +1,259 @@
+<script>
+  input('steps', [])
+  input('selected', 0)
+  input('running', true)
+  input('speed', 1)
+
+  this.status = 'booting'
+  this.fps = 0
+  this.viewSteps = computed(() => this.steps.map((step, index) => ({ ...step, index, selected:index === this.selected })))
+
+  let frame = 0
+  let phase = 0
+  let yaw = -.18
+  let pitch = .17
+  let distance = 9.4
+  let dragging = false
+  let pointerX = 0
+  let pointerY = 0
+
+  const emit = (name, detail) => host.dispatchEvent(new CustomEvent(name, { detail, bubbles:true, composed:true }))
+  this.pick = event => {
+    const index = Number(event.currentTarget.dataset.index) || 0
+    phase = index
+    emit('step-select', { index })
+    emit('energy-change', { energy:.92 })
+  }
+  this.down = event => {
+    dragging = true
+    pointerX = event.clientX
+    pointerY = event.clientY
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+  this.move = event => {
+    if (!dragging) return
+    yaw += (event.clientX - pointerX) * .007
+    pitch = Math.max(-.55, Math.min(.55, pitch + (event.clientY - pointerY) * .006))
+    pointerX = event.clientX
+    pointerY = event.clientY
+  }
+  this.up = () => dragging = false
+  this.zoom = event => {
+    event.preventDefault()
+    distance = Math.max(6.2, Math.min(14, distance + event.deltaY * .008))
+  }
+
+  let observer
+  queueMicrotask(() => {
+    const canvas = host.shadowRoot.querySelector('canvas')
+    const labelLayer = host.shadowRoot.querySelector('.labels')
+    const gl = canvas.getContext('webgl2', { antialias:true, alpha:false, powerPreference:'high-performance' })
+    if (!gl) { this.status = 'WebGL2 unavailable'; return }
+
+    const vertexSource = `#version 300 es
+      precision highp float;
+      layout(location=0) in vec3 aPosition;
+      layout(location=1) in vec4 aColor;
+      out vec4 vColor;
+      void main(){ gl_Position=vec4(aPosition,1.0); vColor=aColor; }
+    `
+    const fragmentSource = `#version 300 es
+      precision highp float;
+      in vec4 vColor;
+      out vec4 outColor;
+      void main(){ outColor=vColor; }
+    `
+    const shader = (type, source) => {
+      const item = gl.createShader(type)
+      gl.shaderSource(item, source)
+      gl.compileShader(item)
+      if (!gl.getShaderParameter(item, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(item) || 'shader compile failed')
+      return item
+    }
+    let program
+    try {
+      program = gl.createProgram()
+      gl.attachShader(program, shader(gl.VERTEX_SHADER, vertexSource))
+      gl.attachShader(program, shader(gl.FRAGMENT_SHADER, fragmentSource))
+      gl.linkProgram(program)
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program) || 'program link failed')
+    } catch (error) {
+      this.status = 'shader error'
+      console.error(error)
+      return
+    }
+
+    const buffer = gl.createBuffer()
+    const vao = gl.createVertexArray()
+    gl.bindVertexArray(vao)
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
+    gl.enableVertexAttribArray(0)
+    gl.enableVertexAttribArray(1)
+    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 28, 0)
+    gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 28, 12)
+    gl.enable(gl.DEPTH_TEST)
+    gl.depthFunc(gl.LEQUAL)
+    gl.enable(gl.BLEND)
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+    gl.useProgram(program)
+
+    const world = [
+      [-4.2, 1.05,-.7],[-3.0,1.35,-2.1],[-1.35,.92,-2.85],[.55,.42,-2.45],
+      [2.35,.92,-1.15],[3.55,.06,.55],[2.05,-.85,2.2],[-.75,-.72,2.45]
+    ]
+    const faces = [
+      [0,1,2,3],[4,7,6,5],[0,4,5,1],[1,5,6,2],[2,6,7,3],[4,0,3,7]
+    ]
+    const corners = [[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]]
+    const hex = value => {
+      const text = String(value || '#6ef0cf').replace('#','')
+      const full = text.length === 3 ? text.split('').map(c => c+c).join('') : text
+      const n = Number.parseInt(full,16)
+      return [((n>>16)&255)/255,((n>>8)&255)/255,(n&255)/255]
+    }
+    const mix = (a,b,t) => a.map((value,index) => value + (b[index]-value)*t)
+    const lerp3 = (a,b,t) => a.map((value,index) => value + (b[index]-value)*t)
+    const project = point => {
+      const cy=Math.cos(yaw), sy=Math.sin(yaw), cp=Math.cos(pitch), sp=Math.sin(pitch)
+      const rx = cy*point[0] - sy*point[2]
+      const rz = sy*point[0] + cy*point[2]
+      const ry = cp*point[1] - sp*rz
+      const depth = sp*point[1] + cp*rz + distance
+      const aspect = canvas.width / Math.max(1,canvas.height)
+      const focal = 1 / Math.tan(.72/2)
+      return [rx*focal/(aspect*depth), ry*focal/depth, Math.max(-.98,Math.min(.98,((depth-2)/(18-2))*2-1)), depth]
+    }
+    const vertex = (list, p, color, alpha=1) => {
+      const q = project(p)
+      list.push(q[0],q[1],q[2],color[0],color[1],color[2],alpha)
+    }
+    const cube = (list, center, size, color, alpha=1) => {
+      const points = corners.map(c => [center[0]+c[0]*size,center[1]+c[1]*size,center[2]+c[2]*size])
+      faces.forEach((face, faceIndex) => {
+        const tone = mix(color,[1,1,1],.05 + faceIndex*.035)
+        ;[face[0],face[1],face[2],face[0],face[2],face[3]].forEach(index => vertex(list,points[index],tone,alpha))
+      })
+    }
+    const line = (list,a,b,color,alpha=.35) => { vertex(list,a,color,alpha); vertex(list,b,color,alpha) }
+    const draw = (data, mode) => {
+      if (!data.length) return
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.DYNAMIC_DRAW)
+      gl.drawArrays(mode, 0, data.length / 7)
+    }
+    const resize = () => {
+      const ratio = Math.min(2, window.devicePixelRatio || 1)
+      const width = Math.max(1, Math.round(canvas.clientWidth * ratio))
+      const height = Math.max(1, Math.round(canvas.clientHeight * ratio))
+      if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height }
+      gl.viewport(0,0,width,height)
+    }
+    observer = new ResizeObserver(resize)
+    observer.observe(canvas)
+    resize()
+    this.status = 'WebGL2 live'
+
+    let previous = performance.now()
+    let fpsStart = previous
+    let frames = 0
+    let autoStep = -1
+    const render = now => {
+      const dt = Math.min(.05,(now-previous)/1000)
+      previous = now
+      if (this.running) phase += dt * .62 * Math.max(.1,Number(this.speed)||1)
+      const count = Math.max(1,world.length)
+      const active = ((Math.floor(phase)%count)+count)%count
+      const local = phase - Math.floor(phase)
+      if (this.running && active !== autoStep) {
+        autoStep = active
+        emit('step-select',{ index:active })
+        emit('energy-change',{ energy:.58 + (active%3)*.14 })
+      }
+
+      resize()
+      gl.clearColor(.018,.028,.045,1)
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+
+      const triangles=[]
+      const lines=[]
+      const gridColor=[.17,.28,.42]
+      for(let i=-6;i<=6;i+=1.5){ line(lines,[-6,-1.75,i],[6,-1.75,i],gridColor,.10); line(lines,[i,-1.75,-6],[i,-1.75,6],gridColor,.10) }
+      for(let i=0;i<count-1;i++){
+        const c=hex(this.steps[i]?.color)
+        line(lines,world[i],world[i+1],c,.34)
+      }
+      line(lines,world[count-1],world[0],hex(this.steps[count-1]?.color),.16)
+
+      world.forEach((center,index) => {
+        const selected = index === Number(this.selected)
+        const pulse = index === active ? .08*Math.sin(now*.008)+.08 : 0
+        const color=hex(this.steps[index]?.color)
+        cube(triangles,center,(selected?.48:.34)+pulse,color,selected?1:.72)
+        if(selected) cube(triangles,center,.60+pulse,mix(color,[1,1,1],.35),.10)
+      })
+
+      const next=(active+1)%count
+      const particle=lerp3(world[active],world[next],local)
+      const particleColor=hex(this.steps[active]?.color)
+      cube(triangles,particle,.16,particleColor,1)
+      for(let tail=1;tail<=5;tail++){
+        const t=Math.max(0,local-tail*.055)
+        cube(triangles,lerp3(world[active],world[next],t),.07,particleColor,.30-tail*.04)
+      }
+
+      draw(lines,gl.LINES)
+      draw(triangles,gl.TRIANGLES)
+
+      const labels = labelLayer.querySelectorAll('button[data-index]')
+      labels.forEach(label => {
+        const index=Number(label.dataset.index)
+        const q=project(world[index] || world[0])
+        const x=(q[0]*.5+.5)*canvas.clientWidth
+        const y=(-q[1]*.5+.5)*canvas.clientHeight
+        label.style.transform=`translate3d(${x}px,${y}px,0) translate(-50%,-50%)`
+        label.style.opacity=q[3] > 2 ? '1' : '0'
+        label.style.zIndex=String(Math.max(1,100-Math.round(q[3]*4)))
+      })
+
+      frames++
+      if(now-fpsStart>750){ this.fps=Math.round(frames*1000/(now-fpsStart)); frames=0; fpsStart=now }
+      frame=requestAnimationFrame(render)
+    }
+    frame=requestAnimationFrame(render)
+  })
+
+  onCleanup(() => { cancelAnimationFrame(frame); observer?.disconnect() })
+</script>
+
+<section class="stage" @pointerdown={down} @pointermove={move} @pointerup={up} @pointercancel={up} @wheel={zoom}>
+  <canvas aria-label="Interactive 3D visualization of the Skein reactive pipeline"></canvas>
+  <div class="labels">
+    <button each={viewSteps} key={id} data-index={index} data-selected={selected} --accent={color} @click={pick}>
+      <b>0{id}</b><span>{title}</span>
+    </button>
+  </div>
+  <div class="hud top"><span>{status}</span><b>{fps} FPS</b></div>
+  <div class="hud bottom"><span>drag orbit</span><span>wheel zoom</span><span>click stage</span></div>
+  <div class="energy"></div>
+</section>
+
+<style>
+  :host { display:block; height:100%; min-height:560px; --energy:.65; }
+  * { box-sizing:border-box; }
+  .stage { position:relative; width:100%; height:100%; min-height:560px; overflow:hidden; border:1px solid #1b2a3b; border-radius:20px; background:#05080d; cursor:grab; touch-action:none; box-shadow:inset 0 1px #24405b88,0 30px 100px #0008; }
+  .stage:active { cursor:grabbing; }
+  canvas { display:block; width:100%; height:100%; min-height:560px; }
+  .labels { position:absolute; inset:0; pointer-events:none; }
+  .labels button { --accent:#6ef0cf; position:absolute; left:0; top:0; pointer-events:auto; display:grid; grid-template-columns:auto 1fr; align-items:center; gap:8px; min-width:118px; max-width:190px; padding:8px 10px; border:1px solid color-mix(in srgb,var(--accent) 38%,#172536); border-radius:10px; color:#b8c5d8; background:#07101bd9; backdrop-filter:blur(12px); box-shadow:0 8px 35px #0009,0 0 28px color-mix(in srgb,var(--accent) 10%,transparent); font:700 9px ui-monospace,monospace; text-align:left; cursor:pointer; transition:border-color .15s,background .15s,color .15s,box-shadow .15s; }
+  .labels button:hover,.labels button[data-selected="true"] { color:#f7fbff; border-color:var(--accent); background:color-mix(in srgb,var(--accent) 12%,#07101b); box-shadow:0 10px 40px #000a,0 0 30px color-mix(in srgb,var(--accent) 20%,transparent); }
+  .labels b { color:var(--accent); font-size:8px; }
+  .labels span { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  .hud { position:absolute; z-index:130; display:flex; gap:8px; align-items:center; color:#718198; font:700 8px ui-monospace,monospace; letter-spacing:.1em; text-transform:uppercase; pointer-events:none; }
+  .hud span,.hud b { padding:7px 9px; border:1px solid #182738; border-radius:999px; background:#060b12c9; }
+  .hud b { color:#6ef0cf; }
+  .top { top:14px; right:14px; }
+  .bottom { left:14px; bottom:14px; }
+  .energy { position:absolute; inset:-25%; pointer-events:none; background:radial-gradient(circle at 50% 50%,rgba(71,176,255,calc(var(--energy)*.12)),transparent 48%); mix-blend-mode:screen; }
+  @media(max-width:620px){:host,.stage,canvas{min-height:500px}.labels button{min-width:90px;max-width:125px;padding:6px 7px}.labels span{font-size:8px}.bottom span:nth-child(2){display:none}}
+  @media(prefers-reduced-motion:reduce){.labels button{transition:none}}
+</style>

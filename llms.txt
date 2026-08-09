@@ -1,31 +1,36 @@
-# Skein 0.6
+# Skein 0.6.1
 
 Skein is a tiny zero-dependency HTML-first Web Components runtime with fine-grained native-DOM reactivity.
 
 Canonical sources:
-- README.md — user-facing guide and migration notes
-- llms-full.txt — complete machine-oriented model
+- README.md — user-facing guide
+- llms-full.txt — expanded machine-oriented model
 - .agents/skills/skein/references/syntax.md — exact syntax
 - .agents/skills/skein/references/architecture.md — runtime invariants
-- examples/studio/ — multi-file component composition reference
+- examples/workspace/ — 18-component application-scale composition reference
+- examples/studio/ — Web Audio/Canvas composition reference
 
 Core model:
 - component tags map to HTML files: `<user-card>` → `user/card.html`;
 - source is fetched before Skein claims an unknown custom-element tag;
 - component `this` is reactive state;
-- recursively reactive values are arrays and plain/null-prototype objects only;
+- arrays and plain/null-prototype objects are recursively reactive;
 - Date/Map/Set/DOM/platform/class instances stay native/opaque;
 - shared raw objects keep one Skein Proxy identity across components;
 - bindings are strict paths: `{user.name}`, `.value={name}`, `?disabled={saving}`, `@click={save}`;
 - derived logic belongs in `computed()`;
-- lists use `each={items}` and usually `key={id}`;
-- native `for={inputId}` is an ordinary dynamic attribute;
-- `in={...}` was removed in 0.6; use full paths;
+- lists use `each={items}` and usually `key={id}`; native `for={inputId}` stays HTML;
 - conditions use `if={visible}`;
-- child inputs use `input('value', fallback)` and owner `.value={state}`;
-- child outputs use bubbling/composed native `CustomEvent`;
+- composition is browser-native: properties carry live data down, bubbling+composed CustomEvents carry actions up, native `<slot>` carries content/layout;
+- `input('name', fallback)` declares child input state;
+- pre-mount property > static primitive attribute > fallback when initializing an input;
+- static primitive attributes are initial seeds only; use `.property={path}` for live values and all objects/functions;
+- input names cannot shadow HTMLElement/Skein host APIs;
+- composed events can cross nested Shadow DOM boundaries without relay handlers;
 - disconnect pauses; `host.dispose()` permanently destroys;
 - cleanup uses `onCleanup()` or `abortSignal`;
-- no virtual DOM, SSR, hydration, suspense, event bus, public batch/signal/untrack/stats/flush APIs.
+- no virtual DOM, SSR, hydration, suspense, event bus, provide/inject, framework slot API, public batch/signal/untrack/stats/flush APIs.
 
 Public API: `Skein.version`, `Skein.define(tag, source)`.
+
+Production: 15,444 B raw / 5,652 B gzip / 5,061 B Brotli.

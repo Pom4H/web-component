@@ -95,7 +95,12 @@ try {
   }
   if (!ready) throw new Error(`Workspace did not mount: ${exceptions.join('\n')}`);
 
-  const defined = await evaluate(`(${JSON.stringify(componentTags)}).filter(tag=>customElements.get(tag)).length`);
+  let defined = 0;
+  for (let attempt = 0; attempt < 200; attempt++) {
+    defined = await evaluate(`(${JSON.stringify(componentTags)}).filter(tag=>customElements.get(tag)).length`);
+    if (defined === componentTags.length) break;
+    await sleep(10);
+  }
   if (defined !== componentTags.length) throw new Error(`Expected ${componentTags.length} component types, got ${defined}`);
 
   const slots = await evaluate(`(()=>{const app=document.querySelector('workspace-app');const shell=app.shadowRoot.querySelector('workspace-shell');const root=shell.shadowRoot;return{sidebar:root.querySelector('slot[name="sidebar"]').assignedElements().map(e=>e.localName),topbar:root.querySelector('slot[name="topbar"]').assignedElements().map(e=>e.localName),main:root.querySelector('slot:not([name])').assignedElements().map(e=>e.localName),aside:root.querySelector('slot[name="aside"]').assignedElements().map(e=>e.localName)}})()`);

@@ -225,8 +225,8 @@
   onCleanup(() => { cancelAnimationFrame(frame); observer?.disconnect() })
 </script>
 
-<section class="stage" @pointerdown={down} @pointermove={move} @pointerup={up} @pointercancel={up} @wheel={zoom}>
-  <canvas aria-label="Interactive 3D visualization of the Skein reactive pipeline"></canvas>
+<section class="stage">
+  <canvas aria-label="Interactive 3D visualization of the Skein reactive pipeline" @pointerdown={down} @pointermove={move} @pointerup={up} @pointercancel={up} @wheel={zoom}></canvas>
   <div class="labels">
     <button each={viewSteps} key={id} data-index={index} data-selected={selected} --accent={color} @click={pick}>
       <b>0{id}</b><span>{title}</span>
@@ -240,9 +240,9 @@
 <style>
   :host { display:block; height:100%; min-height:560px; --energy:.65; }
   * { box-sizing:border-box; }
-  .stage { position:relative; width:100%; height:100%; min-height:560px; overflow:hidden; border:1px solid #1b2a3b; border-radius:20px; background:#05080d; cursor:grab; touch-action:none; box-shadow:inset 0 1px #24405b88,0 30px 100px #0008; }
-  .stage:active { cursor:grabbing; }
-  canvas { display:block; width:100%; height:100%; min-height:560px; }
+  .stage { position:relative; width:100%; height:100%; min-height:560px; overflow:hidden; border:1px solid #1b2a3b; border-radius:20px; background:#05080d; box-shadow:inset 0 1px #24405b88,0 30px 100px #0008; }
+  canvas { display:block; width:100%; height:100%; min-height:560px; cursor:grab; touch-action:none; }
+  canvas:active { cursor:grabbing; }
   .labels { position:absolute; inset:0; pointer-events:none; }
   .labels button { --accent:#6ef0cf; position:absolute; left:0; top:0; pointer-events:auto; display:grid; grid-template-columns:auto 1fr; align-items:center; gap:8px; min-width:118px; max-width:190px; padding:8px 10px; border:1px solid color-mix(in srgb,var(--accent) 38%,#172536); border-radius:10px; color:#b8c5d8; background:#07101bd9; backdrop-filter:blur(12px); box-shadow:0 8px 35px #0009,0 0 28px color-mix(in srgb,var(--accent) 10%,transparent); font:700 9px ui-monospace,monospace; text-align:left; cursor:pointer; transition:border-color .15s,background .15s,color .15s,box-shadow .15s; }
   .labels button:hover,.labels button[data-selected="true"] { color:#f7fbff; border-color:var(--accent); background:color-mix(in srgb,var(--accent) 12%,#07101b); box-shadow:0 10px 40px #000a,0 0 30px color-mix(in srgb,var(--accent) 20%,transparent); }

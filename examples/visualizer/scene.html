@@ -1,8 +1,8 @@
 <script>
   input('steps', [])
-  input('selected', 0)
+  input('selected', 3)
   input('running', true)
-  input('speed', 1)
+  input('speed', .92)
   input('burst', 0)
 
   this.status = 'booting'
@@ -10,23 +10,23 @@
   this.count = 41
   this.flash = false
   this.properties = [
-    { id:'count', label:'count', color:'#78f7d0' },
-    { id:'user', label:'user.name', color:'#5b8cff' },
-    { id:'items', label:'items.length', color:'#c27bff' },
-    { id:'theme', label:'theme.accent', color:'#ff9d58' }
+    { id:'count', label:'count', color:'#79f7d2' },
+    { id:'user', label:'user.name', color:'#5f91ff' },
+    { id:'items', label:'items.length', color:'#c784ff' },
+    { id:'theme', label:'theme.accent', color:'#ff9e59' }
   ]
   this.source = 0
   this.viewSteps = computed(() => this.steps.map((step, index) => ({ ...step, index, selected:index === this.selected })))
   this.viewProperties = computed(() => this.properties.map((property, index) => ({ ...property, index, selected:index === this.source })))
 
-  let phase = 0
+  let phase = 3
   let frame = 0
   let observer
   let flashTimer
   let lastBurst = this.burst
   let pointer = [0, 0]
   let pointerTarget = [0, 0]
-  let pointerHeat = 0
+  let pointerHeat = .35
   const trail = []
 
   const emit = (name, detail) => host.dispatchEvent(new CustomEvent(name, { detail, bubbles:true, composed:true }))
@@ -36,8 +36,8 @@
   }
   this.pickProperty = event => {
     this.source = Number(event.currentTarget.dataset.index) || 0
-    phase = 5.04
-    pointerHeat = 1
+    phase = 5.02
+    pointerHeat = 1.35
     emit('step-select', { index:5 })
     emit('energy-change', { energy:.98 })
   }
@@ -45,11 +45,11 @@
     const box = event.currentTarget.getBoundingClientRect()
     pointerTarget[0] = (event.clientX - box.left) / Math.max(1, box.width) * 2 - 1
     pointerTarget[1] = 1 - (event.clientY - box.top) / Math.max(1, box.height) * 2
-    pointerHeat = Math.min(1.4, pointerHeat + .24)
+    pointerHeat = Math.min(1.5, pointerHeat + .20)
     trail.push({ x:pointerTarget[0], y:pointerTarget[1], life:1 })
-    if (trail.length > 14) trail.shift()
+    if (trail.length > 18) trail.shift()
   }
-  this.pointerLeave = () => { pointerTarget = [0, 0]; pointerHeat = Math.max(pointerHeat, .3) }
+  this.pointerLeave = () => pointerTarget = [0, 0]
 
   queueMicrotask(() => {
     const canvas = host.shadowRoot.querySelector('canvas')
@@ -77,8 +77,8 @@
       backgroundProgram = link(`#version 300 es
         precision highp float;
         void main(){
-          vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
-          gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+          vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));
+          gl_Position=vec4(p*2.0-1.0,0.0,1.0);
         }
       `, `#version 300 es
         precision highp float;
@@ -90,26 +90,27 @@
         out vec4 outColor;
         float hash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
         float noise(vec2 p){
-          vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
+          vec2 i=floor(p),f=fract(p); f=f*f*(3.0-2.0*f);
           return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);
         }
         void main(){
-          vec2 uv = gl_FragCoord.xy / max(uResolution,vec2(1.0));
-          vec2 p = uv * 2.0 - 1.0; p.x *= uResolution.x / max(1.0,uResolution.y);
-          vec2 m = vec2(uPointer.x * uResolution.x/uResolution.y, uPointer.y);
-          float d = length(p-m);
-          float n = noise(p*2.8 + vec2(uTime*.035,-uTime*.028));
-          float bands = .5 + .5*sin(p.x*5.0 + p.y*3.0 + n*3.0 - uTime*.28);
-          float wake = exp(-d*d*2.7) * (.16 + uEnergy*.28);
-          float ring = exp(-abs(d - fract(uTime*.22)*1.7)*17.0) * uEnergy * .10;
-          float stageGlow = .03 + .025*sin(uStage*.9 + p.x*2.0 - p.y*1.5);
-          vec3 color = vec3(.008,.014,.026);
-          color += vec3(.02,.08,.13) * (bands*.16 + n*.10 + stageGlow);
-          color += vec3(.08,.42,.55) * wake;
-          color += vec3(.26,.20,.58) * ring;
-          float vignette = smoothstep(1.35,.22,length(p*.72));
-          color *= .58 + .42*vignette;
-          outColor = vec4(color,1.0);
+          vec2 uv=gl_FragCoord.xy/max(uResolution,vec2(1.0));
+          vec2 p=uv*2.0-1.0; p.x*=uResolution.x/max(1.0,uResolution.y);
+          float n=noise(p*2.3+vec2(uTime*.025,-uTime*.018));
+          float fog=noise(p*1.0+vec2(-uTime*.012,uTime*.009));
+          vec2 m=vec2(uPointer.x*uResolution.x/uResolution.y,uPointer.y);
+          float pointerDistance=length(p-m);
+          float wake=exp(-pointerDistance*pointerDistance*2.2)*(.08+uEnergy*.16);
+          vec2 aperture=vec2(.52,0.0);
+          float apertureDistance=length(p-aperture);
+          float apertureHalo=exp(-apertureDistance*apertureDistance*5.5)*(.04+(uStage>5.5?.12:.035));
+          vec3 color=vec3(.004,.008,.015);
+          color+=vec3(.015,.045,.075)*(n*.19+fog*.14);
+          color+=vec3(.03,.16,.23)*wake;
+          color+=vec3(.18,.09,.31)*apertureHalo;
+          float vignette=smoothstep(1.6,.25,length(p*.7));
+          color*=.52+.48*vignette;
+          outColor=vec4(color,1.0);
         }
       `)
       lineProgram = link(`#version 300 es
@@ -139,9 +140,8 @@
           vec2 p=gl_PointCoord*2.0-1.0;
           float d=dot(p,p);
           if(d>1.0) discard;
-          float core=smoothstep(1.0,.02,d);
-          float glow=smoothstep(1.0,.22,d);
-          outColor=vec4(vColor.rgb*(.75+core*.8),vColor.a*glow);
+          float glow=smoothstep(1.0,.02,d);
+          outColor=vec4(vColor.rgb*(.72+glow*.9),vColor.a*smoothstep(1.0,.16,d));
         }
       `)
     } catch (error) {
@@ -150,20 +150,20 @@
       return
     }
 
-    const bgVao = gl.createVertexArray()
-    const lineVao = gl.createVertexArray()
-    const lineBuffer = gl.createBuffer()
+    const bgVao=gl.createVertexArray()
+    const lineVao=gl.createVertexArray()
+    const lineBuffer=gl.createBuffer()
     gl.bindVertexArray(lineVao)
-    gl.bindBuffer(gl.ARRAY_BUFFER, lineBuffer)
+    gl.bindBuffer(gl.ARRAY_BUFFER,lineBuffer)
     gl.enableVertexAttribArray(0)
     gl.enableVertexAttribArray(1)
     gl.vertexAttribPointer(0,3,gl.FLOAT,false,28,0)
     gl.vertexAttribPointer(1,4,gl.FLOAT,false,28,12)
 
-    const pointVao = gl.createVertexArray()
-    const pointBuffer = gl.createBuffer()
+    const pointVao=gl.createVertexArray()
+    const pointBuffer=gl.createBuffer()
     gl.bindVertexArray(pointVao)
-    gl.bindBuffer(gl.ARRAY_BUFFER, pointBuffer)
+    gl.bindBuffer(gl.ARRAY_BUFFER,pointBuffer)
     gl.enableVertexAttribArray(0)
     gl.enableVertexAttribArray(1)
     gl.enableVertexAttribArray(2)
@@ -171,67 +171,83 @@
     gl.vertexAttribPointer(1,4,gl.FLOAT,false,32,12)
     gl.vertexAttribPointer(2,1,gl.FLOAT,false,32,28)
 
-    const sources = [[-4.45,1.42,.2],[-4.28,.46,-.15],[-4.36,-.53,.12],[-4.18,-1.46,-.08]]
-    const targets = [[3.7,1.55,-.3],[4.1,.98,.2],[3.82,.38,-.1],[4.18,-.24,.3],[3.75,-.82,-.18],[4.05,-1.4,.14]]
-    const connections = [
-      [0,0],[0,2],[0,3],[0,5],
-      [1,1],[1,3],[1,4],
-      [2,0],[2,2],[2,4],[2,5],
-      [3,1],[3,3],[3,5]
-    ]
-    const propertyColors = ['#78f7d0','#5b8cff','#c27bff','#ff9d58']
-    const effectColor = '#77cfff'
+    const sources=[[-4.3,1.28,.3],[-4.25,.42,-.2],[-4.32,-.48,.15],[-4.18,-1.34,-.1]]
+    const targets=[[1.3,1.5,-.45],[1.75,.95,.35],[1.5,.34,-.2],[1.8,-.28,.4],[1.38,-.86,-.25],[1.62,-1.42,.18]]
+    const connections=[[0,0],[0,2],[0,3],[0,5],[1,1],[1,3],[1,4],[2,0],[2,2],[2,4],[2,5],[3,1],[3,3],[3,5]]
+    const propertyColors=this.properties.map(property=>property.color)
 
-    const hex = value => {
-      const text=String(value||'#78f7d0').replace('#','')
-      const full=text.length===3?text.split('').map(c=>c+c).join(''):text
-      const n=Number.parseInt(full,16)
+    const hex=value=>{
+      const text=String(value||'#79f7d2').replace('#','')
+      const n=Number.parseInt(text,16)
       return [((n>>16)&255)/255,((n>>8)&255)/255,(n&255)/255]
     }
-    const mix = (a,b,t) => a.map((v,i)=>v+(b[i]-v)*t)
-    const bezier = (a,b,c,t) => {
-      const u=1-t
-      return [u*u*a[0]+2*u*t*b[0]+t*t*c[0],u*u*a[1]+2*u*t*b[1]+t*t*c[1],u*u*a[2]+2*u*t*b[2]+t*t*c[2]]
+    const mix=(a,b,t)=>a.map((value,index)=>value+(b[index]-value)*t)
+    const bezier=(a,b,c,t)=>{ const u=1-t; return [u*u*a[0]+2*u*t*b[0]+t*t*c[0],u*u*a[1]+2*u*t*b[1]+t*t*c[1],u*u*a[2]+2*u*t*b[2]+t*t*c[2]] }
+    const cold=[.13,.22,.32]
+    const violet=hex('#bd7cff')
+    const writeColor=hex('#ff9e59')
+    const white=[1,1,1]
+
+    let seed=1337
+    const random=()=>{ seed=(seed*1664525+1013904223)>>>0; return seed/4294967296 }
+    const ghostFibers=Array.from({length:190},()=>({
+      a:[-4.8+random()*2.1,-2.25+random()*4.5,-2.4+random()*4.8],
+      b:[-1.2+random()*1.7,-2.4+random()*4.8,-2.8+random()*5.6],
+      c:[-.2+random()*3.0,-2.3+random()*4.6,-2.5+random()*5.0],
+      alpha:.012+random()*.032,
+      phase:random()*8
+    }))
+    const dust=Array.from({length:330},()=>({ x:-5.5+random()*10.5,y:-2.8+random()*5.6,z:-4+random()*8,size:.8+random()*2.8,phase:random()*6.28 }))
+
+    const resize=()=>{
+      const ratio=Math.min(1.6,window.devicePixelRatio||1)
+      const width=Math.max(1,Math.round(canvas.clientWidth*ratio))
+      const height=Math.max(1,Math.round(canvas.clientHeight*ratio))
+      if(canvas.width!==width||canvas.height!==height){ canvas.width=width; canvas.height=height }
+      gl.viewport(0,0,width,height)
     }
-    const project = point => {
-      const parallaxX = pointer[0]*.10
-      const parallaxY = pointer[1]*.08
-      const yaw = -.11 + parallaxX
-      const pitch = .10 - parallaxY
+    observer=new ResizeObserver(resize)
+    observer.observe(canvas)
+    resize()
+
+    const project=(point,now)=>{
+      const breathing=Math.sin(now*.00022)*.065
+      const yaw=-.075+pointer[0]*.055+breathing
+      const pitch=.055-pointer[1]*.042+Math.cos(now*.00018)*.025
       const cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch)
       const rx=cy*point[0]-sy*point[2]
       const rz=sy*point[0]+cy*point[2]
       const ry=cp*point[1]-sp*rz
-      const depth=sp*point[1]+cp*rz+9.6
+      const depth=sp*point[1]+cp*rz+9.3+Math.sin(now*.00017)*.18
       const aspect=canvas.width/Math.max(1,canvas.height)
-      const focal=1/Math.tan(.72/2)
-      return [rx*focal/(aspect*depth),ry*focal/depth,Math.max(-.94,Math.min(.94,((depth-2)/16)*2-1)),depth]
+      const focal=1/Math.tan(.7/2)
+      return [rx*focal/(aspect*depth),ry*focal/depth,Math.max(-.95,Math.min(.95,((depth-1)/17)*2-1)),depth]
     }
-    const disturb = (point, now) => {
-      let x=point[0], y=point[1], z=point[2]
-      const px=pointer[0]*4.5, py=pointer[1]*2.55
+    const disturb=(point,now)=>{
+      let [x,y,z]=point
+      const px=pointer[0]*4.4,py=pointer[1]*2.5
       const d2=(x-px)*(x-px)+(y-py)*(y-py)
-      const force=Math.exp(-d2*.72)*pointerHeat
-      z += Math.sin(now*.004 + x*1.7 + y*1.3)*(.04+force*.34)
-      y += Math.cos(now*.003 + x*1.1)*force*.12
+      const force=Math.exp(-d2*.5)*pointerHeat
+      z+=Math.sin(now*.003+x*1.3+y*.9)*(.05+force*.5)
+      y+=Math.cos(now*.0027+x*.8)*force*.13
       for(const mark of trail){
-        const mx=mark.x*4.5,my=mark.y*2.55
-        const md2=(x-mx)*(x-mx)+(y-my)*(y-my)
-        z += Math.exp(-md2*1.05)*mark.life*.13
+        const dx=x-mark.x*4.4,dy=y-mark.y*2.5
+        z+=Math.exp(-(dx*dx+dy*dy)*.72)*mark.life*.18
       }
       return [x,y,z]
     }
-    const lineVertex = (list,p,color,alpha) => {
-      const q=project(p)
-      const depthFade=Math.max(.35,Math.min(1,1.25-(q[3]-7)*.09))
+    const lineVertex=(list,point,color,alpha,now)=>{
+      const q=project(point,now)
+      const depthFade=Math.max(.12,Math.min(1,1.34-(q[3]-7)*.12))
       list.push(q[0],q[1],q[2],color[0],color[1],color[2],alpha*depthFade)
     }
-    const pointVertex = (list,p,color,alpha,size) => {
-      const q=project(p)
-      list.push(q[0],q[1],q[2],color[0],color[1],color[2],alpha,size)
+    const pointVertex=(list,point,color,alpha,size,now)=>{
+      const q=project(point,now)
+      const depthFade=Math.max(.18,Math.min(1,1.35-(q[3]-7)*.11))
+      list.push(q[0],q[1],q[2],color[0],color[1],color[2],alpha*depthFade,size*(1.25/Math.max(.72,q[3]/9.2)))
     }
-    const segment = (list,a,b,color,alpha) => { lineVertex(list,a,color,alpha); lineVertex(list,b,color,alpha) }
-    const drawLines = data => {
+    const segment=(list,a,b,color,alpha,now)=>{ lineVertex(list,a,color,alpha,now); lineVertex(list,b,color,alpha,now) }
+    const drawLines=data=>{
       if(!data.length)return
       gl.useProgram(lineProgram)
       gl.bindVertexArray(lineVao)
@@ -239,7 +255,7 @@
       gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(data),gl.DYNAMIC_DRAW)
       gl.drawArrays(gl.LINES,0,data.length/7)
     }
-    const drawPoints = data => {
+    const drawPoints=data=>{
       if(!data.length)return
       gl.useProgram(pointProgram)
       gl.bindVertexArray(pointVao)
@@ -247,66 +263,54 @@
       gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(data),gl.DYNAMIC_DRAW)
       gl.drawArrays(gl.POINTS,0,data.length/8)
     }
-    const resize = () => {
-      const ratio=Math.min(2,window.devicePixelRatio||1)
-      const width=Math.max(1,Math.round(canvas.clientWidth*ratio))
-      const height=Math.max(1,Math.round(canvas.clientHeight*ratio))
-      if(canvas.width!==width||canvas.height!==height){canvas.width=width;canvas.height=height}
-      gl.viewport(0,0,width,height)
-    }
-    observer=new ResizeObserver(resize)
-    observer.observe(canvas)
-    resize()
-    this.status='WebGL2 live'
 
+    this.status='WebGL2 live'
     let previous=performance.now()
     let fpsStart=previous
     let frames=0
     let previousStage=-1
-    let pendingCount=this.count
-    let commitAt=-1
-    const render = now => {
+    let pendingCount=this.count+1
+    let committedWave=-1
+
+    const render=now=>{
       const dt=Math.min(.05,(now-previous)/1000)
       previous=now
-      pointer[0]+=(pointerTarget[0]-pointer[0])*.055
-      pointer[1]+=(pointerTarget[1]-pointer[1])*.055
-      pointerHeat*=Math.pow(.18,dt)
-      for(let i=trail.length-1;i>=0;i--){trail[i].life-=dt*.72;if(trail[i].life<=0)trail.splice(i,1)}
+      pointer[0]+=(pointerTarget[0]-pointer[0])*.052
+      pointer[1]+=(pointerTarget[1]-pointer[1])*.052
+      pointerHeat*=Math.pow(.20,dt)
+      for(let index=trail.length-1;index>=0;index--){ trail[index].life-=dt*.62; if(trail[index].life<=0)trail.splice(index,1) }
 
       if(this.burst!==lastBurst){
         lastBurst=this.burst
-        phase=5.03
-        pointerHeat=1.25
+        phase=5.02
+        pointerHeat=1.5
         pendingCount=this.count+1
-      } else if(this.running) {
-        phase += dt * .72 * Math.max(.1,Number(this.speed)||1)
-      }
+      } else if(this.running) phase+=dt*.72*Math.max(.1,Number(this.speed)||1)
 
       const stage=((Math.floor(phase)%8)+8)%8
       const local=phase-Math.floor(phase)
       if(stage!==previousStage){
         previousStage=stage
         emit('step-select',{index:stage})
-        emit('energy-change',{energy:.48+stage*.055})
-        if(stage===5) pendingCount=this.count+1
-        if(stage===7 && commitAt!==Math.floor(phase)){
-          commitAt=Math.floor(phase)
+        emit('energy-change',{energy:.45+stage*.065})
+        if(stage===5)pendingCount=this.count+1
+        if(stage===7&&committedWave!==Math.floor(phase)){
+          committedWave=Math.floor(phase)
           this.count=pendingCount
           this.flash=true
           clearTimeout(flashTimer)
-          flashTimer=setTimeout(()=>this.flash=false,260)
+          flashTimer=setTimeout(()=>this.flash=false,430)
         }
       }
 
       resize()
-      gl.disable(gl.DEPTH_TEST)
       gl.disable(gl.BLEND)
       gl.useProgram(backgroundProgram)
       gl.bindVertexArray(bgVao)
       gl.uniform2f(gl.getUniformLocation(backgroundProgram,'uResolution'),canvas.width,canvas.height)
       gl.uniform2f(gl.getUniformLocation(backgroundProgram,'uPointer'),pointer[0],pointer[1])
       gl.uniform1f(gl.getUniformLocation(backgroundProgram,'uTime'),now/1000)
-      gl.uniform1f(gl.getUniformLocation(backgroundProgram,'uEnergy'),Math.min(1.2,.38+pointerHeat*.35+(stage>=5?.32:.06)))
+      gl.uniform1f(gl.getUniformLocation(backgroundProgram,'uEnergy'),Math.min(1.3,.25+pointerHeat*.42+(stage>=5?.35:.04)))
       gl.uniform1f(gl.getUniformLocation(backgroundProgram,'uStage'),stage)
       gl.drawArrays(gl.TRIANGLES,0,3)
 
@@ -316,48 +320,53 @@
       const points=[]
       const activeSource=Number(this.source)||0
       const activeColor=hex(propertyColors[activeSource])
-      const cold=[.17,.30,.44]
 
-      for(let gi=-5;gi<=5;gi++){
-        const yy=gi*.43
-        segment(lines,[-5.5,yy,-.65],[5.5,yy,.65],cold,.025)
+      for(const ghost of ghostFibers){
+        let previousPoint=null
+        for(let index=0;index<=13;index++){
+          const t=index/13
+          let point=bezier(ghost.a,ghost.b,ghost.c,t)
+          point[1]+=Math.sin(now*.00055+ghost.phase+t*8)*.05
+          point[2]+=Math.cos(now*.00048+ghost.phase+t*7)*.08
+          point=disturb(point,now)
+          if(previousPoint)segment(lines,previousPoint,point,cold,ghost.alpha*(.65+.35*Math.sin(t*Math.PI)),now)
+          previousPoint=point
+        }
       }
 
-      connections.forEach(pair=>{
-        const sourceIndex=pair[0], targetIndex=pair[1]
-        const a=sources[sourceIndex], c=targets[targetIndex]
-        const seed=(sourceIndex*17+targetIndex*29)*.13
-        const control=[-.25+Math.sin(seed)*.65,(a[1]+c[1])*.48+Math.sin(seed*1.7)*.55,Math.cos(seed)*1.15]
-        const isActive=sourceIndex===activeSource
-        let visibility=.055
-        if(stage===1) visibility=.06+.20*Math.min(1,local*1.8)
-        if(stage===2) visibility=.10
-        if(stage===3) visibility=isActive?.18:.035
-        if(stage===4) visibility=isActive?.72:.025
-        if(stage===5) visibility=isActive?.90:.018
-        if(stage===6) visibility=isActive?.55:.022
-        if(stage===7) visibility=isActive?.96:.018
-        const color=isActive?mix(activeColor,[1,1,1],stage===7?.24:.04):cold
+      for(const particle of dust){
+        const point=[particle.x+Math.sin(now*.00015+particle.phase)*.16,particle.y+Math.cos(now*.00019+particle.phase*1.7)*.12,particle.z+Math.sin(now*.00011+particle.phase*2.1)*.18]
+        pointVertex(points,point,cold,.07+particle.size*.008,particle.size,now)
+      }
+
+      connections.forEach(([sourceIndex,targetIndex])=>{
+        const a=sources[sourceIndex],c=targets[targetIndex]
+        const seedValue=(sourceIndex*17+targetIndex*31)*.17
+        const control=[-.65+Math.sin(seedValue)*.85,(a[1]+c[1])*.48+Math.sin(seedValue*1.8)*.62,Math.cos(seedValue)*1.45]
+        const active=sourceIndex===activeSource
+        let visibility=active?.20:.02
+        if(stage===3)visibility=active?(.18+.45*local):.015
+        if(stage===4)visibility=active?.82:.015
+        if(stage===5)visibility=active?.96:.012
+        if(stage===6)visibility=active?.55:.012
+        if(stage===7)visibility=active?.92:.01
+        const semanticColor=stage===5&&active?mix(activeColor,writeColor,.72):stage===6&&active?mix(activeColor,violet,.65):stage===7&&active?mix(activeColor,white,.7):activeColor
         let previousPoint=null
-        const segments=28
-        for(let s=0;s<=segments;s++){
-          const t=s/segments
-          let p=bezier(a,control,c,t)
-          const drift=Math.sin(now*.0018+t*11+seed)*.065
-          p=[p[0],p[1]+drift*(1-t)*t*4,p[2]+Math.cos(now*.0015+t*8+seed)*.08]
-          p=disturb(p,now)
-          const reveal=stage===1?Math.min(1,local*1.55):1
-          if(t<=reveal && previousPoint) segment(lines,previousPoint,p,color,visibility*(.55+.45*Math.sin(t*Math.PI)))
-          previousPoint=p
+        for(let index=0;index<=32;index++){
+          const t=index/32
+          let point=bezier(a,control,c,t)
+          point[1]+=Math.sin(now*.0013+t*10+seedValue)*.055*(1-t)*t*4
+          point=disturb(point,now)
+          if(previousPoint)segment(lines,previousPoint,point,semanticColor,visibility*(.55+.45*Math.sin(t*Math.PI)),now)
+          previousPoint=point
         }
-        if(isActive && stage>=3){
-          const pulseCount=stage===6?2:4
-          for(let pIndex=0;pIndex<pulseCount;pIndex++){
-            let t=(local+pIndex/pulseCount)%1
-            if(stage===5) t=Math.min(1,local*.72+pIndex*.055)
-            if(stage===7) t=Math.min(1,.52+local*.48+pIndex*.07)
-            const p=disturb(bezier(a,control,c,t),now)
-            pointVertex(points,p,mix(activeColor,[1,1,1],.35),.75,5.5+(1-t)*3.5)
+        if(active&&stage>=3){
+          for(let pulse=0;pulse<5;pulse++){
+            let t=(local+pulse*.18)%1
+            if(stage===5)t=Math.min(1,local*.68+pulse*.045)
+            if(stage===6)t=Math.min(.86,local*.55+pulse*.035)
+            if(stage===7)t=.76+Math.min(.24,local*.24+pulse*.028)
+            pointVertex(points,disturb(bezier(a,control,c,t),now),mix(semanticColor,white,.45),.92,7.5+(1-t)*5,now)
           }
         }
       })
@@ -365,44 +374,64 @@
       sources.forEach((position,index)=>{
         const active=index===activeSource
         const color=hex(propertyColors[index])
-        pointVertex(points,disturb(position,now),color,active?.98:.30,active?18:10)
-        if(active && stage===5){
-          for(let ring=0;ring<18;ring++){
-            const angle=ring/18*Math.PI*2
-            const radius=.22+local*1.2
-            const p=[position[0]+Math.cos(angle)*radius,position[1]+Math.sin(angle)*radius,position[2]]
-            pointVertex(points,p,color,(1-local)*.35,3.2)
+        pointVertex(points,disturb(position,now),color,active?.98:.23,active?18:8,now)
+        if(active&&stage===5){
+          for(let ring=0;ring<36;ring++){
+            const angle=ring/36*Math.PI*2
+            const radius=.16+local*1.45
+            pointVertex(points,[position[0]+Math.cos(angle)*radius,position[1]+Math.sin(angle)*radius,position[2]+Math.sin(angle*3)*.08],mix(activeColor,writeColor,.65),(1-local)*.48,3.5,now)
           }
         }
       })
+
       targets.forEach((position,index)=>{
-        const connected=connections.some(pair=>pair[0]===activeSource&&pair[1]===index)
-        const color=connected?mix(activeColor,hex(effectColor),.45):hex(effectColor)
-        const arrival=stage===7?Math.max(0,1-Math.abs(local-.62)*4):0
-        pointVertex(points,position,color,connected?.60:.18,connected?11+arrival*9:7)
+        const connected=connections.some(connection=>connection[0]===activeSource&&connection[1]===index)
+        pointVertex(points,position,connected?mix(activeColor,hex('#68d9ff'),.45):cold,connected?.58:.10,connected?10:5,now)
       })
 
+      const aperture=[2.48,0,.15]
+      const baseRadius=stage===6?1.22*(1-local)+.10:.72+Math.sin(now*.0012)*.035
+      for(let ring=0;ring<3;ring++){
+        const radius=baseRadius*(1-ring*.18)
+        for(let index=0;index<96;index++){
+          const angle=index/96*Math.PI*2
+          const point=[aperture[0],Math.sin(angle)*radius,aperture[2]+Math.cos(angle)*radius*.36]
+          const alpha=stage===6?.18+.46*(1-local):.045-ring*.009
+          pointVertex(points,point,stage===6?mix(violet,white,.18):violet,alpha,stage===6?4.5:2.3,now)
+        }
+      }
+
       if(stage===6){
-        const center=[0,0,.35]
-        const radius=1.55*(1-local)+.12
-        for(let i=0;i<42;i++){
-          const angle=i/42*Math.PI*2
-          const p=[center[0]+Math.cos(angle)*radius*1.5,center[1]+Math.sin(angle)*radius*.68,center[2]+Math.sin(angle*3+now*.004)*.12]
-          pointVertex(points,p,mix(activeColor,[.8,.55,1],.35),.18+.30*(1-local),3.5)
+        for(let index=0;index<90;index++){
+          const angle=index*2.399+now*.00035
+          const radius=(1-local)*(2.7+(index%7)*.09)+.08
+          const point=[aperture[0]-radius*.95,Math.sin(angle)*radius*.52,aperture[2]+Math.cos(angle)*radius*.33]
+          pointVertex(points,point,mix(activeColor,violet,.55),.16+.38*(1-local),3+(index%3),now)
+        }
+      }
+
+      if(stage===7){
+        const beamStart=[aperture[0]+.12,0,.1],beamEnd=[4.9,0,.08]
+        for(let beam=0;beam<4;beam++){
+          const offset=(beam-1.5)*.018
+          segment(lines,[beamStart[0],offset,beamStart[2]],[beamEnd[0],offset,beamEnd[2]],white,.18+.24*(1-Math.abs(local-.52)),now)
+        }
+        for(let index=0;index<12;index++){
+          const t=Math.min(1,local*1.15+index*.035)
+          pointVertex(points,[beamStart[0]+(beamEnd[0]-beamStart[0])*t,Math.sin(index)*.025,.08],white,.95,8-index*.25,now)
         }
       }
 
       drawLines(lines)
       drawPoints(points)
-
       frames++
-      if(now-fpsStart>750){this.fps=Math.round(frames*1000/(now-fpsStart));frames=0;fpsStart=now}
+      if(now-fpsStart>700){ this.fps=Math.round(frames*1000/(now-fpsStart)); frames=0; fpsStart=now }
       frame=requestAnimationFrame(render)
     }
     frame=requestAnimationFrame(render)
   })
 
-  onCleanup(() => {
+  onCleanup(()=>{
     cancelAnimationFrame(frame)
     observer?.disconnect()
     clearTimeout(flashTimer)
@@ -410,7 +439,7 @@
 </script>
 
 <section class="stage">
-  <canvas aria-label="Interactive WebGL dependency field for the Skein reactive pipeline" @pointermove={pointerMove} @pointerleave={pointerLeave}></canvas>
+  <canvas aria-label="Interactive WebGL dependency skein for the Skein reactive runtime" @pointermove={pointerMove} @pointerleave={pointerLeave}></canvas>
 
   <div class="properties" aria-label="Reactive properties">
     <button each={viewProperties} key={id} data-index={index} data-selected={selected} --accent={color} @click={pickProperty}>
@@ -418,68 +447,61 @@
     </button>
   </div>
 
-  <div class="targets" aria-label="Exact DOM targets">
-    <small>REAL DOM</small>
-    <output ?data-flash={flash}><span>textContent</span><b>{count}</b></output>
-    <span>--accent</span>
-    <span>cx</span>
-    <span>user effect</span>
+  <div class="aperture-label"><span>BATCH BOUNDARY</span><b>ONE MICROTASK</b></div>
+
+  <div class="targets" ?data-flash={flash} aria-label="Exact DOM target">
+    <small><span>ACTUAL BROWSER DOM</span><span>EXACT WRITE</span></small>
+    <output><code>&lt;span&gt;</code><span>textContent</span><b>{count}</b></output>
   </div>
 
   <nav class="labels" aria-label="Runtime stages">
     <button each={viewSteps} key={id} data-index={index} data-selected={selected} --accent={color} @click={pickStage}>
-      <b>0{id}</b><span>{title}</span>
+      <i></i><span>{kicker}</span>
     </button>
   </nav>
 
-  <div class="hud top"><span>{status}</span><b>{fps} FPS</b></div>
-  <div class="hud bottom"><span>pointer bends field</span><span>click property = write</span><span>DOM commits are real</span></div>
+  <div class="hud"><span>{status}</span><span><b>{fps}</b> FPS</span></div>
+  <div class="hint">move pointer through the skein</div>
   <div class="energy"></div>
 </section>
 
 <style>
-  :host { display:block; height:100%; min-height:590px; --energy:.65; }
+  :host { display:block; width:100%; height:100vh; min-height:650px; --energy:.65; }
   * { box-sizing:border-box; }
-  .stage { position:relative; width:100%; height:100%; min-height:590px; overflow:hidden; border:1px solid #17283a; border-radius:22px; background:#03060b; box-shadow:inset 0 1px #24405b88,0 30px 100px #0009; }
-  canvas { display:block; width:100%; height:100%; min-height:590px; touch-action:none; cursor:crosshair; }
-  .energy { position:absolute; inset:-20%; pointer-events:none; background:radial-gradient(circle at 52% 48%,rgba(87,192,255,calc(var(--energy)*.08)),transparent 46%); mix-blend-mode:screen; }
+  .stage { position:relative; width:100%; height:100%; overflow:hidden; background:#020408; }
+  canvas { display:block; width:100%; height:100%; touch-action:none; cursor:crosshair; }
+  .energy { position:absolute; inset:-22%; pointer-events:none; background:radial-gradient(circle at 62% 50%,rgba(121,247,210,calc(var(--energy)*.035)),transparent 43%); mix-blend-mode:screen; }
 
-  .properties { position:absolute; z-index:30; left:14px; top:50%; translate:0 -50%; display:grid; gap:8px; pointer-events:none; }
-  .properties button { --accent:#78f7d0; pointer-events:auto; display:flex; align-items:center; gap:9px; width:max-content; max-width:150px; padding:8px 10px; border:1px solid #1c2c40; border-radius:999px; color:#708198; background:#050b13d9; font:700 9px ui-monospace,monospace; cursor:pointer; backdrop-filter:blur(10px); transition:.18s ease; }
-  .properties i { width:7px; height:7px; border-radius:50%; background:var(--accent); box-shadow:0 0 16px var(--accent); }
-  .properties button:hover,.properties button[data-selected="true"] { color:#f5fbff; border-color:var(--accent); background:color-mix(in srgb,var(--accent) 10%,#050b13); transform:translateX(4px); }
+  .properties { position:absolute; z-index:30; left:27px; top:50%; translate:0 -36%; display:grid; gap:9px; pointer-events:none; }
+  .properties button { --accent:#79f7d2; pointer-events:auto; width:max-content; min-width:118px; display:flex; gap:10px; align-items:center; padding:8px 11px; border:1px solid #15273b; border-radius:999px; color:#6d7b8e; background:#030912cc; backdrop-filter:blur(10px); font:750 9px ui-monospace,monospace; transition:.2s; cursor:pointer; }
+  .properties i { width:7px; height:7px; border-radius:50%; background:var(--accent); box-shadow:0 0 18px var(--accent); }
+  .properties button:hover,.properties button[data-selected="true"] { color:#f5fbff; border-color:color-mix(in srgb,var(--accent) 80%,#263849); transform:translateX(6px); box-shadow:0 0 28px color-mix(in srgb,var(--accent) 15%,transparent); }
 
-  .targets { position:absolute; z-index:30; right:14px; top:50%; translate:0 -50%; width:132px; display:grid; gap:7px; pointer-events:none; }
-  .targets small { color:#5e6f84; font:800 8px ui-monospace,monospace; letter-spacing:.16em; }
-  .targets > span,.targets output { display:flex; justify-content:space-between; gap:12px; align-items:center; min-height:34px; padding:8px 10px; border:1px solid #1a2b3d; border-radius:9px; color:#7e8da0; background:#050b13d9; backdrop-filter:blur(10px); font:700 8px ui-monospace,monospace; }
-  .targets output { color:#9fb0c5; border-color:#265b64; }
-  .targets output span { color:#7195a4; }
-  .targets output b { color:#78f7d0; font-size:17px; text-shadow:0 0 18px #78f7d066; }
-  .targets output[data-flash] { animation:commit .28s ease-out; }
-  @keyframes commit { 0%{transform:scale(.94);box-shadow:0 0 0 #78f7d000;background:#78f7d008} 35%{transform:scale(1.055);box-shadow:0 0 36px #78f7d05c;background:#78f7d020} 100%{transform:scale(1);box-shadow:0 0 0 #78f7d000} }
+  .aperture-label { position:absolute; z-index:24; left:69%; top:49%; translate:-50% -50%; color:#ab8cff; font:800 8px ui-monospace,monospace; letter-spacing:.18em; text-transform:uppercase; pointer-events:none; text-shadow:0 0 16px #a56fff88; }
+  .aperture-label span,.aperture-label b { display:block; }
+  .aperture-label b { margin-top:5px; color:#e1d6ff; font-size:10px; letter-spacing:.08em; }
 
-  .labels { position:absolute; z-index:40; left:50%; bottom:42px; translate:-50% 0; width:min(92%,920px); display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:5px; pointer-events:none; }
-  .labels button { --accent:#78f7d0; pointer-events:auto; min-width:0; padding:7px 6px; border:1px solid #172637; border-radius:9px; color:#5c6c80; background:#050a11d9; backdrop-filter:blur(12px); font:700 7px ui-monospace,monospace; text-align:left; cursor:pointer; transition:.16s ease; overflow:hidden; }
-  .labels b { display:block; margin-bottom:3px; color:var(--accent); font-size:7px; }
-  .labels span { display:block; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
-  .labels button:hover,.labels button[data-selected="true"] { color:#eef7ff; border-color:color-mix(in srgb,var(--accent) 72%,#223); background:color-mix(in srgb,var(--accent) 9%,#050a11); box-shadow:0 0 20px color-mix(in srgb,var(--accent) 13%,transparent); }
+  .targets { position:absolute; z-index:35; right:28px; top:50%; translate:0 -50%; width:205px; padding:10px; border:1px solid #eaf5ff26; border-radius:14px; background:#eaf3ff; box-shadow:0 22px 90px #000b,0 0 70px #c9eaff12; color:#07101b; pointer-events:none; }
+  .targets small { display:flex; justify-content:space-between; gap:8px; color:#5f6b77; font:850 8px ui-monospace,monospace; letter-spacing:.12em; }
+  .targets output { display:grid; grid-template-columns:1fr auto; gap:7px 12px; align-items:end; margin-top:9px; padding:15px 14px; border:1px solid #c9d3dc; border-radius:9px; background:#fff; box-shadow:0 4px 16px #0a17231c; }
+  .targets code { grid-column:1/-1; color:#6b7783; font:700 8px ui-monospace,monospace; }
+  .targets output span { color:#1d2a36; font:750 10px ui-monospace,monospace; }
+  .targets output b { color:#06111a; font:900 36px/1 ui-monospace,monospace; letter-spacing:-.08em; }
+  .targets[data-flash] { animation:dom-hit .43s cubic-bezier(.2,.85,.2,1); }
+  @keyframes dom-hit { 0%{transform:translateY(-50%) scale(.95);box-shadow:0 22px 90px #000b,0 0 0 #fff0} 30%{transform:translateY(-50%) scale(1.055);box-shadow:0 25px 110px #000d,0 0 100px #fff9} 100%{transform:translateY(-50%) scale(1);box-shadow:0 22px 90px #000b,0 0 70px #c9eaff12} }
 
-  .hud { position:absolute; z-index:50; display:flex; gap:7px; align-items:center; color:#617287; font:700 8px ui-monospace,monospace; letter-spacing:.09em; text-transform:uppercase; pointer-events:none; }
-  .hud span,.hud b { padding:6px 8px; border:1px solid #172638; border-radius:999px; background:#050a11cc; }
-  .hud b { color:#78f7d0; }
-  .top { top:13px; right:13px; }
-  .bottom { left:50%; bottom:10px; translate:-50% 0; white-space:nowrap; }
+  .labels { position:absolute; z-index:32; left:50%; bottom:27px; translate:-50% 0; width:min(700px,52vw); display:grid; grid-template-columns:repeat(8,1fr); gap:3px; pointer-events:none; }
+  .labels button { --accent:#79f7d2; position:relative; pointer-events:auto; height:30px; padding:8px 2px 0; border:0; border-top:1px solid #142334; color:#526074; background:transparent; font:700 7px ui-monospace,monospace; text-transform:uppercase; cursor:pointer; }
+  .labels i { position:absolute; top:-3px; left:50%; width:5px; height:5px; border-radius:50%; translate:-50% 0; background:#213346; box-shadow:0 0 0 2px #020408; }
+  .labels button:hover,.labels button[data-selected="true"] { color:#e5eef8; border-color:var(--accent); }
+  .labels button:hover i,.labels button[data-selected="true"] i { background:var(--accent); box-shadow:0 0 18px var(--accent); }
 
-  @media(max-width:760px){
-    :host,.stage,canvas{min-height:560px}
-    .labels{grid-template-columns:repeat(4,1fr);bottom:43px}
-    .targets{right:8px;width:112px}.properties{left:8px}
-    .properties button{max-width:118px}.bottom span:nth-child(2){display:none}
-  }
-  @media(max-width:500px){
-    .labels{width:96%;gap:3px}.labels button{padding:5px 4px}
-    .targets>span{display:none}.targets{top:35%;width:108px}.properties{top:42%}
-    .bottom span:nth-child(1){display:none}
-  }
-  @media(prefers-reduced-motion:reduce){.properties button,.labels button{transition:none}.targets output[data-flash]{animation:none}}
+  .hud { position:absolute; z-index:40; right:28px; top:24px; display:flex; gap:7px; color:#617187; font:800 8px ui-monospace,monospace; text-transform:uppercase; letter-spacing:.08em; pointer-events:none; }
+  .hud span { padding:7px 9px; border:1px solid #14263a; border-radius:999px; background:#030912c8; }
+  .hud b { color:#79f7d2; }
+  .hint { position:absolute; z-index:25; right:28px; bottom:28px; color:#56667a; font:700 8px ui-monospace,monospace; text-transform:uppercase; letter-spacing:.1em; pointer-events:none; }
+
+  @media(max-width:900px){.targets{width:170px;right:14px}.labels{width:64vw}.properties{left:16px}.aperture-label{left:66%}}
+  @media(max-width:620px){:host{min-height:600px}.targets{width:145px}.properties button{min-width:96px}.labels{display:none}.aperture-label{display:none}.hint{display:none}}
+  @media(prefers-reduced-motion:reduce){.properties button{transition:none}.targets[data-flash]{animation:none}}
 </style>

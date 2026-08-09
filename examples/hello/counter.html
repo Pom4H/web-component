@@ -1,0 +1,65 @@
+<script>
+  this.count = 0
+  this.increment = () => this.count++
+  this.decrement = () => this.count--
+</script>
+
+<main --turn={count}>
+  <p>HELLO / SKEIN</p>
+  <strong>{count}</strong>
+  <div>
+    <button @click={decrement} aria-label="Decrease count">−</button>
+    <button @click={increment} aria-label="Increase count">+</button>
+  </div>
+</main>
+
+<style>
+  :host {
+    display: grid;
+    min-height: 100%;
+    place-items: center;
+    background: #f4f0e6;
+    color: #11110f;
+    font-family: ui-sans-serif, system-ui, sans-serif;
+  }
+
+  main {
+    display: grid;
+    gap: 20px;
+    justify-items: center;
+    padding: 36px;
+    border: 1px solid #11110f;
+    box-shadow: 10px 10px 0 #eaff63;
+  }
+
+  p {
+    margin: 0;
+    font: 700 11px ui-monospace, monospace;
+    letter-spacing: .14em;
+  }
+
+  strong {
+    font-size: 72px;
+    line-height: 1;
+    transform: rotate(calc(var(--turn, 0) * 1deg));
+    transition: transform 160ms ease;
+  }
+
+  div { display: flex; gap: 8px; }
+
+  button {
+    width: 48px;
+    height: 42px;
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  button:last-child { background: #11110f; color: #f4f0e6; }
+</style>

@@ -4,7 +4,7 @@
 
 Skein is a tiny HTML-first Web Components runtime with fine-grained reactivity.
 
-- **15.8 kB raw / 5.7 kB gzip / 5.1 kB Brotli**
+- **15,839 B raw / 5,686 B gzip / 5,123 B Brotli**
 - zero runtime dependencies
 - no virtual DOM
 - no build step required
@@ -35,6 +35,18 @@ The production artifact is one ES module: `skein.min.js`.
 ```
 
 No npm, CLI, config or bundler is required. Pin a commit SHA instead of `@main` for reproducible production sites.
+
+## Browser Playground
+
+[Open the zero-dependency Playground](https://pom4h.github.io/web-component/playground/) to edit a complete component and run it beside its preview. The editor provides line numbers, cursor and selection position, syntax highlighting, smart indent/outdent and a draggable desktop editor/preview split without embedding a third-party editor.
+
+Each built-in example keeps its own auto-saved browser-local draft. **Reset** restores the repository source, while **Share** copies a URL containing the current source. Run, save and share actions report their state in the workspace, and runtime errors can be read and dismissed without covering the editor permanently.
+
+```text
+Ctrl/Cmd + Enter   run
+Ctrl/Cmd + S       save the current example draft
+Tab / Shift+Tab    indent / outdent the current line or selection
+```
 
 ## Component files
 
@@ -353,6 +365,7 @@ There is no virtual tree to diff and no component-wide rerender after a state wr
 
 The public examples each have one architectural purpose:
 
+- **Hello Counter** — the smallest editable state, event and CSS custom-property example.
 - **Workspace** — 18-component application composition with native slots, properties and events.
 - **Queue Board** — keyed DOM identity and native form behavior.
 - **Field Atlas** — native SVG with exact reactive attribute writes.

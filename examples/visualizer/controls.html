@@ -1,6 +1,8 @@
 <script>
   input('running', true)
   input('speed', 1)
+  this.action = computed(() => this.running ? 'pause flow' : 'resume flow')
+  this.mode = computed(() => this.running ? 'running' : 'paused')
 
   this.toggle = () => host.dispatchEvent(new CustomEvent('run-change', {
     detail:{ running:!this.running }, bubbles:true, composed:true
@@ -11,11 +13,11 @@
 </script>
 
 <section>
-  <header><small>CONTROL SURFACE</small><b>{running}</b></header>
-  <button @click={toggle}>{running}</button>
+  <header><small>CONTROL SURFACE</small><b>{mode}</b></header>
+  <button @click={toggle}>{action}</button>
   <label>
     <span>pipeline speed</span>
-    <output>{speed}</output>
+    <output>{speed}×</output>
     <input type="range" min="0.25" max="2.5" step="0.25" .value={speed} @input={changeSpeed}>
   </label>
   <p>Drag the scene to orbit. Scroll to zoom. Click a floating stage label to jump through the same event → state → property path.</p>

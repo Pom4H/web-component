@@ -1,0 +1,70 @@
+<script>
+  this.steps = [
+    { id:1, title:'component.html', kicker:'author', detail:'Plain HTML owns script, markup and style. No build graph is required before the browser sees the component.', api:'HTML file', color:'#4f8cff' },
+    { id:2, title:'parse + compile once', kicker:'compile', detail:'Skein parses the component source once and turns strict bindings into precise effects over real DOM nodes.', api:'compile once', color:'#48d7ff' },
+    { id:3, title:'real DOM clone', kicker:'mount', detail:'A component instance clones real DOM. There is no virtual tree waiting to be diffed after state changes.', api:'Shadow DOM', color:'#45e0c2' },
+    { id:4, title:'reactive reads', kicker:'track', detail:'Bindings subscribe only to the properties they actually read, so unrelated state does not wake unrelated work.', api:'Proxy reads', color:'#75ef8c' },
+    { id:5, title:'dependency graph', kicker:'react', detail:'Fine-grained dependencies connect state properties directly to the DOM effects that consume them.', api:'property → effect', color:'#8aff65' },
+    { id:6, title:'state write', kicker:'mutate', detail:'Ordinary object and array writes invalidate only subscribers attached to the changed property.', api:'this.value++', color:'#ff9b45' },
+    { id:7, title:'one microtask', kicker:'schedule', detail:'Synchronous writes coalesce into one render wave before user effects run.', api:'queueMicrotask()', color:'#bc72ff' },
+    { id:8, title:'exact DOM writes + effects', kicker:'commit', detail:'Skein writes the exact text, attribute, property or CSS declaration that changed, then runs user effects.', api:'DOM commit', color:'#8a68ff' }
+  ]
+  this.selected = 0
+  this.running = true
+  this.speed = 1
+  this.energy = .68
+  this.current = computed(() => this.steps[this.selected])
+
+  this.select = event => {
+    this.selected = Number(event.detail.index) || 0
+    this.energy = .45 + (this.selected % 4) * .12
+  }
+  this.runChange = event => this.running = event.detail.running
+  this.speedChange = event => this.speed = event.detail.speed
+  this.energyChange = event => this.energy = event.detail.energy
+</script>
+
+<visualizer-shell>
+  <header slot="mast" class="mast">
+    <div>
+      <small>ZERO DEPENDENCY / WEBGL2 / NATIVE COMPOSITION</small>
+      <h1>SEE THE RUNTIME.</h1>
+    </div>
+    <p>The visualization is itself a Skein application. Controls emit composed DOM events, state lives here, properties flow back into the scene and inspector, and WebGL stays imperative at 60 FPS.</p>
+  </header>
+
+  <visualizer-scene slot="scene"
+    .steps={steps}
+    .selected={selected}
+    .running={running}
+    .speed={speed}
+    --energy={energy}
+    @step-select={select}
+    @energy-change={energyChange}>
+  </visualizer-scene>
+
+  <visualizer-controls slot="controls"
+    .running={running}
+    .speed={speed}
+    @run-change={runChange}
+    @speed-change={speedChange}>
+  </visualizer-controls>
+
+  <visualizer-inspector slot="inspector"
+    .step={current}
+    .running={running}
+    .speed={speed}>
+  </visualizer-inspector>
+</visualizer-shell>
+
+<style>
+  :host { display:block; min-height:100vh; background:#05070b; color:#edf4ff; font-family:Inter,ui-sans-serif,system-ui,sans-serif; }
+  * { box-sizing:border-box; }
+  .mast { display:flex; align-items:end; justify-content:space-between; gap:32px; min-width:0; }
+  .mast > div { min-width:0; }
+  small { color:#6ef0cf; font:700 10px/1.2 ui-monospace,SFMono-Regular,monospace; letter-spacing:.16em; }
+  h1 { margin:8px 0 0; font:900 clamp(38px,7vw,92px)/.78 Arial Black,Impact,sans-serif; letter-spacing:-.075em; }
+  p { width:min(560px,48vw); margin:0; color:#8996aa; font-size:13px; line-height:1.55; }
+  visualizer-scene, visualizer-controls, visualizer-inspector { display:block; min-width:0; }
+  @media(max-width:900px){.mast{align-items:start;flex-direction:column}.mast p{width:auto;max-width:680px}}
+</style>

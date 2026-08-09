@@ -1,21 +1,32 @@
 # Skein
 
-**Native web, tightly woven.**
+**Reactive Web Components in plain HTML files — no npm or compiler.**
 
-Skein is a tiny HTML-first Web Components runtime with fine-grained reactivity.
+Skein is a small browser runtime for interactive widgets on static sites and server-rendered pages. Write each component as ordinary HTML containing its script and style; Skein supplies fine-grained reactivity while Custom Elements, Shadow DOM and the rest of the browser stay native.
 
 - **15,839 B raw / 5,686 B gzip / 5,123 B Brotli**
 - zero runtime dependencies
 - no virtual DOM
-- no build step required
+- no npm, compiler or application build step required
 - reactive plain objects and arrays through native Proxy
 - real Custom Elements + Shadow DOM
 - native HTML, CSS, SVG, Canvas, Web Audio and platform objects
 - keyed DOM identity and scoped cleanup
 
-The production artifact is one ES module: `skein.min.js`.
+The production artifact is one ES module: `skein.min.js`. It is designed for browser-side interactive regions: data visualizations, instruments, media controls and small application surfaces built with native CSS, SVG, Canvas or Web Audio.
 
-## 60-second start
+## Where Skein fits
+
+Use Skein when the deployable artifact should remain a folder of static files, but plain Custom Elements would leave you writing reactive updates, keyed DOM identity and cleanup by hand. It is especially suited to:
+
+- interactive SVG and Canvas visualizations;
+- Web Audio tools and media controls;
+- widgets embedded in static sites, CMS pages or existing server applications;
+- kiosks and browser-based device interfaces where SSR is not required.
+
+Skein is not trying to replace an SSR application framework or a mature design-system toolchain. If your application already depends on a compiler and full framework ecosystem, that framework will usually be the more practical default.
+
+## 60-second start: one page, one component
 
 ```html
 <click-count></click-count>
@@ -34,7 +45,7 @@ The production artifact is one ES module: `skein.min.js`.
 </script>
 ```
 
-No npm, CLI, config or bundler is required. Pin a commit SHA instead of `@main` for reproducible production sites.
+Save that as `index.html`, serve the directory over HTTP and open it in a modern browser. No package manifest, CLI, config or bundler is required. The inline template is useful for a first widget; when it grows, move its contents into `click/count.html` and keep `<click-count>` in the page. Pin a commit SHA instead of `@main` for reproducible production sites.
 
 ## Browser Playground
 
@@ -363,14 +374,14 @@ There is no virtual tree to diff and no component-wide rerender after a state wr
 
 ## Examples
 
-The public examples each have one architectural purpose:
+The public examples show the browser-native workloads Skein is intended for:
 
 - **Hello Counter** — the smallest editable state, event and CSS custom-property example.
 - **Workspace** — 18-component application composition with native slots, properties and events.
 - **Queue Board** — keyed DOM identity and native form behavior.
-- **Field Atlas** — native SVG with exact reactive attribute writes.
+- **Field Atlas** — an interactive native SVG with exact reactive attribute writes.
 - **Type Machine** — four independent `--name={path}` bindings feeding native CSS while a normal inline style remains intact.
-- **Skein Studio** — multi-file Web Audio/Canvas composition.
+- **Skein Studio** — a browser-only Web Audio instrument with Canvas visualization, composed from multiple HTML component files.
 
 ## 0.6 migration
 
@@ -400,7 +411,7 @@ Both browser suites use Node built-ins plus raw Chrome DevTools Protocol; no tes
 
 ## Constraints
 
-Skein currently does not implement SSR, hydration, suspense or error boundaries. Keep static, semantic and SEO-critical content as ordinary document HTML when possible and enhance interactive regions with Skein.
+Skein currently does not implement SSR, hydration, suspense or error boundaries. Keep static, semantic and SEO-critical content as ordinary document HTML and use Skein for browser-side interactive regions.
 
 Component scripts execute through `AsyncFunction`, so a strict Content Security Policy still requires allowing dynamic evaluation.
 

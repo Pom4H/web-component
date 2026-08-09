@@ -124,7 +124,9 @@ const contentTypes = new Map([
 const siteServer = createHttpServer(async (request, response) => {
   try {
     const pathname = decodeURIComponent(new URL(request.url, 'http://127.0.0.1').pathname);
-    const relative = pathname === '/playground' || pathname === '/playground/' ? 'playground/index.html' : pathname.slice(1);
+    const relative = pathname === '/playground' || pathname === '/playground/' ? 'playground/index.html'
+      : pathname === '/examples' || pathname === '/examples/' ? 'examples/index.html'
+      : pathname.slice(1);
     const allowed = relative === 'skein.min.js' || ['examples/', 'playground/', 'site/'].some(prefix => relative.startsWith(prefix));
     if (!allowed || relative.includes('..')) throw new Error('Not found');
     const body = await readFile(join(root, relative));
@@ -250,6 +252,126 @@ try {
   }
   if (late !== 'ready') throw new Error(`Late define failed: ${late}`);
   console.log('late-define: passed');
+
+  const audioHarness = await send('Page.addScriptToEvaluateOnNewDocument', { source: `(()=>{
+    const calls=globalThis.__audioCalls=[];
+    class FakeOscillator extends EventTarget {
+      constructor(){super();this.frequency={value:0};this.type='sine'}
+      connect(node){calls.push('oscillator-connect');return node}
+      disconnect(){calls.push('oscillator-disconnect')}
+      start(){calls.push('oscillator-start')}
+      stop(){calls.push('oscillator-stop');setTimeout(()=>this.dispatchEvent(new Event('ended')),0)}
+    }
+    class FakeGain {
+      constructor(){this.gain={value:.1,setValueAtTime(value){this.value=value},exponentialRampToValueAtTime(value){this.value=value},cancelScheduledValues(){}}}
+      connect(node){calls.push('gain-connect');return node}
+      disconnect(){calls.push('gain-disconnect')}
+    }
+    class FakeAudioContext extends EventTarget {
+      constructor(options={}){super();this.state='suspended';this.currentTime=1;this.destination={};calls.push('context:'+String(options.latencyHint||''));globalThis.__audioContext=this}
+      resume(){
+        calls.push('resume:'+String(navigator.userActivation.isActive));
+        return new Promise(resolve=>setTimeout(()=>{this.state='running';calls.push('resumed');this.dispatchEvent(new Event('statechange'));resolve()},35))
+      }
+      createOscillator(){calls.push('create-oscillator');return new FakeOscillator()}
+      createGain(){calls.push('create-gain');return new FakeGain()}
+      close(){this.state='closed';calls.push('close');this.dispatchEvent(new Event('statechange'));return Promise.resolve()}
+    }
+    Object.defineProperty(globalThis,'AudioContext',{configurable:true,writable:true,value:FakeAudioContext});
+    Object.defineProperty(globalThis,'webkitAudioContext',{configurable:true,writable:true,value:FakeAudioContext});
+  })()` });
+  try {
+    await send('Emulation.setDeviceMetricsOverride', { width: 1200, height: 800, deviceScaleFactor: 1, mobile: false });
+    await send('Page.navigate', { url: `${siteOrigin}/examples/` });
+
+    let galleryStudio;
+    for (let attempt = 0; attempt < 300; attempt++) {
+      await sleep(25);
+      try {
+        galleryStudio = await evaluate(send, `(()=>{
+          const frame=[...document.querySelectorAll('iframe')].find(node=>node.title==='Skein Studio');
+          const app=frame?.contentDocument?.querySelector('studio-app');
+          const root=app?.shadowRoot;
+          const synth=root?.querySelector('pocket-synth');
+          const key=synth?.shadowRoot?.querySelector('.keys button');
+          const featured=[...document.querySelectorAll('.demo-card--featured')].map(node=>node.querySelector('iframe')?.title);
+          return {ready:!!key,allow:frame?.getAttribute('allow'),frameClass:frame?.className,featured,overflow:frame?.contentWindow?.getComputedStyle(frame.contentDocument.body).overflowY};
+        })()`);
+      } catch {}
+      if (galleryStudio?.ready) break;
+    }
+    if (!galleryStudio?.ready || galleryStudio.allow !== 'autoplay *' || !galleryStudio.frameClass.includes('demo-frame--studio') || galleryStudio.featured.join(',') !== 'Workspace,Skein Studio' || galleryStudio.overflow !== 'auto') {
+      throw new Error(`Gallery Studio frame failed: ${JSON.stringify(galleryStudio)}`);
+    }
+
+    const point = await evaluate(send, `(()=>{
+      const frame=[...document.querySelectorAll('iframe')].find(node=>node.title==='Skein Studio');
+      frame.scrollIntoView({block:'center',behavior:'instant'});
+      const key=frame.contentDocument.querySelector('studio-app').shadowRoot.querySelector('pocket-synth').shadowRoot.querySelector('.keys button');
+      key.scrollIntoView({block:'center',behavior:'instant'});
+      const frameBox=frame.getBoundingClientRect(),keyBox=key.getBoundingClientRect();
+      return {x:frameBox.left+keyBox.left+keyBox.width/2,y:frameBox.top+keyBox.top+keyBox.height/2,visible:keyBox.top>=0&&keyBox.bottom<=frame.contentWindow.innerHeight};
+    })()`);
+    if (!point.visible || point.x < 0 || point.x > 1200 || point.y < 0 || point.y > 800) throw new Error(`Studio key is not reachable in its demo frame: ${JSON.stringify(point)}`);
+
+    await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: point.x, y: point.y });
+    await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: point.x, y: point.y, button: 'left', buttons: 1, clickCount: 1 });
+    await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: point.x, y: point.y, button: 'left', buttons: 0, clickCount: 1 });
+    await sleep(10);
+    const beforeResume = await evaluate(send, `(()=>{const frame=[...document.querySelectorAll('iframe')].find(node=>node.title==='Skein Studio');return frame.contentWindow.__audioCalls})()`);
+    if (!beforeResume.includes('resume:true') || beforeResume.includes('oscillator-start')) throw new Error(`Audio did not wait for activated resume: ${JSON.stringify(beforeResume)}`);
+
+    await sleep(100);
+    const quickTap = await evaluate(send, `(()=>{
+      const frame=[...document.querySelectorAll('iframe')].find(node=>node.title==='Skein Studio');
+      const app=frame.contentDocument.querySelector('studio-app'),synth=app.shadowRoot.querySelector('pocket-synth');
+      return {calls:frame.contentWindow.__audioCalls,note:app.state.note,active:synth.state.notes[0].active,state:synth.state.audioState};
+    })()`);
+    const resumeIndex = quickTap.calls.indexOf('resumed');
+    const startIndex = quickTap.calls.indexOf('oscillator-start');
+    const stopIndex = quickTap.calls.indexOf('oscillator-stop');
+    if (resumeIndex < 0 || startIndex <= resumeIndex || stopIndex <= startIndex || quickTap.note !== 'C' || quickTap.active || quickTap.state !== 'audio on') {
+      throw new Error(`Quick first tap audio contract failed: ${JSON.stringify(quickTap)}`);
+    }
+
+    const activationStarts = quickTap.calls.filter(value => value === 'oscillator-start').length;
+    const activationStops = quickTap.calls.filter(value => value === 'oscillator-stop').length;
+    await evaluate(send, `(()=>{
+      const frame=[...document.querySelectorAll('iframe')].find(node=>node.title==='Skein Studio');
+      frame.contentDocument.querySelector('studio-app').shadowRoot.querySelector('pocket-synth').shadowRoot.querySelector('.keys button').click();
+    })()`);
+    await sleep(60);
+    const nativeActivation = await evaluate(send, `(()=>{
+      const frame=[...document.querySelectorAll('iframe')].find(node=>node.title==='Skein Studio');
+      const synth=frame.contentDocument.querySelector('studio-app').shadowRoot.querySelector('pocket-synth');
+      return {calls:frame.contentWindow.__audioCalls,active:synth.state.notes[0].active};
+    })()`);
+    if (nativeActivation.calls.filter(value => value === 'oscillator-start').length !== activationStarts + 1 || nativeActivation.calls.filter(value => value === 'oscillator-stop').length !== activationStops + 1 || nativeActivation.active) {
+      throw new Error(`Native button activation audio contract failed: ${JSON.stringify(nativeActivation)}`);
+    }
+
+    await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: point.x, y: point.y, button: 'left', buttons: 1, clickCount: 1 });
+    await sleep(20);
+    const heldNote = await evaluate(send, `(()=>{
+      const frame=[...document.querySelectorAll('iframe')].find(node=>node.title==='Skein Studio');
+      const app=frame.contentDocument.querySelector('studio-app'),synth=app.shadowRoot.querySelector('pocket-synth');
+      return {active:synth.state.notes[0].active,stops:frame.contentWindow.__audioCalls.filter(value=>value==='oscillator-stop').length};
+    })()`);
+    if (!heldNote.active) throw new Error(`Held Studio note did not start: ${JSON.stringify(heldNote)}`);
+
+    await evaluate(send, `(()=>{
+      const frame=[...document.querySelectorAll('iframe')].find(node=>node.title==='Skein Studio');
+      frame.contentDocument.querySelector('studio-app').dispose();
+    })()`);
+    await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: point.x, y: point.y, button: 'left', buttons: 0, clickCount: 1 });
+    await sleep(20);
+    const cleanup = await evaluate(send, `(()=>{const frame=[...document.querySelectorAll('iframe')].find(node=>node.title==='Skein Studio');return frame.contentWindow.__audioCalls})()`);
+    const cleanupStops = cleanup.filter(value=>value==='oscillator-stop').length;
+    if (!cleanup.includes('close') || cleanupStops <= heldNote.stops || !cleanup.includes('oscillator-disconnect') || !cleanup.includes('gain-disconnect')) throw new Error(`Studio audio cleanup failed: ${JSON.stringify(cleanup)}`);
+    console.log('studio-gallery-audio: passed');
+  } finally {
+    await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: audioHarness.identifier });
+  }
 
   await send('Emulation.setDeviceMetricsOverride', { width: 1200, height: 800, deviceScaleFactor: 1, mobile: false });
   await send('Page.navigate', { url: `${siteOrigin}/playground/` });

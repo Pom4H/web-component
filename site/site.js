@@ -28,7 +28,7 @@ Skein.define('skein-nav', `
 
 Skein.define('skein-footer', `
 <footer>
-  <div><strong>Skein</strong><span>native web, tightly woven.</span></div>
+  <div><strong>Skein</strong><span>reactive components in plain HTML.</span></div>
   <div class="right"><a href="https://github.com/Pom4H/web-component">source</a><span>5.1 kB brotli</span><span>zero dependencies</span><span>2026</span></div>
 </footer>
 <style>
@@ -40,15 +40,15 @@ Skein.define('skein-footer', `
 
 Skein.define('skein-threads', `
 <script>
-  this.x = 50
-  this.y = 48
+  this.x = '50%'
+  this.y = '48%'
   this.move = event => {
     const r = event.currentTarget.getBoundingClientRect()
-    this.x = ((event.clientX-r.left)/r.width*100).toFixed(1)
-    this.y = ((event.clientY-r.top)/r.height*100).toFixed(1)
+    this.x = ((event.clientX-r.left)/r.width*100).toFixed(1) + '%'
+    this.y = ((event.clientY-r.top)/r.height*100).toFixed(1) + '%'
   }
 <\/script>
-<div class="field" style="--x:{x}%;--y:{y}%;" @pointermove={move}>
+<div class="field" --x={x} --y={y} @pointermove={move}>
   <svg viewBox="0 0 1000 520" preserveAspectRatio="none" aria-hidden="true">
     <g class="warp">
       <path d="M-80 90 C180 20 330 180 520 105 S830 15 1080 120"/><path d="M-80 170 C150 85 340 250 520 176 S820 92 1080 196"/>
@@ -86,7 +86,10 @@ for (const nav of document.querySelectorAll('skein-nav')) {
   patch();
 }
 
-for (const code of document.querySelectorAll('code[data-highlight]')) code.innerHTML = highlight(code.textContent);
+for (const code of document.querySelectorAll('code[data-highlight]')) {
+  code.innerHTML = highlight(code.textContent);
+  if (code.parentElement?.tagName === 'PRE') code.parentElement.tabIndex = 0;
+}
 
 document.addEventListener('click', async event => {
   const button = event.target.closest('[data-copy]');

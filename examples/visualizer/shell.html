@@ -1,28 +1,24 @@
 <main class="shell">
+  <section class="scene"><slot name="scene"></slot></section>
   <section class="mast"><slot name="mast"></slot></section>
-  <section class="body">
-    <div class="scene"><slot name="scene"></slot></div>
-    <aside class="rail">
-      <slot name="controls"></slot>
-      <slot name="inspector"></slot>
-    </aside>
-  </section>
+  <aside class="controls"><slot name="controls"></slot></aside>
+  <aside class="inspector"><slot name="inspector"></slot></aside>
   <footer>
     <span>properties ↓</span><span>composed events ↑</span><span>native slots</span><span>CSS custom properties</span><b>WebGL2</b>
   </footer>
 </main>
 
 <style>
-  :host { display:block; min-height:100vh; background:radial-gradient(circle at 52% 38%,#101c2a 0,#070a10 42%,#040609 78%); }
+  :host { display:block; min-height:100vh; background:#020408; }
   * { box-sizing:border-box; }
-  .shell { min-height:100vh; padding:22px; display:grid; grid-template-rows:auto minmax(560px,1fr) auto; gap:18px; }
-  .mast { padding:4px 2px 0; }
-  .body { min-width:0; min-height:0; display:grid; grid-template-columns:minmax(0,1fr) minmax(260px,330px); gap:14px; }
-  .scene,.rail { min-width:0; min-height:0; }
-  .rail { display:grid; grid-template-rows:auto 1fr; gap:14px; }
-  footer { display:flex; flex-wrap:wrap; gap:8px; align-items:center; color:#657287; font:700 9px ui-monospace,monospace; letter-spacing:.08em; text-transform:uppercase; }
-  footer span, footer b { border:1px solid #1a2634; border-radius:999px; padding:7px 10px; background:#080d14cc; }
-  footer b { margin-left:auto; color:#6ef0cf; border-color:#245849; }
-  @media(max-width:900px){.shell{padding:14px;grid-template-rows:auto auto auto}.body{grid-template-columns:1fr}.rail{grid-template-columns:1fr 1fr;grid-template-rows:auto}.scene{min-height:560px}}
-  @media(max-width:620px){.rail{grid-template-columns:1fr}.scene{min-height:500px}footer b{margin-left:0}}
+  .shell { position:relative; min-height:100vh; overflow:hidden; background:radial-gradient(circle at 54% 48%,#0b1522 0,#04080e 45%,#010204 86%); }
+  .scene { position:absolute; inset:0; min-width:0; min-height:0; }
+  .mast { position:absolute; z-index:60; left:30px; top:27px; width:min(690px,62vw); pointer-events:none; }
+  .controls { position:absolute; z-index:70; left:29px; bottom:27px; width:290px; }
+  .inspector { display:none; }
+  footer { position:absolute; z-index:65; left:50%; bottom:27px; translate:-50% 0; display:flex; gap:7px; align-items:center; color:#536276; font:700 8px ui-monospace,monospace; letter-spacing:.08em; text-transform:uppercase; pointer-events:none; }
+  footer span, footer b { border-top:1px solid #142334; padding:8px 7px 0; white-space:nowrap; }
+  footer b { color:#78f7d0; }
+  @media(max-width:900px){.mast{left:18px;top:18px;width:min(600px,82vw)}.controls{left:18px;bottom:18px;width:250px}footer{display:none}}
+  @media(max-width:620px){.mast{width:calc(100vw - 36px)}.controls{width:220px}}
 </style>

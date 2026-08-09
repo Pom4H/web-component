@@ -1,0 +1,37 @@
+<script>
+  input('running', true)
+  input('speed', 1)
+
+  this.toggle = () => host.dispatchEvent(new CustomEvent('run-change', {
+    detail:{ running:!this.running }, bubbles:true, composed:true
+  }))
+  this.changeSpeed = event => host.dispatchEvent(new CustomEvent('speed-change', {
+    detail:{ speed:Number(event.currentTarget.value) }, bubbles:true, composed:true
+  }))
+</script>
+
+<section>
+  <header><small>CONTROL SURFACE</small><b>{running}</b></header>
+  <button @click={toggle}>{running}</button>
+  <label>
+    <span>pipeline speed</span>
+    <output>{speed}</output>
+    <input type="range" min="0.25" max="2.5" step="0.25" .value={speed} @input={changeSpeed}>
+  </label>
+  <p>Drag the scene to orbit. Scroll to zoom. Click a floating stage label to jump through the same event → state → property path.</p>
+</section>
+
+<style>
+  :host { display:block; color:#dbe6f7; }
+  * { box-sizing:border-box; }
+  section { padding:16px; border:1px solid #1c2b3d; border-radius:16px; background:linear-gradient(180deg,#0b121dcc,#080d14e8); box-shadow:0 18px 70px #0008; }
+  header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
+  small { color:#72839b; font:700 9px ui-monospace,monospace; letter-spacing:.14em; }
+  header b { color:#6ef0cf; font:700 9px ui-monospace,monospace; text-transform:uppercase; }
+  button { width:100%; border:1px solid #2a4160; border-radius:12px; padding:11px 14px; color:#f4f8ff; background:#101c2c; font:800 11px ui-monospace,monospace; text-transform:uppercase; cursor:pointer; }
+  button:hover { border-color:#65b7ff; }
+  label { display:grid; grid-template-columns:1fr auto; gap:8px 12px; margin-top:14px; color:#93a1b5; font:700 10px ui-monospace,monospace; }
+  output { color:#ffad67; }
+  input { grid-column:1/-1; width:100%; accent-color:#6ef0cf; }
+  p { margin:14px 0 0; color:#657287; font-size:11px; line-height:1.55; }
+</style>

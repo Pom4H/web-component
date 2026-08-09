@@ -1,7 +1,7 @@
 import { registerComponent, loadElement } from './runtime/component.js';
 
 export const Skein = {
-  version: '0.6.0',
+  version: '0.6.1',
   define: registerComponent,
 };
 

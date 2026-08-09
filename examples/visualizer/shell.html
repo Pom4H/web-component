@@ -1,0 +1,28 @@
+<main class="shell">
+  <section class="mast"><slot name="mast"></slot></section>
+  <section class="body">
+    <div class="scene"><slot name="scene"></slot></div>
+    <aside class="rail">
+      <slot name="controls"></slot>
+      <slot name="inspector"></slot>
+    </aside>
+  </section>
+  <footer>
+    <span>properties ↓</span><span>composed events ↑</span><span>native slots</span><span>CSS custom properties</span><b>WebGL2</b>
+  </footer>
+</main>
+
+<style>
+  :host { display:block; min-height:100vh; background:radial-gradient(circle at 52% 38%,#101c2a 0,#070a10 42%,#040609 78%); }
+  * { box-sizing:border-box; }
+  .shell { min-height:100vh; padding:22px; display:grid; grid-template-rows:auto minmax(560px,1fr) auto; gap:18px; }
+  .mast { padding:4px 2px 0; }
+  .body { min-width:0; min-height:0; display:grid; grid-template-columns:minmax(0,1fr) minmax(260px,330px); gap:14px; }
+  .scene,.rail { min-width:0; min-height:0; }
+  .rail { display:grid; grid-template-rows:auto 1fr; gap:14px; }
+  footer { display:flex; flex-wrap:wrap; gap:8px; align-items:center; color:#657287; font:700 9px ui-monospace,monospace; letter-spacing:.08em; text-transform:uppercase; }
+  footer span, footer b { border:1px solid #1a2634; border-radius:999px; padding:7px 10px; background:#080d14cc; }
+  footer b { margin-left:auto; color:#6ef0cf; border-color:#245849; }
+  @media(max-width:900px){.shell{padding:14px;grid-template-rows:auto auto auto}.body{grid-template-columns:1fr}.rail{grid-template-columns:1fr 1fr;grid-template-rows:auto}.scene{min-height:560px}}
+  @media(max-width:620px){.rail{grid-template-columns:1fr}.scene{min-height:500px}footer b{margin-left:0}}
+</style>

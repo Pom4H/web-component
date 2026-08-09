@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#f4f0e6" />
-  <meta name="description" content="Skein is a tiny zero-dependency HTML-first Web Components runtime with fine-grained reactivity and native component composition." />
+  <meta name="description" content="Skein is a tiny zero-dependency HTML-first Web Components runtime with fine-grained reactivity and native application composition." />
   <title>Skein — native web, tightly woven</title>
   <link rel="stylesheet" href="site/styles.css" />
   <script type="module" src="site/site.js"></script>
@@ -14,20 +14,20 @@
   <main>
     <section class="hero">
       <skein-threads></skein-threads>
-      <div class="badge-row"><span class="badge">0 dependencies</span><span class="badge">4.9 kB brotli</span><span class="badge">no build</span></div>
+      <div class="badge-row"><span class="badge">0 dependencies</span><span class="badge">5.1 kB brotli</span><span class="badge">no build</span></div>
       <div class="wrap hero-copy">
         <p class="eyebrow">HTML-first reactive web components</p>
         <h1 class="display">SKEIN</h1>
         <div class="subrow">
-          <p class="lede">Fine-grained reactive state over the browser you already have. HTML composes components; CSS, SVG, Canvas and Web Audio stay native.</p>
-          <div class="actions"><a class="button" href="examples/">See composition →</a><a class="button ghost" href="start/">Start in one file</a></div>
+          <p class="lede">Fine-grained reactive state over the browser you already have. HTML composes components; Shadow DOM, CSS, SVG, Canvas and Web Audio stay native.</p>
+          <div class="actions"><a class="button" href="examples/workspace/">Open 18-component app →</a><a class="button ghost" href="start/">Start in one file</a></div>
         </div>
       </div>
     </section>
 
     <div class="ticker" aria-hidden="true"><div class="ticker-track">
-      <span>custom elements</span><span>properties down</span><span>events up</span><span>keyed ranges</span><span>css</span><span>svg</span><span>canvas</span><span>web audio</span>
-      <span>custom elements</span><span>properties down</span><span>events up</span><span>keyed ranges</span><span>css</span><span>svg</span><span>canvas</span><span>web audio</span>
+      <span>custom elements</span><span>properties down</span><span>events up</span><span>native slots</span><span>keyed ranges</span><span>css</span><span>svg</span><span>canvas</span>
+      <span>custom elements</span><span>properties down</span><span>events up</span><span>native slots</span><span>keyed ranges</span><span>css</span><span>svg</span><span>canvas</span>
     </div></div>
 
     <section class="section">
@@ -35,8 +35,8 @@
         <div class="section-head"><p class="eyebrow">01 / the premise</p><h2>The browser is already a rendering engine and a component model.</h2></div>
         <div class="grid-3">
           <article class="feature"><span class="num">DOM</span><div><h3>Create once.</h3><p>Templates compile once. State writes update exact DOM parts instead of rebuilding a virtual tree.</p></div></article>
-          <article class="feature"><span class="num">COMPONENTS</span><div><h3>Compose as HTML.</h3><p>Tag names load HTML files. Owners pass DOM properties down; children dispatch native events up.</p></div></article>
-          <article class="feature"><span class="num">WEB APIs</span><div><h3>Keep the medium native.</h3><p>Date, Map, DOM, CSS, SVG, Canvas and Web Audio remain real browser objects instead of framework wrappers.</p></div></article>
+          <article class="feature"><span class="num">COMPONENTS</span><div><h3>Compose as HTML.</h3><p>Tag names load HTML files. Properties carry data, composed events carry actions, native slots carry content.</p></div></article>
+          <article class="feature"><span class="num">WEB APIs</span><div><h3>Keep the medium native.</h3><p>Date, Map, Shadow DOM, CSS, SVG, Canvas and Web Audio remain real browser objects instead of framework wrappers.</p></div></article>
         </div>
       </div>
     </section>
@@ -47,7 +47,7 @@
           <p class="eyebrow">02 / start</p>
           <h2 style="font-size:clamp(48px,7vw,96px);letter-spacing:-.065em;line-height:.9;margin:20px 0 24px">One HTML file is enough.</h2>
           <p class="lede" style="font-size:19px">No npm, CLI or config. Prototype inline, then move components into files when the project actually needs boundaries.</p>
-          <p style="margin-top:18px;font:600 12px ui-monospace,monospace;letter-spacing:.04em">skein.min.js · 15.0 kB raw · 5.5 kB gzip · 4.9 kB brotli</p>
+          <p style="margin-top:18px;font:600 12px ui-monospace,monospace;letter-spacing:.04em">skein.min.js · 15.4 kB raw · 5.7 kB gzip · 5.1 kB brotli</p>
           <p style="margin-top:28px"><a class="button" href="start/">See the 60-second start</a></p>
         </div>
         <div class="code-card">
@@ -70,31 +70,30 @@
       </div>
     </section>
 
-    <section class="statement"><div class="wrap"><blockquote>Properties down.<br />Events up.<br />HTML composes.</blockquote><small>native custom element contracts</small></div></section>
+    <section class="statement"><div class="wrap"><blockquote>Properties carry data.<br />Events carry actions.<br />Slots carry content.</blockquote><small>native Custom Elements / native Shadow DOM</small></div></section>
 
     <section class="section">
       <div class="wrap">
-        <div class="section-head"><p class="eyebrow">03 / composition</p><h2>No framework-specific channel between components.</h2></div>
+        <div class="section-head"><p class="eyebrow">03 / application composition</p><h2>18 component types. Still browser primitives.</h2></div>
         <div class="split">
           <div class="code-card">
-            <div class="code-top"><span>studio/app.html</span><a href="examples/" style="color:inherit">run Studio ↗</a></div>
-            <pre><code data-highlight>&lt;studio-mixer
-  .wave={wave}
-  .volume={volume}
-  @mix-change={mix}&gt;
-&lt;/studio-mixer&gt;
+            <div class="code-top"><span>workspace/overview.html</span><a href="examples/workspace/" style="color:inherit">open app ↗</a></div>
+            <pre><code data-highlight>&lt;ui-panel&gt;
+  &lt;span slot="heading"&gt;Tasks&lt;/span&gt;
+  &lt;task-board .tasks={tasks}&gt;&lt;/task-board&gt;
+&lt;/ui-panel&gt;
 
-&lt;pocket-synth
-  .wave={wave}
-  .volume={volume}
-  @note={noteOn}&gt;
-&lt;/pocket-synth&gt;</code></pre>
+&lt;detail-drawer
+  .task={selectedTask}
+  .open={drawerOpen}
+  @move-task={moveTask}&gt;
+&lt;/detail-drawer&gt;</code></pre>
           </div>
           <div>
-            <div class="big-number">↓↑</div>
-            <h3 style="font-size:32px;letter-spacing:-.04em;margin:28px 0 12px">DOM properties + CustomEvent.</h3>
-            <p class="lede" style="font-size:18px">A child declares <code>input('volume', .18)</code>. The owner writes the host property through <code>.volume={volume}</code>. Requests travel back as bubbling, composed native events.</p>
-            <p><a class="button ghost" href="docs/#composition">Read the contract →</a></p>
+            <div class="big-number">18</div>
+            <h3 style="font-size:32px;letter-spacing:-.04em;margin:28px 0 12px">No component bus appeared.</h3>
+            <p class="lede" style="font-size:18px">The Workspace example uses properties for live data, bubbling composed CustomEvents for actions and native slots for layout. Leaf events cross multiple Shadow DOM boundaries without relay handlers.</p>
+            <p><a class="button ghost" href="examples/workspace/">Run Workspace →</a></p>
           </div>
         </div>
       </div>
@@ -102,7 +101,21 @@
 
     <section class="section">
       <div class="wrap">
-        <div class="section-head"><p class="eyebrow">04 / rendering</p><h2>Fine-grained without turning HTML into a programming language.</h2></div>
+        <div class="section-head"><p class="eyebrow">04 / inputs</p><h2>Static configuration reads like HTML. Live data stays a DOM property.</h2></div>
+        <div class="split">
+          <div class="code-card"><pre><code data-highlight>&lt;ui-metric
+  name="Active"
+  tone="lime"
+  .value={active}&gt;
+&lt;/ui-metric&gt;</code></pre></div>
+          <div><h3 style="font-size:32px;letter-spacing:-.04em;margin:0 0 12px">Attribute when static. Property when live.</h3><p class="lede" style="font-size:18px">Primitive literal attributes seed <code>input()</code>. Objects, functions and values that must keep updating use <code>.property={path}</code>. Pre-mount properties always win.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="wrap">
+        <div class="section-head"><p class="eyebrow">05 / rendering</p><h2>Fine-grained without turning HTML into a programming language.</h2></div>
         <div class="grid-3">
           <article class="feature"><span class="num">PATHS</span><div><h3>Bindings stay strict.</h3><p><code>{...}</code> contains property paths. Invalid expressions fail early; derived logic belongs in lazy <code>computed()</code>.</p></div></article>
           <article class="feature"><span class="num">EACH</span><div><h3>Identity survives.</h3><p><code>each={items} key={id}</code> moves real DOM ranges. Native dynamic <code>for={inputId}</code> stays HTML.</p></div></article>
@@ -113,7 +126,7 @@
 
     <section class="section">
       <div class="wrap split">
-        <div><p class="eyebrow">05 / coexistence</p><h2 style="font-size:clamp(42px,6vw,80px);letter-spacing:-.06em;line-height:.92">A missing Skein file does not steal the tag.</h2><p class="lede" style="font-size:18px">Skein fetches component source before <code>customElements.define()</code>. If <code>google/map.html</code> is not there, <code>&lt;google-map&gt;</code> remains free for its real library.</p></div>
+        <div><p class="eyebrow">06 / coexistence</p><h2 style="font-size:clamp(42px,6vw,80px);letter-spacing:-.06em;line-height:.92">A missing Skein file does not steal the tag.</h2><p class="lede" style="font-size:18px">Skein fetches component source before <code>customElements.define()</code>. If <code>google/map.html</code> is not there, <code>&lt;google-map&gt;</code> remains free for its real library.</p></div>
         <div class="code-card"><pre><code data-highlight>&lt;my-panel&gt;&lt;/my-panel&gt;
 &lt;third-party-chart&gt;&lt;/third-party-chart&gt;
 
@@ -124,7 +137,7 @@
 
     <section class="section">
       <div class="wrap split">
-        <div><p class="eyebrow">06 / content</p><h2 style="font-size:clamp(42px,6vw,80px);letter-spacing:-.06em;line-height:.92">Static content can just be HTML.</h2><p class="lede" style="font-size:18px">Skein has no SSR today. If a heading, article or navigation matters before JavaScript, put it directly in the document and use Skein for interactive regions.</p></div>
+        <div><p class="eyebrow">07 / content</p><h2 style="font-size:clamp(42px,6vw,80px);letter-spacing:-.06em;line-height:.92">Static content can just be HTML.</h2><p class="lede" style="font-size:18px">Skein has no SSR today. If a heading, article or navigation matters before JavaScript, put it directly in the document and use Skein for interactive regions.</p></div>
         <div class="code-card"><pre><code data-highlight>&lt;main&gt;
   &lt;h1&gt;Native creative web experiences.&lt;/h1&gt;
   &lt;p&gt;Already present in the HTML response.&lt;/p&gt;
@@ -135,11 +148,11 @@
 
     <section class="section">
       <div class="wrap">
-        <div class="section-head"><p class="eyebrow">07 / agents</p><h2>Humans get docs. Agents get the same contract.</h2></div>
+        <div class="section-head"><p class="eyebrow">08 / verification</p><h2>The small API is tested at application scale.</h2></div>
         <div class="grid-3">
-          <article class="feature"><span class="num">LLMS</span><div><h3>/llms.txt</h3><p>Concise machine-readable framework rules, including 0.6 path/list/input semantics.</p><p style="margin-top:18px"><a href="llms.txt">read it →</a></p></div></article>
-          <article class="feature"><span class="num">SKILL</span><div><h3>Agent Skill</h3><p>Portable instructions cover composition, lifecycle, native objects and Custom Element coexistence.</p><p style="margin-top:18px"><a href="ai/">agent resources →</a></p></div></article>
-          <article class="feature"><span class="num">TESTS</span><div><h3>Real Chrome.</h3><p>The readable and generated minified runtimes plus multi-file Studio are exercised directly in Chromium.</p></div></article>
+          <article class="feature"><span class="num">LLMS</span><div><h3>/llms.txt</h3><p>Machine-readable framework rules track the same composition contract.</p><p style="margin-top:18px"><a href="llms.txt">read it →</a></p></div></article>
+          <article class="feature"><span class="num">SKILL</span><div><h3>Agent Skill</h3><p>Portable instructions cover inputs, native slots, lifecycle and Custom Element coexistence.</p><p style="margin-top:18px"><a href="ai/">agent resources →</a></p></div></article>
+          <article class="feature"><span class="num">CHROME</span><div><h3>18-component regression.</h3><p>The generated production runtime is driven directly in Chromium through the full Workspace interaction flow.</p></div></article>
         </div>
       </div>
     </section>

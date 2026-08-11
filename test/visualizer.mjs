@@ -60,12 +60,14 @@ try{
   let state={}
   for(let i=0;i<40;i++){await sleep(30);state=await telemetry();if(state.simTime>.15)break}
   if(!(state.simTime>.15))throw new Error(`Fixed-step simulation did not advance: ${JSON.stringify(state)}`)
-  const beforePause=state.simTime
 
   const controls=`document.querySelector('visualizer-app').shadowRoot.querySelector('visualizer-controls').shadowRoot`
   await evaluate(`${controls}.querySelector('button[data-action="run"]').click()`)
-  await sleep(180);state=await telemetry()
-  if(Math.abs(state.simTime-beforePause)>.03)throw new Error(`Pause did not stop integration: ${beforePause} -> ${state.simTime}`)
+  await sleep(90)
+  const pausedAt=(await telemetry()).simTime
+  await sleep(180)
+  state=await telemetry()
+  if(Math.abs(state.simTime-pausedAt)>.02)throw new Error(`Pause did not stop integration: ${pausedAt} -> ${state.simTime}`)
 
   await evaluate(`(()=>{const i=${controls}.querySelector('input[data-control="time"]');i.valueAsNumber=1.5;i.dispatchEvent(new Event('input',{bubbles:true}))})()`)
   await evaluate(`(()=>{const i=${controls}.querySelector('input[data-control="field"]');i.valueAsNumber=.6;i.dispatchEvent(new Event('input',{bubbles:true}))})()`)

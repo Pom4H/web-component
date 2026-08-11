@@ -1,86 +1,92 @@
-# Curvature Arena
+# The Night Shift
 
-`examples/visualizer/` is now a game-world vertical slice rather than a diagram of Skein internals.
-
-The domain is deliberately small but engine-shaped:
+`examples/visualizer/` is a playable first-person indie-horror vertical slice built with Skein and native browser APIs. It is deliberately game-shaped rather than a renderer toy: the root component declares a small world, while the scene component owns first-person control, collision, enemy AI, WebGL2 rendering and synthesized audio.
 
 ```text
-declarative world
-  fields[] + rules
-        ↓ typed DOM properties
-fixed-step simulation
-  input → forces → integrate → collisions → pickups
-        ↓
-native WebGL2 renderer
-        ↓
-bubbling + composed world events
-        ↓
-Skein state / HUD / inspector
+visualizer-app
+  game world data
+    player / NPC / enemy
+    walls / props / lockers
+    fuse / power panel / exit
+        ↓ DOM property
+visualizer-scene
+  first-person controller
+  collision + interaction
+  patrol → suspicion → search → chase AI
+  native WebGL2 + Web Audio
+        ↓ game-state CustomEvent
+visualizer-app
+   ├─ visualizer-hud
+   └─ visualizer-dialogue
 ```
 
-There is no game-engine dependency and no second UI state system.
+There is no game-engine dependency, virtual DOM, store or component bus.
 
-## Mathematics
+## Story
 
-The player body is integrated at a fixed simulation rate (`120 Hz` by default) with semi-implicit Euler:
+You answer a night call from a research ward that should have been closed for years. Dr. Mira Vale appears behind reception glass and tells you the magnetic exit has lost power. A spare fuse is in Archive B.
 
-```text
-v[n+1] = clamp(v[n] + a Δt)
-x[n+1] = x[n] + v[n+1] Δt
-```
+The corridor is occupied by Elias, Patient 06. He reacts to sight and sound. Once the player restores power, the story changes: the voice on the intercom identifies the player as Patient 07. Reaching the exit reveals the final detail about Mira.
 
-Acceleration combines four terms:
+The full loop is intentionally short enough to function as an example rather than a standalone game.
 
-```text
-a =
-  Σ μ r / (|r|² + ε²)^(3/2)       gravity / repulsor
-  + κ (ŷ × r) / (|r|² + ε²)       vortex / curl field
-  - γ v                             linear damping
-  + u                               player thrust
-```
+## Mechanics
 
-The arena is a sphere. Crossing the boundary projects the body back to the surface and reflects the outward velocity component with restitution `e`.
-
-The renderer also samples the same force function on a sparse 3D lattice, so the vectors visible in the scene are the actual field used by physics rather than decorative lines.
-
-## Why this is a useful game-engine domain
-
-The example has the pieces a small engine needs without inventing a Skein-specific runtime abstraction:
-
-- a declarative world schema (`Field[]`, `Rules`);
-- deterministic fixed-step simulation with render interpolation;
-- input as a system;
-- force/physics and collision systems;
-- collectibles and score as game rules;
-- continuous WebGL rendering;
-- game events (`world-telemetry`, `world-impact`, `core-collect`);
-- typed component boundaries;
-- a design-time semantic graph for coding agents.
-
-The world declaration lives in `visualizer-app` and is passed to the simulation through ordinary DOM properties. Changing that declaration changes both runtime behavior and the design-time type contract.
-
-## Design-time inspection
-
-```bash
-node tools/skein-check.mjs examples/visualizer/index.html
-node tools/skein-inspect.mjs examples/visualizer/index.html visualizer-scene
-node tools/skein-inspect.mjs examples/visualizer/index.html --manifest
-```
-
-The semantic model derives the scene inputs, emitted world events, shadow parts and typed CSS custom properties from the same source the browser runs.
+- first-person mouse look and WASD movement;
+- sprint with stamina;
+- crouch for slower, quieter movement;
+- enemy field-of-view plus line-of-sight tests;
+- running and nearby footsteps produce detectable noise;
+- AI states: dormant, patrol, suspicion, search and chase;
+- last-known-position pursuit after line of sight breaks;
+- lockers that break sight and create a hiding state;
+- NPC dialogue with branching choices;
+- story objectives and interaction prompts;
+- scripted scare on the fuse pickup;
+- capture jumpscare with synthesized noise/audio;
+- short escape ending and restart flow.
 
 ## Controls
 
-- drag inside the scene: screen-space thrust;
-- `W A S D`: planar thrust;
-- `Q / E`: depth thrust;
-- **pause world**: stop fixed-step integration while rendering continues;
-- **time**: simulation time scale;
-- **field**: scale all field forces;
-- **reset orbit**: deterministic world reset.
+```text
+W A S D       move
+mouse         look
+Shift         sprint
+C             crouch
+E             interact / talk / hide / use
+Esc           release pointer lock
+```
 
-Run the browser regression with:
+Click inside the game to capture the mouse and initialize Web Audio.
+
+## Why the API is engine-shaped
+
+The public example code lives in `visualizer-app` and reads like a tiny Unity/UE scene declaration instead of WebGL setup code:
+
+```js
+this.game = {
+  player: { spawn, yaw },
+  npc: { id, name, position },
+  enemy: { position, patrol, speed, chaseSpeed },
+  walls: [...],
+  props: [...],
+  lockers: [...],
+  fuse,
+  panel,
+  exit
+}
+```
+
+The renderer, shaders, collision helpers, hearing/vision model and update loop stay inside `visualizer-scene`. UI state leaves that component through one bubbling + composed `game-state` event. Dialogue choices and restart commands return as ordinary native events.
+
+## Validation
 
 ```bash
+node tools/skein-check.mjs examples/visualizer/index.html
+node tools/skein-inspect.mjs examples/visualizer/index.html --manifest
+node test/game-model.mjs
 node test/visualizer.mjs
+node test/mobile-visualizer.mjs
 ```
+
+The browser regression covers WebGL mount, world contracts, NPC dialogue branching, transition into the stealth phase and story reset. The mobile regression covers responsive viewport and dialogue layout; the first-person control scheme itself is currently desktop-oriented.

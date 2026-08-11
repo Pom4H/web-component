@@ -64,7 +64,7 @@ try{
   await sleep(520)
   const keyboardState=await stateSnapshot()
   await evaluate(`window.dispatchEvent(new KeyboardEvent('keyup',{code:'KeyW'}));window.dispatchEvent(new KeyboardEvent('keyup',{code:'ShiftLeft'}))`)
-  if(!(keyboardState.stamina<.95))throw new Error(`Desktop keyboard input never reached the simulation loop: ${JSON.stringify(keyboardState)}`)
+  if(!(keyboardState.stamina<.99))throw new Error(`Desktop keyboard input never reached the simulation loop: ${JSON.stringify(keyboardState)}`)
   await restart()
 
   await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:3,mobile:true,screenWidth:390,screenHeight:844})
@@ -77,7 +77,7 @@ try{
   await sleep(520)
   const touchState=await stateSnapshot()
   await evaluate(`(()=>{const move=${sceneRoot}.querySelector('[data-touch="move"]'),run=${sceneRoot}.querySelector('[data-touch="run"]');move.dispatchEvent(new PointerEvent('pointerup',{pointerId:21,pointerType:'touch',bubbles:true}));run.dispatchEvent(new PointerEvent('pointerup',{pointerId:22,pointerType:'touch',bubbles:true}))})()`)
-  if(!(touchState.stamina<.95))throw new Error(`Touch joystick/run input never reached the simulation loop: ${JSON.stringify(touchState)}`)
+  if(!(touchState.stamina<.99))throw new Error(`Touch joystick/run input never reached the simulation loop: ${JSON.stringify(touchState)}`)
   await restart()
 
   await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),scene=app.shadowRoot.querySelector('visualizer-scene');scene.game.npc.position.x=0;scene.game.npc.position.z=7.1;window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyE'}))})()`)

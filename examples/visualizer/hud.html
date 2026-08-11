@@ -1,0 +1,58 @@
+<script>
+  input('state', {
+    objective:'', prompt:'', stamina:1, danger:'quiet', hidden:false, hasFuse:false, power:false,
+    caught:false, ending:'', dialogue:{open:false,speaker:'',text:'',options:[]}
+  })
+  this.dangerLabel = computed(() => this.state.hidden ? 'HIDDEN' : this.state.danger === 'chase' ? 'RUN' : this.state.danger === 'watched' ? 'SEEN?' : 'QUIET')
+  this.restart = () => host.dispatchEvent(new CustomEvent('game-command', { detail:{action:'restart'}, bubbles:true, composed:true }))
+</script>
+
+<div class="hud" data-danger={state.danger} data-hidden={state.hidden}>
+  <section class="objective">
+    <small>OBJECTIVE</small>
+    <strong>{state.objective}</strong>
+  </section>
+
+  <div class="crosshair" aria-hidden="true"><i></i><i></i></div>
+
+  <section class="status">
+    <span class="danger">{dangerLabel}</span>
+    <div class="stamina" --stamina={state.stamina}><i></i></div>
+    <small>STAMINA</small>
+  </section>
+
+  <div class="prompt">{state.prompt}</div>
+
+  <section class="ending" if={state.caught}>
+    <small>SHIFT TERMINATED</small>
+    <h2>HE FOUND YOU.</h2>
+    <p>Elias does not chase forever. He only needs to be right once.</p>
+    <button @click={restart}>restart shift</button>
+  </section>
+
+  <section class="ending escaped" if={state.ending}>
+    <small>06:14 AM</small>
+    <h2>YOU GOT OUT.</h2>
+    <p>{state.ending}</p>
+    <button @click={restart}>play again</button>
+  </section>
+</div>
+
+<style>
+  :host{position:absolute;inset:0;display:block;pointer-events:none;color:#eee8dd;font-family:Inter,ui-sans-serif,system-ui,sans-serif}
+  *{box-sizing:border-box}
+  .objective{position:absolute;left:28px;bottom:28px;max-width:min(420px,58vw);padding-left:12px;border-left:2px solid #8c3b36;text-shadow:0 2px 12px #000}
+  .objective small,.status small{display:block;color:#8d8880;font:800 8px/1.2 ui-monospace,monospace;letter-spacing:.16em}
+  .objective strong{display:block;margin-top:5px;color:#ded8cd;font:700 12px/1.35 ui-monospace,monospace;letter-spacing:.03em}
+  .crosshair{position:absolute;left:50%;top:50%;width:18px;height:18px;translate:-50% -50%;opacity:.55}
+  .crosshair i{position:absolute;background:#d7d0c4}.crosshair i:first-child{left:8px;top:3px;width:1px;height:12px}.crosshair i:last-child{left:3px;top:8px;width:12px;height:1px}
+  .status{position:absolute;right:28px;bottom:28px;width:170px;text-align:right;text-shadow:0 2px 12px #000}
+  .danger{display:block;margin-bottom:7px;color:#9da39b;font:900 10px/1 ui-monospace,monospace;letter-spacing:.14em}
+  .stamina{--stamina:1;height:3px;margin:0 0 6px auto;background:#3b3b38;width:150px;overflow:hidden}.stamina i{display:block;height:100%;width:calc(var(--stamina) * 100%);background:#c9c5b7;transform-origin:left}
+  [data-danger="watched"] .danger{color:#d7a66d}[data-danger="chase"] .danger{color:#df544c;animation:pulse .35s steps(2,end) infinite}[data-hidden="true"] .danger{color:#78998b}
+  .prompt{position:absolute;left:50%;bottom:74px;translate:-50% 0;min-height:18px;color:#d4cec4;font:800 9px/1 ui-monospace,monospace;letter-spacing:.1em;text-transform:uppercase;text-shadow:0 2px 10px #000;white-space:nowrap}
+  .ending{position:absolute;inset:0;display:grid;place-content:center;text-align:center;padding:28px;background:#080504e8;pointer-events:auto;backdrop-filter:blur(5px)}
+  .ending small{color:#b84039;font:900 9px/1 ui-monospace,monospace;letter-spacing:.22em}.ending h2{margin:12px 0 8px;font:900 clamp(40px,8vw,90px)/.86 Arial Black,Impact,sans-serif;letter-spacing:-.07em}.ending p{max-width:470px;margin:0 auto 22px;color:#9f988d;font:500 13px/1.55 ui-monospace,monospace}.ending button{justify-self:center;min-height:46px;padding:0 18px;border:1px solid #6f3a35;border-radius:4px;background:#20100e;color:#eee2d6;font:900 9px/1 ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase;cursor:pointer}.escaped{background:#07100de8}.escaped small{color:#729989}
+  @keyframes pulse{50%{opacity:.35}}
+  @media(max-width:800px){.objective{left:16px;bottom:18px}.status{right:16px;bottom:18px;width:120px}.stamina{width:110px}.prompt{bottom:62px}}
+</style>

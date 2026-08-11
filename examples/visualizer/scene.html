@@ -1,8 +1,13 @@
 <script>
-  input('scene', { name:'Scene', camera:{position:{x:7,y:5,z:9},target:{x:0,y:1,z:0},fov:48}, light:{direction:{x:-.5,y:-1,z:-.35},color:'#fff4d6',intensity:1.2}, objects:[] })
-  input('running', true)
-  input('resetToken', 0)
+  input('game', {
+    title:'Horror', player:{spawn:{x:0,y:1.65,z:0},yaw:0}, npc:{id:'npc',name:'NPC',position:{x:0,y:0,z:0},color:'#aaa'},
+    enemy:{id:'enemy',position:{x:0,y:0,z:-10},patrol:[],speed:1.4,chaseSpeed:3.4}, walls:[], props:[], lockers:[],
+    fuse:{x:0,z:0}, panel:{x:0,z:0}, exit:{x:0,z:0}
+  })
+
   this.status = 'booting'
+  this.scare = false
+  this.blackout = false
 
   queueMicrotask(() => {
     const canvas = host.shadowRoot.querySelector('canvas')
@@ -38,150 +43,365 @@
       in vec3 vNormal;
       in vec3 vWorld;
       uniform vec3 uColor;
-      uniform vec3 uLightDir;
-      uniform float uLight;
-      uniform float uMetallic;
-      uniform float uRoughness;
+      uniform vec3 uCamera;
+      uniform vec3 uForward;
+      uniform vec3 uFog;
+      uniform float uTorch;
+      uniform float uEmissive;
       out vec4 outColor;
       void main(){
         vec3 n=normalize(vNormal);
-        float ndl=max(dot(n,normalize(-uLightDir)),0.0);
-        float hemi=n.y*.5+.5;
-        vec3 base=uColor*(.18+.42*hemi+.7*ndl*uLight);
-        float rim=pow(1.0-max(dot(n,normalize(vec3(3.0,2.0,6.0)-vWorld)),0.0),2.0);
-        vec3 spec=vec3((.08+.45*uMetallic)*(1.0-uRoughness))*rim;
-        outColor=vec4(base+spec,1.0);
+        vec3 ray=vWorld-uCamera;
+        float dist=length(ray);
+        vec3 dir=normalize(ray);
+        float cone=pow(max(dot(dir,normalize(uForward)),0.0),18.0);
+        float torch=cone*smoothstep(18.0,1.2,dist)*uTorch;
+        float top=max(n.y,0.0)*.055;
+        float side=max(dot(n,normalize(vec3(-.35,.8,.2))),0.0)*.08;
+        vec3 lit=uColor*(.026+top+side+torch+uEmissive);
+        float fog=smoothstep(7.0,24.0,dist);
+        outColor=vec4(mix(lit,uFog,fog),1.0);
       }
     `))
     gl.linkProgram(program)
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program) || 'program link failed')
 
     const loc = {
-      mvp: gl.getUniformLocation(program,'uMVP'),
-      model: gl.getUniformLocation(program,'uModel'),
-      color: gl.getUniformLocation(program,'uColor'),
-      lightDir: gl.getUniformLocation(program,'uLightDir'),
-      light: gl.getUniformLocation(program,'uLight'),
-      metallic: gl.getUniformLocation(program,'uMetallic'),
-      roughness: gl.getUniformLocation(program,'uRoughness')
+      mvp:gl.getUniformLocation(program,'uMVP'), model:gl.getUniformLocation(program,'uModel'), color:gl.getUniformLocation(program,'uColor'),
+      camera:gl.getUniformLocation(program,'uCamera'), forward:gl.getUniformLocation(program,'uForward'), fog:gl.getUniformLocation(program,'uFog'),
+      torch:gl.getUniformLocation(program,'uTorch'), emissive:gl.getUniformLocation(program,'uEmissive')
     }
-
-    const vao=gl.createVertexArray(); gl.bindVertexArray(vao)
-    const buffer=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,buffer)
-    gl.enableVertexAttribArray(0); gl.enableVertexAttribArray(1)
-    gl.vertexAttribPointer(0,3,gl.FLOAT,false,24,0)
-    gl.vertexAttribPointer(1,3,gl.FLOAT,false,24,12)
 
     const pushTri=(out,a,b,c,n)=>{for(const p of [a,b,c])out.push(...p,...n)}
     const box=()=>{
-      const o=[], f=[
-        [[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1],[0,0,1]],
-        [[1,-1,-1],[-1,-1,-1],[-1,1,-1],[1,1,-1],[0,0,-1]],
-        [[1,-1,1],[1,-1,-1],[1,1,-1],[1,1,1],[1,0,0]],
-        [[-1,-1,-1],[-1,-1,1],[-1,1,1],[-1,1,-1],[-1,0,0]],
-        [[-1,1,1],[1,1,1],[1,1,-1],[-1,1,-1],[0,1,0]],
-        [[-1,-1,-1],[1,-1,-1],[1,-1,1],[-1,-1,1],[0,-1,0]]
+      const o=[],f=[
+        [[-.5,-.5,.5],[.5,-.5,.5],[.5,.5,.5],[-.5,.5,.5],[0,0,1]],
+        [[.5,-.5,-.5],[-.5,-.5,-.5],[-.5,.5,-.5],[.5,.5,-.5],[0,0,-1]],
+        [[.5,-.5,.5],[.5,-.5,-.5],[.5,.5,-.5],[.5,.5,.5],[1,0,0]],
+        [[-.5,-.5,-.5],[-.5,-.5,.5],[-.5,.5,.5],[-.5,.5,-.5],[-1,0,0]],
+        [[-.5,.5,.5],[.5,.5,.5],[.5,.5,-.5],[-.5,.5,-.5],[0,1,0]],
+        [[-.5,-.5,-.5],[.5,-.5,-.5],[.5,-.5,.5],[-.5,-.5,.5],[0,-1,0]]
       ]
       for(const [a,b,c,d,n] of f){pushTri(o,a,b,c,n);pushTri(o,a,c,d,n)}
       return o
     }
-    const plane=()=>[-1,0,-1,0,1,0, 1,0,-1,0,1,0, 1,0,1,0,1,0, -1,0,-1,0,1,0, 1,0,1,0,1,0, -1,0,1,0,1,0]
-    const sphere=(segments=24,rings=16)=>{
+    const sphere=(segments=18,rings=12)=>{
       const o=[]
-      const p=(u,v)=>{const a=u*Math.PI*2,b=v*Math.PI;return[Math.sin(b)*Math.cos(a),Math.cos(b),Math.sin(b)*Math.sin(a)]}
+      const p=(u,v)=>{const a=u*Math.PI*2,b=v*Math.PI;return[Math.sin(b)*Math.cos(a)*.5,Math.cos(b)*.5,Math.sin(b)*Math.sin(a)*.5]}
+      const n=p
       for(let y=0;y<rings;y++)for(let x=0;x<segments;x++){
         const a=p(x/segments,y/rings),b=p((x+1)/segments,y/rings),c=p((x+1)/segments,(y+1)/rings),d=p(x/segments,(y+1)/rings)
-        pushTri(o,a,b,c,a);pushTri(o,a,c,d,a)
-      }
-      return o
-    }
-    const torus=(major=1,minor=.34,segments=32,sides=12)=>{
-      const o=[]
-      const p=(u,v)=>{const a=u*Math.PI*2,b=v*Math.PI*2,r=major+minor*Math.cos(b);return[r*Math.cos(a),minor*Math.sin(b),r*Math.sin(a)]}
-      const n=(u,v)=>{const a=u*Math.PI*2,b=v*Math.PI*2;return[Math.cos(b)*Math.cos(a),Math.sin(b),Math.cos(b)*Math.sin(a)]}
-      for(let y=0;y<sides;y++)for(let x=0;x<segments;x++){
-        const u=x/segments,v=y/sides,u1=(x+1)/segments,v1=(y+1)/sides
-        const a=p(u,v),b=p(u1,v),c=p(u1,v1),d=p(u,v1),na=n(u,v),nb=n(u1,v),nc=n(u1,v1),nd=n(u,v1)
+        const na=n(x/segments,y/rings),nb=n((x+1)/segments,y/rings),nc=n((x+1)/segments,(y+1)/rings),nd=n(x/segments,(y+1)/rings)
         for(const [P,N] of [[a,na],[b,nb],[c,nc],[a,na],[c,nc],[d,nd]])o.push(...P,...N)
       }
       return o
     }
 
-    const meshes = { box:box(), plane:plane(), sphere:sphere(), torus:torus() }
-    const gpu = {}
-    for (const [name,data] of Object.entries(meshes)) {
-      const b=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,b); gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(data),gl.STATIC_DRAW)
-      gpu[name]={buffer:b,count:data.length/6}
+    const gpu={}
+    for(const [name,data] of Object.entries({box:box(),sphere:sphere()})){
+      const buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(data),gl.STATIC_DRAW)
+      gpu[name]={buffer,count:data.length/6}
     }
+    const vao=gl.createVertexArray();gl.bindVertexArray(vao)
+    gl.enableVertexAttribArray(0);gl.enableVertexAttribArray(1)
 
-    const deg=x=>x*Math.PI/180
     const multiply=(a,b)=>{const o=new Float32Array(16);for(let c=0;c<4;c++)for(let r=0;r<4;r++)o[c*4+r]=a[r]*b[c*4]+a[4+r]*b[c*4+1]+a[8+r]*b[c*4+2]+a[12+r]*b[c*4+3];return o}
     const perspective=(fovy,aspect,near,far)=>{const f=1/Math.tan(fovy/2),nf=1/(near-far);return new Float32Array([f/aspect,0,0,0,0,f,0,0,0,0,(far+near)*nf,-1,0,0,2*far*near*nf,0])}
     const norm=v=>{const m=Math.hypot(...v)||1;return v.map(x=>x/m)}
     const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]
     const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2]
     const lookAt=(eye,center)=>{const z=norm([eye[0]-center[0],eye[1]-center[1],eye[2]-center[2]]),x=norm(cross([0,1,0],z)),y=cross(z,x);return new Float32Array([x[0],y[0],z[0],0,x[1],y[1],z[1],0,x[2],y[2],z[2],0,-dot(x,eye),-dot(y,eye),-dot(z,eye),1])}
-    const model=(p,r,s)=>{
-      const [cx,sx,cy,sy,cz,sz]=[Math.cos(r.x),Math.sin(r.x),Math.cos(r.y),Math.sin(r.y),Math.cos(r.z),Math.sin(r.z)]
-      return new Float32Array([
-        (cy*cz)*s.x,(sx*sy*cz+cx*sz)*s.x,(-cx*sy*cz+sx*sz)*s.x,0,
-        (-cy*sz)*s.y,(-sx*sy*sz+cx*cz)*s.y,(cx*sy*sz+sx*cz)*s.y,0,
-        sy*s.z,(-sx*cy)*s.z,(cx*cy)*s.z,0,
-        p.x,p.y,p.z,1
-      ])
+    const model=(p,yaw,s)=>{const c=Math.cos(yaw),n=Math.sin(yaw);return new Float32Array([c*s.x,0,-n*s.x,0,0,s.y,0,0,n*s.z,0,c*s.z,0,p.x,p.y,p.z,1])}
+    const hex=h=>{const x=parseInt(h.slice(1),16);return[((x>>16)&255)/255,((x>>8)&255)/255,(x&255)/255]}
+    const near=(a,b,d)=>Math.hypot(a.x-b.x,a.z-b.z)<=d
+
+    let audio=null,hum=null,humGain=null,lastBeat=0
+    const ensureAudio=()=>{
+      if(audio){audio.resume?.();return}
+      audio=new (window.AudioContext||window.webkitAudioContext)()
+      hum=audio.createOscillator();humGain=audio.createGain();hum.type='sine';hum.frequency.value=47;humGain.gain.value=.012;hum.connect(humGain).connect(audio.destination);hum.start()
     }
-    const colorHex=h=>{const x=parseInt(h.slice(1),16);return[((x>>16)&255)/255,((x>>8)&255)/255,(x&255)/255]}
-
-    let start=performance.now(),last=start,frames=0,lastFps=start,resetSeen=this.resetToken,angle=0
-    const emit=(fps)=>host.dispatchEvent(new CustomEvent('scene-telemetry',{detail:{fps,drawCalls:this.scene.objects.length,objects:this.scene.objects.length,selected:'hero'},bubbles:true,composed:true}))
-
-    const resize=()=>{
-      const dpr=Math.min(devicePixelRatio||1,2),w=Math.max(1,canvas.clientWidth),h=Math.max(1,canvas.clientHeight)
-      const pw=Math.floor(w*dpr),ph=Math.floor(h*dpr)
-      if(canvas.width!==pw||canvas.height!==ph){canvas.width=pw;canvas.height=ph}
-      gl.viewport(0,0,pw,ph)
+    const tone=(frequency=.0,duration=.12,volume=.04,type='sine')=>{
+      if(!audio)return
+      const o=audio.createOscillator(),g=audio.createGain();o.type=type;o.frequency.setValueAtTime(frequency,audio.currentTime);g.gain.setValueAtTime(volume,audio.currentTime);g.gain.exponentialRampToValueAtTime(.0001,audio.currentTime+duration);o.connect(g).connect(audio.destination);o.start();o.stop(audio.currentTime+duration)
+    }
+    const scream=()=>{
+      if(!audio)return
+      const length=Math.floor(audio.sampleRate*.34),buffer=audio.createBuffer(1,length,audio.sampleRate),data=buffer.getChannelData(0)
+      for(let i=0;i<length;i++)data[i]=(Math.random()*2-1)*(1-i/length)
+      const source=audio.createBufferSource(),filter=audio.createBiquadFilter(),gain=audio.createGain();source.buffer=buffer;filter.type='bandpass';filter.frequency.value=1700;filter.Q.value=.65;gain.gain.value=.42;source.connect(filter).connect(gain).connect(audio.destination);source.start();tone(58,.45,.18,'sawtooth')
     }
 
-    const frame=now=>{
-      resize()
-      const dt=Math.min(.05,(now-last)/1000);last=now
-      if(this.resetToken!==resetSeen){angle=0;resetSeen=this.resetToken}
-      if(this.running)angle+=dt*.45
+    const keys=new Set()
+    let yaw=this.game.player.yaw,pitch=0
+    let player={x:this.game.player.spawn.x,z:this.game.player.spawn.z,y:this.game.player.spawn.y}
+    let crouched=false,hidden=false,hiddenLocker=null,preHide=null,stamina=1,moving=false,sprinting=false
+    let hasFuse=false,power=false,caught=false,ending='',phase='meet-mira',objective='Find Dr. Mira at reception'
+    let dialogue={open:false,speaker:'',text:'',options:[]}
+    let npcVisible=true,scriptDark=0,lastPublish=0,lastPrompt=''
+    let enemy={x:this.game.enemy.position.x,z:this.game.enemy.position.z,dx:0,dz:-1,state:'dormant',active:false,patrol:0,suspicion:0,lost:0,search:0,lastX:0,lastZ:0}
+    let scareTimer=0
 
-      gl.enable(gl.DEPTH_TEST); gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK)
-      gl.clearColor(.035,.045,.065,1); gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT)
-      gl.useProgram(program)
+    const solidBlocks=()=>[...this.game.walls,...this.game.props.filter(item=>item.solid)]
+    const pointBlocked=(x,z,r=.3)=>{
+      for(const block of solidBlocks()){
+        const hx=block.size.x*.5+r,hz=block.size.z*.5+r
+        if(Math.abs(x-block.position.x)<hx&&Math.abs(z-block.position.z)<hz)return true
+      }
+      if(!power&&Math.abs(z-this.game.exit.z)<.22+r&&Math.abs(x-this.game.exit.x)<.7+r)return true
+      return false
+    }
+    const rayClear=(ax,az,bx,bz)=>{
+      const d=Math.hypot(bx-ax,bz-az),steps=Math.max(1,Math.ceil(d/.22))
+      for(let i=1;i<steps;i++){const t=i/steps,x=ax+(bx-ax)*t,z=az+(bz-az)*t;if(pointBlocked(x,z,.03))return false}
+      return true
+    }
+    const moveBody=(body,dx,dz,r=.28)=>{
+      if(!pointBlocked(body.x+dx,body.z,r))body.x+=dx
+      if(!pointBlocked(body.x,body.z+dz,r))body.z+=dz
+    }
 
-      const cam=this.scene.camera
-      const eye=[cam.position.x,cam.position.y,cam.position.z],target=[cam.target.x,cam.target.y,cam.target.z]
-      const view=lookAt(eye,target),proj=perspective(deg(cam.fov),canvas.width/canvas.height,.1,100),vp=multiply(proj,view)
-      const light=this.scene.light
-      gl.uniform3fv(loc.lightDir,new Float32Array([light.direction.x,light.direction.y,light.direction.z]));gl.uniform1f(loc.light,light.intensity)
+    const publish=(force=false,now=performance.now())=>{
+      if(!force&&now-lastPublish<90)return
+      lastPublish=now
+      let prompt=''
+      if(!dialogue.open&&!caught&&!ending){
+        if(document.pointerLockElement!==canvas)prompt='Click the scene to enter'
+        else if(hidden)prompt='[E] leave locker'
+        else if(phase==='meet-mira'&&near(player,this.game.npc.position,2.05))prompt='[E] talk to Dr. Mira'
+        else if(phase==='find-fuse'&&near(player,this.game.fuse,1.15))prompt='[E] take the fuse'
+        else if(hasFuse&&!power&&near(player,this.game.panel,1.25))prompt='[E] install fuse'
+        else if(power&&near(player,this.game.exit,1.2))prompt='[E] open reception exit'
+        else {
+          const locker=this.game.lockers.find(item=>near(player,item,1.05))
+          if(locker)prompt='[E] hide in locker'
+        }
+      }
+      lastPrompt=prompt
+      const danger=hidden?'hidden':enemy.state==='chase'?'chase':enemy.suspicion>.28?'watched':'quiet'
+      host.dispatchEvent(new CustomEvent('game-state',{detail:{
+        objective,prompt,stamina:Math.max(0,Math.min(1,stamina)),danger,hidden,hasFuse,power,caught,ending,
+        dialogue:{open:dialogue.open,speaker:dialogue.speaker,text:dialogue.text,options:dialogue.options.map(item=>({...item}))}
+      },bubbles:true,composed:true}))
+    }
 
-      for(const object of this.scene.objects){
-        const mesh=gpu[object.shape]; if(!mesh)continue
-        const spin=object.id==='hero'?angle:object.id==='ring'?-angle*.7:object.id==='orb'?angle*.35:0
-        const r={x:object.rotation.x,y:object.rotation.y+spin,z:object.rotation.z}
-        const m=model(object.position,r,object.scale),mvp=multiply(vp,m)
-        gl.uniformMatrix4fv(loc.model,false,m);gl.uniformMatrix4fv(loc.mvp,false,mvp)
-        gl.uniform3fv(loc.color,new Float32Array(colorHex(object.color)));gl.uniform1f(loc.metallic,object.metallic||0);gl.uniform1f(loc.roughness,object.roughness??.5)
-        gl.bindBuffer(gl.ARRAY_BUFFER,mesh.buffer);gl.vertexAttribPointer(0,3,gl.FLOAT,false,24,0);gl.vertexAttribPointer(1,3,gl.FLOAT,false,24,12)
-        gl.drawArrays(gl.TRIANGLES,0,mesh.count)
+    const closeDialogue=()=>{dialogue={open:false,speaker:'',text:'',options:[]};publish(true)}
+    const say=(speaker,text,options)=>{
+      dialogue={open:true,speaker,text,options}
+      if(document.pointerLockElement===canvas)document.exitPointerLock()
+      publish(true)
+    }
+    const talkMira=()=>{
+      if(phase==='meet-mira'){
+        say('DR. MIRA VALE','You actually came. Good. The magnetic exit died with the ward power. Archive B has a spare fuse. Walk there. Do not run.',[
+          {id:'elias',label:'Who is in the corridor?'},{id:'fuse',label:'Where is Archive B?'}
+        ])
+      } else if(!power){
+        say('DR. MIRA VALE','Archive B. Left side of the long hall. Red fuse on the workbench. If the lights start breathing, hide.',[{id:'go',label:'I understand'}])
+      }
+    }
+    const chooseDialogue=id=>{
+      if(id==='elias'){
+        say('DR. MIRA VALE','Elias. Patient 06. He stopped responding to voices, then started responding to footsteps. He knows every blind corner in this building.',[{id:'fuse',label:'Tell me where the fuse is'}])
+      }else if(id==='fuse'){
+        say('DR. MIRA VALE','Archive B is through the opening on the left. The fuse is on the inner workbench. Crouch if he gets close. Lockers will hide you from sight.',[{id:'go',label:'Go to Archive B'}])
+      }else if(id==='go'){
+        phase='find-fuse';objective='Reach Archive B and recover the spare fuse';enemy.active=true;enemy.state='patrol';closeDialogue()
+      }else if(id==='run'){
+        objective='RUN — reception exit is unlocked';phase='escape';enemy.active=true;enemy.state='chase';enemy.suspicion=1;enemy.x=.2;enemy.z=-10.5;enemy.lastX=player.x;enemy.lastZ=player.z;closeDialogue();tone(92,.4,.07,'sawtooth')
+      }else if(id==='close')closeDialogue()
+    }
+
+    const scareBurst=(kind='scripted')=>{
+      clearTimeout(scareTimer);this.scare=true;scream();scareTimer=setTimeout(()=>{if(kind!=='caught')this.scare=false},kind==='caught'?900:320)
+    }
+    const capture=()=>{
+      if(caught||ending)return
+      caught=true;enemy.state='caught';objective='';this.blackout=false;scareBurst('caught');if(document.pointerLockElement===canvas)document.exitPointerLock();publish(true)
+    }
+    const finish=()=>{
+      if(!power||caught||ending)return
+      ending='The booth is empty. Mira died in 2019. The voice guiding you through Ward C was a recording that knew which answers you would choose.'
+      objective='';enemy.active=false;enemy.state='dormant';this.blackout=false;if(document.pointerLockElement===canvas)document.exitPointerLock();tone(330,.5,.035,'sine');publish(true)
+    }
+    const restart=()=>{
+      yaw=this.game.player.yaw;pitch=0;player={x:this.game.player.spawn.x,z:this.game.player.spawn.z,y:this.game.player.spawn.y};crouched=false;hidden=false;hiddenLocker=null;preHide=null;stamina=1;moving=false;sprinting=false
+      hasFuse=false;power=false;caught=false;ending='';phase='meet-mira';objective='Find Dr. Mira at reception';dialogue={open:false,speaker:'',text:'',options:[]};npcVisible=true;scriptDark=0
+      enemy={x:this.game.enemy.position.x,z:this.game.enemy.position.z,dx:0,dz:-1,state:'dormant',active:false,patrol:0,suspicion:0,lost:0,search:0,lastX:0,lastZ:0};this.scare=false;this.blackout=false;publish(true)
+    }
+
+    const interact=()=>{
+      if(dialogue.open||caught||ending)return
+      if(hidden){hidden=false;this.blackout=false;if(preHide){player.x=preHide.x;player.z=preHide.z}hiddenLocker=null;publish(true);return}
+      if(phase==='meet-mira'&&near(player,this.game.npc.position,2.05)){talkMira();return}
+      if(phase==='find-fuse'&&near(player,this.game.fuse,1.15)){
+        hasFuse=true;phase='return-panel';objective='Return the fuse to the reception power panel';scriptDark=1.35;enemy.state='search';enemy.search=5.5;enemy.suspicion=.55;enemy.lastX=player.x;enemy.lastZ=player.z;scareBurst();tone(120,.5,.06,'square');publish(true);return
+      }
+      if(hasFuse&&!power&&near(player,this.game.panel,1.25)){
+        power=true;phase='warning';objective='The reception door has power';npcVisible=false;enemy.active=false;enemy.state='dormant';tone(540,.16,.04,'square')
+        say('INTERCOM — MIRA','Power restored. Listen to me: do not open the reception door. You are not on the night shift. You are Patient 07.',[{id:'run',label:'Open it anyway'}]);return
+      }
+      if(power&&near(player,this.game.exit,1.2)){finish();return}
+      const locker=this.game.lockers.find(item=>near(player,item,1.05))
+      if(locker){preHide={x:player.x,z:player.z};hidden=true;hiddenLocker=locker;player.x=locker.x;player.z=locker.z;this.blackout=true;publish(true)}
+    }
+
+    host.addEventListener('dialogue-choice',event=>chooseDialogue(event.detail?.id),{signal:abortSignal})
+    host.addEventListener('game-command',event=>{if(event.detail?.action==='restart')restart()},{signal:abortSignal})
+    canvas.addEventListener('click',()=>{if(!dialogue.open&&!caught&&!ending){ensureAudio();canvas.requestPointerLock?.()}},{signal:abortSignal})
+    document.addEventListener('pointerlockchange',()=>publish(true),{signal:abortSignal})
+    document.addEventListener('mousemove',event=>{
+      if(document.pointerLockElement!==canvas||dialogue.open||caught||ending||hidden)return
+      yaw+=event.movementX*.0022;pitch=Math.max(-1.25,Math.min(1.25,pitch-event.movementY*.0019))
+    },{signal:abortSignal})
+    window.addEventListener('keydown',event=>{
+      if(event.code==='KeyE'&&!event.repeat){interact();return}
+      if(event.code==='KeyC'&&!event.repeat&&!dialogue.open&&!hidden){crouched=!crouched;return}
+      keys.add(event.code)
+    },{signal:abortSignal})
+    window.addEventListener('keyup',event=>keys.delete(event.code),{signal:abortSignal})
+
+    const updatePlayer=dt=>{
+      moving=false;sprinting=false
+      if(dialogue.open||caught||ending||hidden||document.pointerLockElement!==canvas){stamina=Math.min(1,stamina+dt*.18);return}
+      let f=(keys.has('KeyW')?1:0)-(keys.has('KeyS')?1:0),r=(keys.has('KeyD')?1:0)-(keys.has('KeyA')?1:0)
+      const len=Math.hypot(f,r);if(len>0){f/=len;r/=len;moving=true}
+      const wantsSprint=keys.has('ShiftLeft')||keys.has('ShiftRight')
+      sprinting=moving&&wantsSprint&&!crouched&&stamina>.03
+      const speed=crouched?1.28:sprinting?4.25:2.25
+      if(sprinting)stamina=Math.max(0,stamina-dt*.25);else stamina=Math.min(1,stamina+dt*.17)
+      const fx=Math.sin(yaw),fz=Math.cos(yaw),rx=Math.cos(yaw),rz=-Math.sin(yaw)
+      moveBody(player,(fx*f+rx*r)*speed*dt,(fz*f+rz*r)*speed*dt,.28)
+      player.y=crouched?1.18:1.65
+    }
+
+    const canSeePlayer=()=>{
+      if(!enemy.active||hidden||caught||ending)return false
+      const dx=player.x-enemy.x,dz=player.z-enemy.z,dist=Math.hypot(dx,dz)
+      if(dist>9.2)return false
+      const facing=norm([enemy.dx,0,enemy.dz]),toward=norm([dx,0,dz])
+      return dot(facing,toward)>.48&&rayClear(enemy.x,enemy.z,player.x,player.z)
+    }
+    const enemyMoveTo=(x,z,speed,dt)=>{
+      const dx=x-enemy.x,dz=z-enemy.z,d=Math.hypot(dx,dz)
+      if(d<.001)return d
+      enemy.dx=dx/d;enemy.dz=dz/d;moveBody(enemy,enemy.dx*speed*dt,enemy.dz*speed*dt,.26);return d
+    }
+    const updateEnemy=(dt,now)=>{
+      if(!enemy.active||dialogue.open||caught||ending)return
+      const dist=Math.hypot(player.x-enemy.x,player.z-enemy.z),visible=canSeePlayer()
+      const heard=!hidden&&((sprinting&&dist<8.5)||(moving&&!crouched&&dist<2.7))&&rayClear(enemy.x,enemy.z,player.x,player.z)
+
+      if(enemy.state!=='chase'){
+        if(visible)enemy.suspicion=Math.min(1.2,enemy.suspicion+dt*(1.25+(9.2-dist)*.08))
+        else if(heard)enemy.suspicion=Math.min(1.2,enemy.suspicion+dt*(sprinting?1.45:.6))
+        else enemy.suspicion=Math.max(0,enemy.suspicion-dt*.34)
+        if(enemy.suspicion>=1){enemy.state='chase';enemy.lastX=player.x;enemy.lastZ=player.z;enemy.lost=0;tone(74,.28,.07,'square')}
       }
 
-      frames++
-      if(now-lastFps>500){const fps=Math.round(frames*1000/(now-lastFps));frames=0;lastFps=now;emit(fps);this.status=`${fps} fps`}
+      if(enemy.state==='patrol'){
+        const point=this.game.enemy.patrol[enemy.patrol%this.game.enemy.patrol.length]
+        if(point&&enemyMoveTo(point.x,point.z,this.game.enemy.speed,dt)<.45)enemy.patrol++
+      }else if(enemy.state==='search'){
+        enemy.search-=dt
+        if(enemyMoveTo(enemy.lastX,enemy.lastZ,this.game.enemy.speed*1.1,dt)<.55){enemy.dx=Math.sin(now*.0015);enemy.dz=Math.cos(now*.0015)}
+        if(enemy.search<=0){enemy.state='patrol';enemy.suspicion=.12}
+      }else if(enemy.state==='chase'){
+        if(visible){enemy.lastX=player.x;enemy.lastZ=player.z;enemy.lost=0}else enemy.lost+=dt
+        enemyMoveTo(enemy.lastX,enemy.lastZ,this.game.enemy.chaseSpeed,dt)
+        if(!hidden&&dist<.72&&rayClear(enemy.x,enemy.z,player.x,player.z))capture()
+        if(hidden&&dist<.92&&enemy.lost<.7)capture()
+        if(enemy.lost>4.2){enemy.state='search';enemy.search=5.5;enemy.suspicion=.5}
+        if(audio&&now-lastBeat>Math.max(330,720-dist*35)){lastBeat=now;tone(48,.09,.05,'sine');setTimeout(()=>tone(43,.1,.035,'sine'),110)}
+      }
+    }
+
+    const draw=(shape,p,s,color,emissive=0,yawValue=0,vp=null,eye=null,forward=null,torch=1)=>{
+      const mesh=gpu[shape];if(!mesh)return
+      const m=model(p,yawValue,s),mvp=multiply(vp,m)
+      gl.uniformMatrix4fv(loc.model,false,m);gl.uniformMatrix4fv(loc.mvp,false,mvp);gl.uniform3fv(loc.color,new Float32Array(hex(color)));gl.uniform1f(loc.emissive,emissive)
+      gl.bindBuffer(gl.ARRAY_BUFFER,mesh.buffer);gl.vertexAttribPointer(0,3,gl.FLOAT,false,24,0);gl.vertexAttribPointer(1,3,gl.FLOAT,false,24,12);gl.drawArrays(gl.TRIANGLES,0,mesh.count)
+    }
+
+    const resize=()=>{
+      const dpr=Math.min(devicePixelRatio||1,2),w=Math.max(1,canvas.clientWidth),h=Math.max(1,canvas.clientHeight),pw=Math.floor(w*dpr),ph=Math.floor(h*dpr)
+      if(canvas.width!==pw||canvas.height!==ph){canvas.width=pw;canvas.height=ph}gl.viewport(0,0,pw,ph)
+    }
+
+    let last=performance.now()
+    const frame=now=>{
+      resize();const dt=Math.min(.05,(now-last)/1000);last=now
+      if(scriptDark>0)scriptDark=Math.max(0,scriptDark-dt)
+      updatePlayer(dt);updateEnemy(dt,now)
+
+      const fx=Math.sin(yaw)*Math.cos(pitch),fy=Math.sin(pitch),fz=Math.cos(yaw)*Math.cos(pitch)
+      const eye=[player.x,player.y,player.z],center=[player.x+fx,player.y+fy,player.z+fz]
+      const view=lookAt(eye,center),proj=perspective(68*Math.PI/180,canvas.width/canvas.height,.06,70),vp=multiply(proj,view)
+      const torch=scriptDark>0?(Math.sin(now*.055)>.1?.08:.55):enemy.state==='chase'?.72:1
+
+      gl.enable(gl.DEPTH_TEST);gl.enable(gl.CULL_FACE);gl.cullFace(gl.BACK);gl.clearColor(.008,.011,.012,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.useProgram(program)
+      gl.uniform3fv(loc.camera,new Float32Array(eye));gl.uniform3fv(loc.forward,new Float32Array([fx,fy,fz]));gl.uniform3fv(loc.fog,new Float32Array([.012,.016,.017]));gl.uniform1f(loc.torch,torch)
+
+      draw('box',{x:0,y:-.08,z:-4},{x:18,y:.14,z:29},'#252522',0,0,vp,eye,[fx,fy,fz],torch)
+      draw('box',{x:0,y:3.12,z:-4},{x:18,y:.12,z:29},'#151718',0,0,vp,eye,[fx,fy,fz],torch)
+      for(const block of this.game.walls)draw('box',block.position,block.size,block.color,0,0,vp,eye,[fx,fy,fz],torch)
+      for(const block of this.game.props)draw('box',block.position,block.size,block.color,block.id==='glass'?.06:0,0,vp,eye,[fx,fy,fz],torch)
+
+      for(const locker of this.game.lockers){
+        draw('box',{x:locker.x,y:1,z:locker.z},{x:.82,y:2,z:.66},'#273036',0,locker.yaw,vp,eye,[fx,fy,fz],torch)
+        draw('box',{x:locker.x,y:1.05,z:locker.z-.34},{x:.48,y:.06,z:.03},'#657078',.06,locker.yaw,vp,eye,[fx,fy,fz],torch)
+      }
+
+      const flicker=.16+Math.max(0,Math.sin(now*.004))*0.18
+      for(const z of [7,1,-5,-11,-16])draw('box',{x:0,y:3.02,z},{x:1.4,y:.05,z:.18},power?'#d8e0c8':'#8f9a83',power?.55:flicker,0,vp,eye,[fx,fy,fz],torch)
+
+      if(npcVisible){
+        const n=this.game.npc.position
+        draw('box',{x:n.x,y:.95,z:n.z},{x:.48,y:1.35,z:.34},this.game.npc.color,.02,0,vp,eye,[fx,fy,fz],torch)
+        draw('sphere',{x:n.x,y:1.78,z:n.z-.02},{x:.46,y:.5,z:.46},'#c8c3b8',.025,0,vp,eye,[fx,fy,fz],torch)
+      }
+
+      if(!hasFuse){
+        draw('box',{x:this.game.fuse.x,y:.72,z:this.game.fuse.z},{x:.18,y:.42,z:.12},'#c44731',.65,now*.001,vp,eye,[fx,fy,fz],torch)
+      }
+      draw('box',{x:this.game.panel.x+.22,y:1.25,z:this.game.panel.z},{x:.07,y:.22,z:.22},power?'#69a878':hasFuse?'#d39a4f':'#74392f',power?.7:.18,0,vp,eye,[fx,fy,fz],torch)
+      draw('box',{x:this.game.exit.x,y:2.5,z:this.game.exit.z-.05},{x:1.2,y:.24,z:.08},power?'#5d9d77':'#482b29',power?.8:.08,0,vp,eye,[fx,fy,fz],torch)
+      if(!power)draw('box',{x:this.game.exit.x,y:1.1,z:this.game.exit.z},{x:1.35,y:2.2,z:.18},'#2d3233',0,0,vp,eye,[fx,fy,fz],torch)
+
+      if(enemy.active&&enemy.state!=='caught'){
+        const eYaw=Math.atan2(enemy.dx,enemy.dz)
+        draw('box',{x:enemy.x,y:.95,z:enemy.z},{x:.54,y:1.5,z:.4},'#222424',.01,eYaw,vp,eye,[fx,fy,fz],torch)
+        draw('sphere',{x:enemy.x,y:1.82,z:enemy.z},{x:.48,y:.54,z:.48},'#8e8077',.015,eYaw,vp,eye,[fx,fy,fz],torch)
+        draw('box',{x:enemy.x-.11*enemy.dz,y:1.86,z:enemy.z+.11*enemy.dx},{x:.045,y:.035,z:.035},'#ae2c26',.9,eYaw,vp,eye,[fx,fy,fz],torch)
+        draw('box',{x:enemy.x+.11*enemy.dz,y:1.86,z:enemy.z-.11*enemy.dx},{x:.045,y:.035,z:.035},'#ae2c26',.9,eYaw,vp,eye,[fx,fy,fz],torch)
+      }
+
+      this.blackout=hidden
+      publish(false,now)
       requestAnimationFrame(frame)
     }
-    requestAnimationFrame(frame)
+
+    onCleanup(()=>{clearTimeout(scareTimer);try{hum?.stop()}catch{};try{audio?.close()}catch{};if(document.pointerLockElement===canvas)document.exitPointerLock()})
+    this.status='world live';publish(true);requestAnimationFrame(frame)
   })
 </script>
 
-<canvas aria-label="Interactive 3D scene"></canvas>
-<div class="hint">drag-free demo · camera / light / meshes / update</div>
+<canvas aria-label="First person horror game"></canvas>
+<div class="vignette"></div>
+<div class="locker" if={blackout}><span>...</span></div>
+<div class="jumpscare" if={scare}>
+  <div class="face"><i></i><i></i><b></b></div>
+</div>
 
 <style>
-  :host{display:block;width:100%;height:100%;min-height:100vh;background:#090b10}
-  canvas{display:block;width:100%;height:100%;min-height:100vh}
-  .hint{position:absolute;left:50%;bottom:28px;translate:-50% 0;color:#7e8798;font:800 8px/1 ui-monospace,monospace;letter-spacing:.1em;text-transform:uppercase;pointer-events:none}
+  :host{position:relative;display:block;width:100%;height:100%;min-height:100vh;background:#030405;overflow:hidden}
+  canvas{display:block;width:100%;height:100%;min-height:100vh;cursor:crosshair}
+  .vignette{position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 50% 48%,transparent 0 35%,#0005 68%,#000d 100%),linear-gradient(#10120f10,#160c0a18);mix-blend-mode:multiply}
+  .locker{position:absolute;inset:0;display:grid;place-items:center;background:linear-gradient(90deg,#020303 0 44%,transparent 46% 54%,#020303 56% 100%);pointer-events:none}.locker:before,.locker:after{content:"";position:absolute;top:0;bottom:0;width:1px;background:#41413d55}.locker:before{left:44%}.locker:after{right:44%}.locker span{color:#4f4c45;font:900 12px ui-monospace,monospace;letter-spacing:.5em}
+  .jumpscare{position:absolute;inset:0;display:grid;place-items:center;background:#d9d0bd;z-index:20;animation:shake .07s steps(2,end) infinite,flash .32s steps(2,end) both;pointer-events:none}
+  .face{position:relative;width:min(76vw,600px);aspect-ratio:1;border-radius:46% 46% 40% 40%;background:radial-gradient(circle at 50% 38%,#d6c9b5 0 21%,#83776b 57%,#171515 100%);filter:contrast(1.5) saturate(.3)}
+  .face i{position:absolute;top:34%;width:22%;height:13%;border-radius:50%;background:#070707;box-shadow:0 0 0 18px #443d38aa}.face i:first-child{left:17%;rotate:8deg}.face i:nth-child(2){right:17%;rotate:-8deg}.face b{position:absolute;left:31%;bottom:17%;width:38%;height:25%;border-radius:20% 20% 50% 50%;background:#080707;box-shadow:inset 0 18px #352522}
+  @keyframes shake{0%{transform:translate(-8px,5px) scale(1.04)}100%{transform:translate(7px,-6px) scale(1.12)}}
+  @keyframes flash{0%{filter:invert(1) contrast(2)}35%{filter:none}60%{filter:invert(.8)}100%{filter:none}}
+  @media(max-width:800px),(pointer:coarse){canvas{min-height:100dvh}}
 </style>

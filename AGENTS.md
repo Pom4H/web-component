@@ -6,7 +6,7 @@ This repository contains **Skein**, a zero-dependency HTML-first Web Components 
 
 For application syntax, read `llms-full.txt` and `.agents/skills/skein/references/syntax.md`. For renderer/reactivity/lifecycle/performance work, also read `.agents/skills/skein/references/architecture.md`, relevant `runtime/` source and `test/`.
 
-Use `examples/workspace/` as the application-scale composition reference, not only isolated demos.
+Use `examples/workspace/` as the application-scale composition reference, not only isolated demos. Use `examples/control-room/` when changing design-time types or component contracts.
 
 ## Runtime invariants
 
@@ -116,11 +116,26 @@ Then run the checker from an entry page so it follows the same tag-to-file mappi
 
 ```bash
 node tools/skein-check.mjs examples/workspace/index.html
+node tools/skein-check.mjs examples/control-room/index.html
 ```
 
-The checker infers state created by top-level `this.foo = ...`, follows `computed()` result types, models `each={items}` item scopes, validates binding paths, event handlers, native DOM property bindings, and `.property` names on discovered Skein child inputs. It reports diagnostics against the original `.html` file and exits non-zero on errors.
+The checker infers state created by top-level `this.foo = ...`, follows `computed()` result types, models `each={items}` item scopes, validates binding paths, event handlers, native DOM property bindings, and `.property` names/types on discovered Skein child inputs. It reports diagnostics against the original `.html` file and exits non-zero on errors.
 
 Do not consider a component-editing task complete while `skein-check` reports diagnostics. The checker is development tooling only and must not be imported into the browser runtime.
+
+## Design-time model for agents
+
+Before a broad component-graph change, inspect the semantic model instead of opening every file blindly:
+
+```bash
+node tools/skein-inspect.mjs examples/control-room/index.html
+node tools/skein-inspect.mjs examples/control-room/index.html control-unit-card
+node tools/skein-inspect.mjs examples/control-room/index.html --manifest
+```
+
+The model is derived from application source and indexes typed inputs, emitted `CustomEvent`s, bubbled/composed public events, slots, shadow `part`s, CSS `@property` declarations, child dependencies and reverse `usedBy` edges. Do not add a parallel hand-written component manifest for information that can be derived from these native declarations.
+
+Use `inspect` to understand blast radius, then edit, then run `skein-check`. `test/skein-model.mjs` is the regression gate for the semantic model.
 
 ## Documentation sync
 

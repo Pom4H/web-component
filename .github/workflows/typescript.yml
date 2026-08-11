@@ -50,3 +50,12 @@ jobs:
           fi
           printf '%s\n' "$output" | grep -q 'SKEIN2741'
           printf '%s\n' "$output" | grep -q 'property={alarm}'
+      - name: Verify design-time semantic model
+        run: node test/skein-model.mjs
+      - name: Exercise agent component inspection
+        run: |
+          output=$(node tools/skein-inspect.mjs examples/control-room/index.html control-unit-card)
+          printf '%s\n' "$output"
+          printf '%s\n' "$output" | grep -q 'select-unit { id }'
+          printf '%s\n' "$output" | grep -q 'slots: actions'
+          printf '%s\n' "$output" | grep -q -- '--load: <number> = 0'

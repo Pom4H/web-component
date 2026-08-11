@@ -96,6 +96,19 @@
     let player={position:[.5,5,.5],velocity:[...body.velocity],facing:[0,0,-1],grounded:false}
     let lastReset=this.resetToken
     let lastActions={...this.actions}
+    const pendingActions={jump:0,mine:0,place:0,craft:0}
+    effect(()=>{
+      const next=this.actions
+      const jump=next.jump-lastActions.jump
+      const mine=next.mine-lastActions.mine
+      const place=next.place-lastActions.place
+      const craft=next.craft-lastActions.craft
+      if(jump>0)pendingActions.jump+=jump
+      if(mine>0)pendingActions.mine+=mine
+      if(place>0)pendingActions.place+=place
+      if(craft>0)pendingActions.craft+=craft
+      lastActions={...next}
+    })
     const keys=new Set()
     let meshDirty=true
     let terrainVertices=0
@@ -279,11 +292,14 @@
         const m=Math.hypot(x,z);if(m>1){x/=m;z/=m}
         frame.move=[x,z]
         if(m>.08)player.facing=normal([x,0,z])
-        frame.jump=this.actions.jump!==lastActions.jump
-        frame.mine=this.actions.mine!==lastActions.mine
-        frame.place=this.actions.place!==lastActions.place
-        frame.craft=this.actions.craft!==lastActions.craft
-        lastActions={...this.actions}
+        frame.jump=pendingActions.jump>0
+        frame.mine=pendingActions.mine>0
+        frame.place=pendingActions.place>0
+        frame.craft=pendingActions.craft>0
+        if(frame.jump)pendingActions.jump--
+        if(frame.mine)pendingActions.mine--
+        if(frame.place)pendingActions.place--
+        if(frame.craft)pendingActions.craft--
       },
       gravity(frame,dt){player.velocity[1]=Math.max(-this.world.rules.maxFall,player.velocity[1]-this.world.rules.gravity*dt)},
       locomotion(frame){

@@ -1,6 +1,6 @@
 # TypeScript and editor hints
 
-Skein stays a JavaScript runtime. Type declarations are editor-only and add **zero bytes** to `skein.min.js`.
+Skein stays a JavaScript runtime. Type declarations and the optional checker are development tooling and add **zero bytes** to `skein.min.js`.
 
 ## Public API
 
@@ -31,7 +31,7 @@ host
 abortSignal
 ```
 
-`skein.component.d.ts` is therefore intentionally separate and opt-in. Tooling may include it while type-checking component scripts without pretending these names exist globally on every page.
+`skein.component.d.ts` is intentionally separate and opt-in. Tooling may include it while type-checking component scripts without pretending these names exist globally on every page.
 
 ```ts
 /// <reference path="./skein.component.d.ts" />
@@ -54,13 +54,48 @@ this.double = computed(() => this.count * 2)
 
 Reactive state unwraps that ref when `this.double` is read.
 
+## Checking complete `.html` components
+
+Install TypeScript 7 as a development-only checker dependency:
+
+```bash
+npm install --no-save --ignore-scripts typescript@7.0.2
+```
+
+Then run Skein's CLI checker from an entry page:
+
+```bash
+node tools/skein-check.mjs examples/workspace/index.html
+```
+
+The checker follows the same custom-element mapping as the runtime. For an entry page with `<base href="../">`, `<workspace-app>` resolves to `workspace/app.html`; child tags are discovered recursively.
+
+For each component the checker builds temporary TypeScript that models:
+
+- top-level state created with `this.foo = ...`;
+- values returned by `computed()` as the values seen by bindings;
+- direct `{foo.bar}` binding paths;
+- `each={items}` item scopes, including `index`, `$index`, and `$value`;
+- event handler bindings;
+- native DOM `.property={path}` value types;
+- whether `.property` names exist in discovered Skein child `input()` contracts.
+
+Diagnostics are mapped back to the original HTML location. For example:
+
+```html
+<script>
+  this.users = [{ id: 1, name: 'Ada' }]
+</script>
+
+<li each={users}>{nmae}</li>
+```
+
+fails with a diagnostic at the `{nmae}` binding and exits with status 1. Correcting it to `{name}` exits with status 0.
+
+The repository CI checks three cases with TypeScript 7.0.2: the declaration contract, the real 18-component workspace, and an intentionally invalid list binding that must fail.
+
 ## Current boundary
 
-These declarations type the JavaScript API, but they do not yet make the TypeScript language service understand a complete Skein `.html` component. In particular, editor tooling does not yet infer:
+The checker is deliberately conservative about component input value types. The runtime uses an `input()` fallback for initial attribute conversion, but later DOM property assignment is not runtime-type-restricted to the fallback's JavaScript type. The checker therefore validates that a child `.property` names a declared input, but it does not yet infer a strict cross-component value type from the fallback alone.
 
-- state members created with `this.foo = ...` inside `<script>`;
-- `{foo.bar}` binding paths in markup;
-- item scope inside `each={items}`;
-- whether `.property`, `@event`, `?boolean`, or `--css-var` paths exist.
-
-That requires a Skein-aware HTML language layer. The declarations in this change are the base contract for that next step: the language tool can type-check the extracted component script against `skein.component.d.ts`, then expose the inferred state graph to HTML completions and diagnostics.
+There is also no editor autocomplete for `{binding.paths}` yet. The CLI checker is the shared validation core for agents and CI; a future HTML/LSP layer can reuse the same model for completions and live diagnostics.

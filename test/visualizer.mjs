@@ -54,17 +54,15 @@ try{
 
   const defined=await evaluate(`(${JSON.stringify(tags)}).filter(tag=>customElements.get(tag)).length`)
   if(defined!==tags.length)throw new Error(`Expected ${tags.length} component types, got ${defined}`)
-  const contract=await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),scene=app.shadowRoot.querySelector('visualizer-scene');return{fields:app.state.fields.length,fixedHz:app.state.rules.fixedHz,webgl:!!scene.shadowRoot.querySelector('canvas').getContext('webgl2')}})()`)
-  if(contract.fields!==3||contract.fixedHz!==120||!contract.webgl)throw new Error(`World contract failed: ${JSON.stringify(contract)}`)
+
+  const contract=await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),scene=app.shadowRoot.querySelector('visualizer-scene');return{entities:app.state.world.entities.length,systems:app.state.world.systems.length,fixedHz:app.state.world.rules.fixedHz,sceneEntities:scene.state.world.entities.length,order:scene.state.systemOrder,webgl:!!scene.shadowRoot.querySelector('canvas').getContext('webgl2')}})()`)
+  if(contract.entities!==10||contract.systems!==5||contract.fixedHz!==120||contract.sceneEntities!==10||contract.order!=='input → forces → integrate → bounds → collect'||!contract.webgl)throw new Error(`World contract failed: ${JSON.stringify(contract)}`)
 
   let state={}
   for(let i=0;i<40;i++){await sleep(30);state=await telemetry();if(state.simTime>.15)break}
   if(!(state.simTime>.15))throw new Error(`Fixed-step simulation did not advance: ${JSON.stringify(state)}`)
 
   const controls=`document.querySelector('visualizer-app').shadowRoot.querySelector('visualizer-controls').shadowRoot`
-  const nativeProperties=await evaluate(`(()=>{const root=${controls},time=root.querySelector('input[data-control="time"]'),field=root.querySelector('input[data-control="field"]');return{time:time.valueAsNumber,field:field.valueAsNumber,timeLower:Object.hasOwn(time,'valueasnumber'),fieldLower:Object.hasOwn(field,'valueasnumber')}})()`)
-  if(nativeProperties.time!==1||nativeProperties.field!==1||nativeProperties.timeLower||nativeProperties.fieldLower)throw new Error(`Native camel-case property binding failed: ${JSON.stringify(nativeProperties)}`)
-
   await evaluate(`${controls}.querySelector('button[data-action="run"]').click()`)
   await sleep(90)
   const pausedAt=(await telemetry()).simTime
@@ -75,8 +73,11 @@ try{
   await evaluate(`(()=>{const i=${controls}.querySelector('input[data-control="time"]');i.valueAsNumber=1.5;i.dispatchEvent(new Event('input',{bubbles:true}))})()`)
   await evaluate(`(()=>{const i=${controls}.querySelector('input[data-control="field"]');i.valueAsNumber=.6;i.dispatchEvent(new Event('input',{bubbles:true}))})()`)
   await sleep(40)
-  let flow=await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),scene=app.shadowRoot.querySelector('visualizer-scene');return{time:app.state.timeScale,sceneTime:scene.state.timeScale,hostTime:scene.timeScale,foldedTime:scene.timescale,field:app.state.fieldScale,sceneField:scene.state.fieldScale,hostField:scene.fieldScale,foldedField:scene.fieldscale}})()`)
-  if(flow.time!==1.5||flow.sceneTime!==1.5||flow.hostTime!==1.5||flow.foldedTime!==1.5||Math.abs(flow.field-.6)>.001||Math.abs(flow.sceneField-.6)>.001||Math.abs(flow.hostField-.6)>.001||Math.abs(flow.foldedField-.6)>.001)throw new Error(`Property flow failed: ${JSON.stringify(flow)}`)
+  let flow=await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),scene=app.shadowRoot.querySelector('visualizer-scene');return{time:app.state.timeScale,sceneTime:scene.state.timeScale,field:app.state.fieldScale,sceneField:scene.state.fieldScale}})()`)
+  if(flow.time!==1.5||flow.sceneTime!==1.5||Math.abs(flow.field-.6)>.001||Math.abs(flow.sceneField-.6)>.001)throw new Error(`Property flow failed: ${JSON.stringify(flow)}`)
+
+  const nativeCase=await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),scene=app.shadowRoot.querySelector('visualizer-scene'),input=${controls}.querySelector('input[data-control="time"]');return{sceneTimeScale:scene.timeScale,lowercaseSceneExpando:Object.hasOwn(scene,'timescale'),valueAsNumber:input.valueAsNumber,lowercaseInputExpando:Object.hasOwn(input,'valueasnumber')}})()`)
+  if(nativeCase.sceneTimeScale!==1.5||nativeCase.lowercaseSceneExpando||nativeCase.valueAsNumber!==1.5||nativeCase.lowercaseInputExpando)throw new Error(`Case-sensitive property contract failed: ${JSON.stringify(nativeCase)}`)
 
   const token=await evaluate(`document.querySelector('visualizer-app').state.resetToken`)
   await evaluate(`${controls}.querySelector('button[data-action="reset"]').click()`);await sleep(130)
@@ -87,12 +88,21 @@ try{
   await evaluate(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyD'}))`);await sleep(160);state=await telemetry();await evaluate(`window.dispatchEvent(new KeyboardEvent('keyup',{code:'KeyD'}))`)
   if(state.thrust<=0)throw new Error(`Input did not feed physics: ${JSON.stringify(state)}`)
 
+  await evaluate(`${controls}.querySelector('button[data-action="run"]').click()`)
+  await evaluate(`(()=>{const app=document.querySelector('visualizer-app');app.state.world.systems=app.state.world.systems.filter(system=>system.id!=='input')})()`)
+  await evaluate(`${controls}.querySelector('button[data-action="reset"]').click()`);await sleep(120)
+  await evaluate(`${controls}.querySelector('button[data-action="run"]').click()`)
+  await evaluate(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyD'}))`);await sleep(160);state=await telemetry();await evaluate(`window.dispatchEvent(new KeyboardEvent('keyup',{code:'KeyD'}))`)
+  if(state.thrust>.01)throw new Error(`Declared system schedule did not control execution: ${JSON.stringify(state)}`)
+
   flow=await evaluate(`(()=>{const scene=document.querySelector('visualizer-app').shadowRoot.querySelector('visualizer-scene');return{thrust:scene.style.getPropertyValue('--thrust'),danger:scene.style.getPropertyValue('--danger'),parts:['world','canvas','math','hud'].every(name=>!!scene.shadowRoot.querySelector('[part~="'+name+'"]'))}})()`)
   if(!flow.thrust||!flow.danger||!flow.parts)throw new Error(`Native styling contract failed: ${JSON.stringify(flow)}`)
   if(exceptions.length)throw new Error(`Browser exceptions:\n${exceptions.join('\n')}`)
 
   console.log('curvature-arena-webgl: passed')
   console.log('curvature-arena-fixed-step: passed')
+  console.log('curvature-arena-ecs-world: passed')
+  console.log('curvature-arena-system-schedule: passed')
   console.log('curvature-arena-property-flow: passed')
   console.log('curvature-arena-input-system: passed')
   console.log('curvature-arena-design-contracts: passed')

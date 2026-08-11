@@ -10,11 +10,11 @@
   /** @typedef {{ fixedHz:number, gravity:number, maxFall:number, reach:number }} Rules */
   /** @typedef {{ entities:Entity[], systems:SystemSpec[], recipes:Recipe[], rules:Rules }} World */
   /** @typedef {{ x:number, z:number }} GameControls */
-  /** @typedef {{ jump:number, mine:number, place:number, craft:number }} GameActions */
+  /** @typedef {'jump'|'mine'|'place'|'craft'} GameCommand */
 
   input('world', /** @type {World} */ ({entities:[],systems:[],recipes:[],rules:{fixedHz:120,gravity:22,maxFall:17,reach:4.2}}))
   input('controls', /** @type {GameControls} */ ({x:0,z:0}))
-  input('actions', /** @type {GameActions} */ ({jump:0,mine:0,place:0,craft:0}))
+  input('commands', /** @type {GameCommand[]} */ ([]))
   input('running', /** @type {boolean} */ (true))
   input('resetToken', /** @type {number} */ (0))
 
@@ -95,20 +95,6 @@
     let crafted=0
     let player={position:[.5,5,.5],velocity:[...body.velocity],facing:[0,0,-1],grounded:false}
     let lastReset=this.resetToken
-    let lastActions={...this.actions}
-    const pendingActions={jump:0,mine:0,place:0,craft:0}
-    effect(()=>{
-      const next=this.actions
-      const jump=next.jump-lastActions.jump
-      const mine=next.mine-lastActions.mine
-      const place=next.place-lastActions.place
-      const craft=next.craft-lastActions.craft
-      if(jump>0)pendingActions.jump+=jump
-      if(mine>0)pendingActions.mine+=mine
-      if(place>0)pendingActions.place+=place
-      if(craft>0)pendingActions.craft+=craft
-      lastActions={...next}
-    })
     const keys=new Set()
     let meshDirty=true
     let terrainVertices=0
@@ -276,10 +262,10 @@
       if(['KeyW','KeyA','KeyS','KeyD','Space','KeyF','KeyG','KeyC'].includes(event.code))event.preventDefault()
       keys.add(event.code)
       if(event.repeat)return
-      if(event.code==='Space')this.actions={...this.actions,jump:this.actions.jump+1}
-      if(event.code==='KeyF')this.actions={...this.actions,mine:this.actions.mine+1}
-      if(event.code==='KeyG')this.actions={...this.actions,place:this.actions.place+1}
-      if(event.code==='KeyC')this.actions={...this.actions,craft:this.actions.craft+1}
+      if(event.code==='Space')this.commands.push('jump')
+      if(event.code==='KeyF')this.commands.push('mine')
+      if(event.code==='KeyG')this.commands.push('place')
+      if(event.code==='KeyC')this.commands.push('craft')
     }
     const keyUp=event=>keys.delete(event.code)
     window.addEventListener('keydown',keyDown,{signal:abortSignal})
@@ -292,14 +278,11 @@
         const m=Math.hypot(x,z);if(m>1){x/=m;z/=m}
         frame.move=[x,z]
         if(m>.08)player.facing=normal([x,0,z])
-        frame.jump=pendingActions.jump>0
-        frame.mine=pendingActions.mine>0
-        frame.place=pendingActions.place>0
-        frame.craft=pendingActions.craft>0
-        if(frame.jump)pendingActions.jump--
-        if(frame.mine)pendingActions.mine--
-        if(frame.place)pendingActions.place--
-        if(frame.craft)pendingActions.craft--
+        const command=this.commands.shift()
+        frame.jump=command==='jump'
+        frame.mine=command==='mine'
+        frame.place=command==='place'
+        frame.craft=command==='craft'
       },
       gravity(frame,dt){player.velocity[1]=Math.max(-this.world.rules.maxFall,player.velocity[1]-this.world.rules.gravity*dt)},
       locomotion(frame){

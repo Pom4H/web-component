@@ -13,6 +13,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Verify production runtime is current
+        run: node tools/build.mjs --check
       - name: Install TypeScript 7
         run: npm install --no-save --ignore-scripts typescript@7.0.2
       - name: Check declaration contract

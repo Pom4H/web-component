@@ -91,10 +91,8 @@ try{
   for(let i=0;i<60;i++){await sleep(25);state=await telemetry();if(state.grounded&&state.target!=='none'&&Math.abs(state.position.x-.5)<.1)break}
   const y0=state.position.y
   await evaluate(`${gamepad}.querySelector('[data-action="jump"]').click()`)
-  await sleep(40)
-  const jumpFlow=await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),scene=app.shadowRoot.querySelector('visualizer-scene');return{app:app.state.actions.jump,scene:scene.state.actions.jump,grounded:scene.state.grounded}})()`)
-  await sleep(100);state=await telemetry()
-  if(!(state.position.y>y0+.12)||state.grounded)throw new Error(`Jump did not leave voxel ground: ${JSON.stringify({y0,jumpFlow,state})}`)
+  await sleep(140);state=await telemetry()
+  if(!(state.position.y>y0+.12)||state.grounded)throw new Error(`Jump did not leave voxel ground: ${JSON.stringify({y0,state})}`)
 
   await evaluate(`${controls}.querySelector('button[data-action="reset"]').click()`)
   for(let i=0;i<60;i++){await sleep(25);state=await telemetry();if(state.grounded&&state.target!=='none')break}

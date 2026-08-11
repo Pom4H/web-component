@@ -62,6 +62,9 @@ try{
   if(!(state.simTime>.15))throw new Error(`Fixed-step simulation did not advance: ${JSON.stringify(state)}`)
 
   const controls=`document.querySelector('visualizer-app').shadowRoot.querySelector('visualizer-controls').shadowRoot`
+  const nativeProperties=await evaluate(`(()=>{const root=${controls},time=root.querySelector('input[data-control="time"]'),field=root.querySelector('input[data-control="field"]');return{time:time.valueAsNumber,field:field.valueAsNumber,timeLower:Object.hasOwn(time,'valueasnumber'),fieldLower:Object.hasOwn(field,'valueasnumber')}})()`)
+  if(nativeProperties.time!==1||nativeProperties.field!==1||nativeProperties.timeLower||nativeProperties.fieldLower)throw new Error(`Native camel-case property binding failed: ${JSON.stringify(nativeProperties)}`)
+
   await evaluate(`${controls}.querySelector('button[data-action="run"]').click()`)
   await sleep(90)
   const pausedAt=(await telemetry()).simTime
@@ -72,8 +75,8 @@ try{
   await evaluate(`(()=>{const i=${controls}.querySelector('input[data-control="time"]');i.valueAsNumber=1.5;i.dispatchEvent(new Event('input',{bubbles:true}))})()`)
   await evaluate(`(()=>{const i=${controls}.querySelector('input[data-control="field"]');i.valueAsNumber=.6;i.dispatchEvent(new Event('input',{bubbles:true}))})()`)
   await sleep(40)
-  let flow=await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),scene=app.shadowRoot.querySelector('visualizer-scene');return{time:app.state.timeScale,sceneTime:scene.state.timeScale,field:app.state.fieldScale,sceneField:scene.state.fieldScale}})()`)
-  if(flow.time!==1.5||flow.sceneTime!==1.5||Math.abs(flow.field-.6)>.001||Math.abs(flow.sceneField-.6)>.001)throw new Error(`Property flow failed: ${JSON.stringify(flow)}`)
+  let flow=await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),scene=app.shadowRoot.querySelector('visualizer-scene');return{time:app.state.timeScale,sceneTime:scene.state.timeScale,hostTime:scene.timeScale,foldedTime:scene.timescale,field:app.state.fieldScale,sceneField:scene.state.fieldScale,hostField:scene.fieldScale,foldedField:scene.fieldscale}})()`)
+  if(flow.time!==1.5||flow.sceneTime!==1.5||flow.hostTime!==1.5||flow.foldedTime!==1.5||Math.abs(flow.field-.6)>.001||Math.abs(flow.sceneField-.6)>.001||Math.abs(flow.hostField-.6)>.001||Math.abs(flow.foldedField-.6)>.001)throw new Error(`Property flow failed: ${JSON.stringify(flow)}`)
 
   const token=await evaluate(`document.querySelector('visualizer-app').state.resetToken`)
   await evaluate(`${controls}.querySelector('button[data-action="reset"]').click()`);await sleep(130)

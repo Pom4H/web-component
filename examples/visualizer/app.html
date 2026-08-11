@@ -53,7 +53,6 @@
     this.controls.z = event.detail.z
   }
   this.gameAction = event => {
-    /** @type {GameCommand} */
     const action = event.detail.action
     host.shadowRoot.querySelector('visualizer-scene')?.dispatchEvent(new CustomEvent('game-command', {
       detail:{ action }

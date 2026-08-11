@@ -210,8 +210,9 @@ function checkSource(component, componentByTag) {
     if (check.kind === 'event') code = `const $event${serial++}: (...args: any[]) => any = ${expr};`;
     else if (check.kind === 'property') {
       const child = componentByTag.get(check.tag);
-      if (child && child.state.inputs.has(check.name)) {
-        code = `const $prop${serial++}: import('./${child.id}.state.js').Inputs[${JSON.stringify(check.name)}] = ${expr};`;
+      if (child) {
+        const current = serial++;
+        code = `const $input${current}: keyof import('./${child.id}.state.js').Inputs = ${JSON.stringify(check.name)}; void (${expr});`;
       } else if (!check.tag.includes('-')) {
         const current = serial++;
         code = `declare const $native${current}: HTMLElementTagNameMap[${JSON.stringify(check.tag)}]; const $prop${current}: typeof $native${current}[${JSON.stringify(check.name)}] = ${expr};`;

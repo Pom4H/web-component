@@ -1,31 +1,46 @@
 <script>
-  input('running', true)
-  input('speed', .92)
-  this.action = computed(() => this.running ? 'pause' : 'resume')
-  this.toggle = () => host.dispatchEvent(new CustomEvent('run-change', { detail:{ running:!this.running }, bubbles:true, composed:true }))
-  this.changeSpeed = event => host.dispatchEvent(new CustomEvent('speed-change', { detail:{ speed:Number(event.currentTarget.value) }, bubbles:true, composed:true }))
-  this.write = () => host.dispatchEvent(new CustomEvent('write', { bubbles:true, composed:true }))
+  input('running', /** @type {boolean} */ (true))
+  input('timeScale', /** @type {number} */ (1))
+  input('fieldScale', /** @type {number} */ (1))
+
+  this.action = computed(() => this.running ? 'pause world' : 'resume world')
+  this.toggle = () => host.dispatchEvent(new CustomEvent('run-change', {
+    detail:{ running:!this.running }, bubbles:true, composed:true
+  }))
+  this.changeTime = event => host.dispatchEvent(new CustomEvent('time-scale-change', {
+    detail:{ value:Number(event.currentTarget.valueAsNumber) }, bubbles:true, composed:true
+  }))
+  this.changeField = event => host.dispatchEvent(new CustomEvent('field-scale-change', {
+    detail:{ value:Number(event.currentTarget.valueAsNumber) }, bubbles:true, composed:true
+  }))
+  this.reset = () => host.dispatchEvent(new CustomEvent('world-reset', { bubbles:true, composed:true }))
 </script>
 
-<section>
-  <button data-action="write" class="write" @click={write}>this.count++</button>
+<section part="controls">
   <button data-action="run" @click={toggle}>{action}</button>
-  <label title="pipeline speed">
-    <span>speed</span><output>{speed}×</output>
-    <input type="range" min="0.25" max="2.5" step="0.25" .value={speed} @input={changeSpeed}>
+  <button data-action="reset" class="reset" @click={reset}>reset orbit</button>
+
+  <label>
+    <span>time</span><output>{timeScale}×</output>
+    <input data-control="time" type="range" min="0.25" max="2" step="0.25" .valueAsNumber={timeScale} @input={changeTime}>
+  </label>
+
+  <label>
+    <span>field</span><output>{fieldScale}×</output>
+    <input data-control="field" type="range" min="0" max="2" step="0.1" .valueAsNumber={fieldScale} @input={changeField}>
   </label>
 </section>
 
 <style>
   :host { display:block; color:#dbe6f7; }
   * { box-sizing:border-box; }
-  section { display:grid; grid-template-columns:auto auto 1fr; gap:8px; align-items:center; }
-  button { border:1px solid #203550; border-radius:10px; padding:10px 13px; background:#07101ad9; color:#cbd8e7; backdrop-filter:blur(10px); font:800 9px ui-monospace,monospace; text-transform:uppercase; cursor:pointer; }
-  button:hover { border-color:#4a6788; }
-  .write { color:#04120e; border-color:#79f7d2; background:#79f7d2; box-shadow:0 0 34px #79f7d224; }
-  .write:hover { background:#a4ffe5; }
-  label { min-width:88px; display:grid; grid-template-columns:1fr auto; gap:3px 8px; padding:6px 9px; border:1px solid #182a3d; border-radius:10px; color:#607087; background:#06101acc; backdrop-filter:blur(10px); font:700 7px ui-monospace,monospace; text-transform:uppercase; }
-  output { color:#9fb0c5; }
-  input { grid-column:1/-1; width:100%; height:8px; accent-color:#79f7d2; }
-  @media(max-width:620px){section{grid-template-columns:auto auto}label{display:none}}
+  section { display:grid; grid-template-columns:auto auto 112px 112px; gap:8px; align-items:center; }
+  button,label { border:1px solid #20334d; border-radius:11px; background:#06101bcc; backdrop-filter:blur(12px); }
+  button { padding:11px 13px; color:#cbd8e7; font:800 9px ui-monospace,monospace; text-transform:uppercase; cursor:pointer; }
+  button:hover { border-color:#4f709a; }
+  .reset { color:#07100e; border-color:#68f7d2; background:#68f7d2; }
+  label { display:grid; grid-template-columns:1fr auto; gap:3px 8px; padding:7px 9px; color:#63738a; font:700 7px ui-monospace,monospace; text-transform:uppercase; }
+  output { color:#afbed0; }
+  input { grid-column:1/-1; width:100%; height:8px; accent-color:#68f7d2; }
+  @media(max-width:760px){section{grid-template-columns:auto auto}label{display:none}}
 </style>

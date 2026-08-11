@@ -3,7 +3,7 @@
   input('timeScale', /** @type {number} */ (1))
   input('fieldScale', /** @type {number} */ (1))
 
-  this.action = computed(() => this.running ? 'pause world' : 'resume world')
+  this.action = computed(() => this.running ? 'pause' : 'play')
   this.toggle = () => host.dispatchEvent(new CustomEvent('run-change', {
     detail:{ running:!this.running }, bubbles:true, composed:true
   }))
@@ -18,7 +18,7 @@
 
 <section part="controls">
   <button data-action="run" @click={toggle}>{action}</button>
-  <button data-action="reset" class="reset" @click={reset}>reset orbit</button>
+  <button data-action="reset" class="reset" @click={reset}>home</button>
 
   <label>
     <span>time</span><output>{timeScale}×</output>
@@ -32,15 +32,19 @@
 </section>
 
 <style>
-  :host { display:block; color:#dbe6f7; }
+  :host { display:block; color:#314235; }
   * { box-sizing:border-box; }
   section { display:grid; grid-template-columns:auto auto 112px 112px; gap:8px; align-items:center; }
-  button,label { border:1px solid #20334d; border-radius:11px; background:#06101bcc; backdrop-filter:blur(12px); }
-  button { padding:11px 13px; color:#cbd8e7; font:800 9px ui-monospace,monospace; text-transform:uppercase; cursor:pointer; }
-  button:hover { border-color:#4f709a; }
-  .reset { color:#07100e; border-color:#68f7d2; background:#68f7d2; }
-  label { display:grid; grid-template-columns:1fr auto; gap:3px 8px; padding:7px 9px; color:#63738a; font:700 7px ui-monospace,monospace; text-transform:uppercase; }
-  output { color:#afbed0; }
-  input { grid-column:1/-1; width:100%; height:8px; accent-color:#68f7d2; }
-  @media(max-width:760px){section{grid-template-columns:auto auto}label{display:none}}
+  button,label { border:2px solid #66805f; border-radius:8px; background:#f7fff0e8; box-shadow:inset 0 2px #fff,0 4px 0 #55714e44; }
+  button { min-width:58px; padding:11px 13px; color:#344b37; font:900 9px ui-monospace,monospace; text-transform:uppercase; cursor:pointer; }
+  button:active { translate:0 3px; box-shadow:inset 0 1px #fff,0 1px 0 #55714e44; }
+  .reset { color:#5c4900; border-color:#9c8438; background:#fff1a8e8; box-shadow:inset 0 2px #fff9,0 4px 0 #8f793844; }
+  label { display:grid; grid-template-columns:1fr auto; gap:3px 8px; padding:7px 9px; color:#667966; font:800 7px ui-monospace,monospace; text-transform:uppercase; }
+  output { color:#334b37; }
+  input { grid-column:1/-1; width:100%; height:14px; accent-color:#5d9b65; }
+  @media(max-width:800px),(pointer:coarse){
+    section{grid-template-columns:auto auto;gap:7px}
+    label{display:none}
+    button{min-width:72px;min-height:44px;font-size:10px;background:#f9fff4f0}
+  }
 </style>

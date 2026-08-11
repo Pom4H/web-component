@@ -87,7 +87,7 @@ try{
   if(held!==1||released!==0||!(state.position.x>beforeMobile.position.x+.2))throw new Error(`Touch movement did not flow through typed game input: ${JSON.stringify({held,released,beforeMobile,state})}`)
 
   await evaluate(`${controls}.querySelector('button[data-action="reset"]').click()`)
-  for(let i=0;i<60;i++){await sleep(25);state=await telemetry();if(state.grounded&&state.target!=='none')break}
+  for(let i=0;i<60;i++){await sleep(25);state=await telemetry();if(state.grounded&&state.target!=='none'&&Math.abs(state.position.x-.5)<.1)break}
   const y0=state.position.y
   await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),b=app.shadowRoot.querySelector('visualizer-gamepad').shadowRoot.querySelector('[data-action="jump"]');b.dispatchEvent(new PointerEvent('pointerdown',{pointerId:42,pointerType:'touch',bubbles:true}));})()`)
   await sleep(40)

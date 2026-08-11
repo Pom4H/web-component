@@ -76,8 +76,8 @@ try{
   let flow=await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),scene=app.shadowRoot.querySelector('visualizer-scene');return{time:app.state.timeScale,sceneTime:scene.state.timeScale,field:app.state.fieldScale,sceneField:scene.state.fieldScale}})()`)
   if(flow.time!==1.5||flow.sceneTime!==1.5||Math.abs(flow.field-.6)>.001||Math.abs(flow.sceneField-.6)>.001)throw new Error(`Property flow failed: ${JSON.stringify(flow)}`)
 
-  const nativeCase=await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),scene=app.shadowRoot.querySelector('visualizer-scene'),input=${controls}.querySelector('input[data-control="time"]');return{sceneTimeScale:scene.timeScale,lowercaseSceneExpando:Object.hasOwn(scene,'timescale'),valueAsNumber:input.valueAsNumber,lowercaseInputExpando:Object.hasOwn(input,'valueasnumber')}})()`)
-  if(nativeCase.sceneTimeScale!==1.5||nativeCase.lowercaseSceneExpando||nativeCase.valueAsNumber!==1.5||nativeCase.lowercaseInputExpando)throw new Error(`Case-sensitive property contract failed: ${JSON.stringify(nativeCase)}`)
+  const nativeCase=await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),scene=app.shadowRoot.querySelector('visualizer-scene'),input=${controls}.querySelector('input[data-control="time"]');return{sceneTimeScale:scene.timeScale,foldedTimeScale:scene.timescale,hasFoldedAlias:Object.hasOwn(scene,'timescale'),valueAsNumber:input.valueAsNumber,lowercaseInputExpando:Object.hasOwn(input,'valueasnumber')}})()`)
+  if(nativeCase.sceneTimeScale!==1.5||nativeCase.foldedTimeScale!==1.5||!nativeCase.hasFoldedAlias||nativeCase.valueAsNumber!==1.5||nativeCase.lowercaseInputExpando)throw new Error(`Case-sensitive property contract failed: ${JSON.stringify(nativeCase)}`)
 
   const token=await evaluate(`document.querySelector('visualizer-app').state.resetToken`)
   await evaluate(`${controls}.querySelector('button[data-action="reset"]').click()`);await sleep(130)

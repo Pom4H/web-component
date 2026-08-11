@@ -1,8 +1,61 @@
+<script>
+  const activePointers = new Map()
+
+  const keyDown = code => window.dispatchEvent(new KeyboardEvent('keydown', {
+    code, bubbles:true
+  }))
+  const keyUp = code => window.dispatchEvent(new KeyboardEvent('keyup', {
+    code, bubbles:true
+  }))
+
+  this.mobilePress = event => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return
+    const code = event.currentTarget.dataset.key
+    if (!code) return
+    const previous = activePointers.get(event.pointerId)
+    if (previous && previous !== code) keyUp(previous)
+    activePointers.set(event.pointerId, code)
+    try { event.currentTarget.setPointerCapture?.(event.pointerId) } catch {}
+    keyDown(code)
+    event.preventDefault()
+  }
+
+  this.mobileRelease = event => {
+    const code = activePointers.get(event.pointerId) || event.currentTarget.dataset.key
+    if (code) keyUp(code)
+    activePointers.delete(event.pointerId)
+    event.preventDefault()
+  }
+
+  this.blockMenu = event => event.preventDefault()
+
+  onCleanup(() => {
+    for (const code of activePointers.values()) keyUp(code)
+    activePointers.clear()
+  })
+</script>
+
 <main class="shell">
   <section class="scene"><slot name="scene"></slot></section>
   <section class="mast"><slot name="mast"></slot></section>
   <aside class="controls"><slot name="controls"></slot></aside>
   <aside class="inspector"><slot name="inspector"></slot></aside>
+
+  <nav class="mobile-gamepad" part="mobile-controls" aria-label="Flight controls" @contextmenu={blockMenu}>
+    <div class="dpad" aria-label="Planar thrust">
+      <button class="pad up" data-key="KeyW" aria-label="Thrust up" @pointerdown={mobilePress} @pointerup={mobileRelease} @pointercancel={mobileRelease}>↑</button>
+      <button class="pad left" data-key="KeyA" aria-label="Thrust left" @pointerdown={mobilePress} @pointerup={mobileRelease} @pointercancel={mobileRelease}>←</button>
+      <span class="pad-core" aria-hidden="true"></span>
+      <button class="pad right" data-key="KeyD" aria-label="Thrust right" @pointerdown={mobilePress} @pointerup={mobileRelease} @pointercancel={mobileRelease}>→</button>
+      <button class="pad down" data-key="KeyS" aria-label="Thrust down" @pointerdown={mobilePress} @pointerup={mobileRelease} @pointercancel={mobileRelease}>↓</button>
+    </div>
+
+    <div class="depth" aria-label="Depth thrust">
+      <button class="depth-key" data-key="KeyE" aria-label="Thrust forward" @pointerdown={mobilePress} @pointerup={mobileRelease} @pointercancel={mobileRelease}><b>+Z</b><small>IN</small></button>
+      <button class="depth-key" data-key="KeyQ" aria-label="Thrust backward" @pointerdown={mobilePress} @pointerup={mobileRelease} @pointercancel={mobileRelease}><b>−Z</b><small>OUT</small></button>
+    </div>
+  </nav>
+
   <footer>
     <span>state → typed inputs</span>
     <span>systems → CustomEvent</span>
@@ -23,6 +76,101 @@
   footer { position:absolute; z-index:65; left:50%; bottom:27px; translate:-50% 0; display:flex; gap:7px; align-items:center; color:#4f6075; font:700 8px ui-monospace,monospace; letter-spacing:.08em; text-transform:uppercase; pointer-events:none; }
   footer span,footer b { border-top:1px solid #14263a; padding:8px 7px 0; white-space:nowrap; }
   footer b { color:#68f7d2; }
+
+  .mobile-gamepad { display:none; }
+
   @media(max-width:1050px){.inspector{display:none}.mast{width:min(690px,75vw)}}
-  @media(max-width:800px){.mast{left:18px;top:18px;width:min(620px,88vw)}.controls{left:18px;bottom:18px}footer{display:none}}
+  @media(max-width:800px){
+    .shell { height:100dvh; min-height:100dvh; }
+    .mast { display:none; }
+    .controls { left:50%; top:calc(env(safe-area-inset-top) + 10px); bottom:auto; translate:-50% 0; }
+    footer { display:none; }
+
+    .mobile-gamepad {
+      position:absolute;
+      z-index:90;
+      left:0;
+      right:0;
+      bottom:calc(env(safe-area-inset-bottom) + 12px);
+      display:flex;
+      align-items:flex-end;
+      justify-content:space-between;
+      padding:0 15px;
+      pointer-events:none;
+      touch-action:none;
+      user-select:none;
+      -webkit-user-select:none;
+      -webkit-touch-callout:none;
+    }
+
+    .dpad {
+      width:178px;
+      height:178px;
+      display:grid;
+      grid-template-columns:repeat(3,54px);
+      grid-template-rows:repeat(3,54px);
+      gap:8px;
+      align-items:center;
+      justify-content:center;
+      pointer-events:auto;
+    }
+    .pad,.depth-key {
+      appearance:none;
+      border:1px solid #6688a766;
+      background:#071522b8;
+      color:#d9f7f0;
+      backdrop-filter:blur(12px);
+      -webkit-backdrop-filter:blur(12px);
+      box-shadow:inset 0 1px #b9fff51a,0 8px 24px #0008;
+      touch-action:none;
+      pointer-events:auto;
+    }
+    .pad {
+      width:54px;
+      height:54px;
+      border-radius:18px;
+      font:800 24px/1 system-ui,sans-serif;
+    }
+    .pad:active,.depth-key:active { border-color:#68f7d2; background:#12312fdd; transform:scale(.94); }
+    .up { grid-column:2; grid-row:1; }
+    .left { grid-column:1; grid-row:2; }
+    .right { grid-column:3; grid-row:2; }
+    .down { grid-column:2; grid-row:3; }
+    .pad-core {
+      grid-column:2;
+      grid-row:2;
+      width:30px;
+      height:30px;
+      justify-self:center;
+      border:1px solid #68f7d244;
+      border-radius:50%;
+      background:radial-gradient(circle,#68f7d244 0 18%,transparent 22%);
+      box-shadow:0 0 28px #68f7d222;
+    }
+
+    .depth {
+      display:grid;
+      gap:10px;
+      padding-bottom:12px;
+      pointer-events:auto;
+    }
+    .depth-key {
+      width:68px;
+      min-height:68px;
+      display:grid;
+      place-items:center;
+      align-content:center;
+      gap:3px;
+      border-radius:50%;
+    }
+    .depth-key b { font:900 15px/1 ui-monospace,monospace; }
+    .depth-key small { color:#6f879f; font:800 7px/1 ui-monospace,monospace; letter-spacing:.12em; }
+  }
+
+  @media(max-width:390px){
+    .mobile-gamepad { padding-inline:10px; }
+    .dpad { width:160px; height:160px; grid-template-columns:repeat(3,48px); grid-template-rows:repeat(3,48px); gap:7px; }
+    .pad { width:48px; height:48px; border-radius:16px; }
+    .depth-key { width:62px; min-height:62px; }
+  }
 </style>

@@ -1,0 +1,54 @@
+<script>
+  /** @typedef {{ id:string, label:string, value:number, unit:string, severity:'normal'|'warning'|'alarm' }} Sensor */
+  /** @typedef {{ id:string, name:string, area:string, status:'normal'|'warning'|'alarm', load:number, metrics:{ pressure:number, temperature:number }, sensors:Sensor[] }} Unit */
+  /** @typedef {{ id:string, unitId:string, severity:'warning'|'alarm', message:string, acknowledged:boolean }} Alarm */
+
+  this.units = /** @type {Unit[]} */ ([
+    { id:'P-101', name:'Feed pump', area:'Water intake', status:'warning', load:82, metrics:{ pressure:4.8, temperature:68 }, sensors:[
+      { id:'PT-101', label:'Discharge pressure', value:4.8, unit:'bar', severity:'warning' },
+      { id:'TT-101', label:'Bearing temperature', value:68, unit:'°C', severity:'normal' }
+    ]},
+    { id:'P-102', name:'Transfer pump', area:'Water intake', status:'normal', load:61, metrics:{ pressure:3.7, temperature:54 }, sensors:[
+      { id:'PT-102', label:'Discharge pressure', value:3.7, unit:'bar', severity:'normal' },
+      { id:'TT-102', label:'Bearing temperature', value:54, unit:'°C', severity:'normal' }
+    ]},
+    { id:'HX-201', name:'Heat exchanger', area:'Process loop', status:'alarm', load:94, metrics:{ pressure:6.2, temperature:91 }, sensors:[
+      { id:'PT-201', label:'Loop pressure', value:6.2, unit:'bar', severity:'alarm' },
+      { id:'TT-201', label:'Outlet temperature', value:91, unit:'°C', severity:'alarm' }
+    ]}
+  ])
+
+  this.alarms = /** @type {Alarm[]} */ ([
+    { id:'A-2031', unitId:'HX-201', severity:'alarm', message:'Loop pressure above trip threshold', acknowledged:false },
+    { id:'A-2029', unitId:'P-101', severity:'warning', message:'Discharge pressure trending high', acknowledged:false }
+  ])
+
+  this.selectedId = 'P-101'
+  this.selectedUnit = computed(() => this.units.find(unit => unit.id === this.selectedId) || this.units[0])
+  this.selectUnit = event => this.selectedId = event.detail.id
+</script>
+
+<div class="page">
+  <header>
+    <div><small>Typed operations example</small><h1>Control Room</h1></div>
+    <span>agent-safe component contracts</span>
+  </header>
+
+  <control-summary-strip .units={units}></control-summary-strip>
+
+  <main>
+    <control-unit-grid
+      .units={units}
+      .selectedId={selectedId}
+      @select-unit={selectUnit}>
+    </control-unit-grid>
+
+    <control-unit-inspector .unit={selectedUnit}></control-unit-inspector>
+  </main>
+
+  <control-alarm-feed .alarms={alarms}></control-alarm-feed>
+</div>
+
+<style>
+  :host{display:block;background:#0b0e0c;color:#eef2eb;font-family:Inter,ui-sans-serif,system-ui,sans-serif;min-height:100vh}.page{max-width:1240px;margin:auto;padding:30px}header{display:flex;align-items:end;justify-content:space-between;margin-bottom:24px}h1{margin:4px 0 0;font-size:34px}small,header span{color:#7f8a81;font:700 11px ui-monospace,monospace;text-transform:uppercase;letter-spacing:.08em}main{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(300px,.8fr);gap:16px;margin:16px 0}@media(max-width:850px){main{grid-template-columns:1fr}.page{padding:16px}}
+</style>

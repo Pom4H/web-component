@@ -1,0 +1,13 @@
+<script>
+  /** @typedef {{ id:string, label:string, value:number, unit:string, severity:'normal'|'warning'|'alarm' }} Sensor */
+  input('sensors', /** @type {Sensor[]} */ ([]))
+</script>
+
+<div class="sensors">
+  <div class="sensor" each={sensors} key={id} data-severity={severity}>
+    <span>{label}</span>
+    <strong>{value} {unit}</strong>
+  </div>
+</div>
+
+<style>:host{display:block}.sensors{display:grid;gap:5px;margin-top:14px}.sensor{display:flex;justify-content:space-between;padding-top:7px;border-top:1px solid #242a25;color:#8f9991;font-size:11px}.sensor strong{color:#d8dfd9}.sensor[data-severity="alarm"] strong{color:#ff8978}.sensor[data-severity="warning"] strong{color:#ffd176}</style>

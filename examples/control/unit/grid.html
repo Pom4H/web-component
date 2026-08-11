@@ -1,0 +1,16 @@
+<script>
+  /** @typedef {{ id:string, name:string, area:string, status:'normal'|'warning'|'alarm', load:number, metrics:{ pressure:number, temperature:number }, sensors:{ id:string, label:string, value:number, unit:string, severity:'normal'|'warning'|'alarm' }[] }} Unit */
+  input('units', /** @type {Unit[]} */ ([]))
+  input('selectedId', /** @type {string} */ (''))
+</script>
+
+<section>
+  <control-unit-card
+    each={units}
+    key={id}
+    .unit={$value}
+    .selectedId={selectedId}>
+  </control-unit-card>
+</section>
+
+<style>:host{display:block}section{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}@media(max-width:650px){section{grid-template-columns:1fr}}</style>

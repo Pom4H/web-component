@@ -1,0 +1,61 @@
+name: TypeScript and Skein types
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  types:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install TypeScript 7
+        run: npm install --no-save --ignore-scripts typescript@7.0.2
+      - name: Check declaration contract
+        run: >-
+          npx tsc
+          --noEmit
+          --strict
+          --target es2022
+          --module esnext
+          --moduleResolution bundler
+          --lib es2022,dom
+          test/typescript-contract.ts
+      - name: Type-check the 18-component workspace
+        run: node tools/skein-check.mjs examples/workspace/index.html
+      - name: Type-check a known-good list scope
+        run: node tools/skein-check.mjs test/skein-check/valid/index.html
+      - name: Prove an invalid list binding fails
+        run: |
+          if node tools/skein-check.mjs test/skein-check/invalid/index.html; then
+            echo "Expected the invalid Skein fixture to fail type checking"
+            exit 1
+          fi
+      - name: Type-check the typed control room
+        run: node tools/skein-check.mjs examples/control-room/index.html
+      - name: Prove an invalid component contract fails
+        run: |
+          set +e
+          output=$(node tools/skein-check.mjs test/skein-check/invalid-contract/index.html 2>&1)
+          status=$?
+          set -e
+          printf '%s\n' "$output"
+          if [ "$status" -eq 0 ]; then
+            echo "Expected the invalid component contract to fail type checking"
+            exit 1
+          fi
+          printf '%s\n' "$output" | grep -q 'SKEIN2741'
+          printf '%s\n' "$output" | grep -q 'property={alarm}'
+      - name: Verify design-time semantic model
+        run: node test/skein-model.mjs
+      - name: Exercise agent component inspection
+        run: |
+          output=$(node tools/skein-inspect.mjs examples/control-room/index.html control-unit-card)
+          printf '%s\n' "$output"
+          printf '%s\n' "$output" | grep -q 'select-unit { id }'
+          printf '%s\n' "$output" | grep -q 'slots: actions'
+          printf '%s\n' "$output" | grep -q -- '--load: <number> = 0'

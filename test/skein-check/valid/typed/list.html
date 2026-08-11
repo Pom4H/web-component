@@ -1,0 +1,13 @@
+<script>
+  this.users = [
+    { id: 1, name: 'Ada', active: true },
+    { id: 2, name: 'Lin', active: false }
+  ]
+  this.select = event => console.log(event.currentTarget.dataset.id)
+</script>
+
+<ul>
+  <li each={users} key={id} ?data-active={active}>
+    <button data-id={id} @click={select}>{name}</button>
+  </li>
+</ul>

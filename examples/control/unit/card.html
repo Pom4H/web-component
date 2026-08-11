@@ -1,0 +1,17 @@
+<script>
+  /** @typedef {{ id:string, label:string, value:number, unit:string, severity:'normal'|'warning'|'alarm' }} Sensor */
+  /** @typedef {{ id:string, name:string, area:string, status:'normal'|'warning'|'alarm', load:number, metrics:{ pressure:number, temperature:number }, sensors:Sensor[] }} Unit */
+  input('unit', /** @type {Unit} */ ({ id:'', name:'', area:'', status:'normal', load:0, metrics:{ pressure:0, temperature:0 }, sensors:[] }))
+  input('selectedId', /** @type {string} */ (''))
+  this.selected = computed(() => this.unit.id === this.selectedId)
+  this.choose = () => host.dispatchEvent(new CustomEvent('select-unit', { detail:{ id:this.unit.id }, bubbles:true, composed:true }))
+</script>
+
+<article part="surface" data-status={unit.status} data-selected={selected} --load={unit.load} @click={choose}>
+  <header part="header"><span>{unit.area}</span><b>{unit.status}</b><slot name="actions"></slot></header>
+  <h2>{unit.name}</h2>
+  <div class="load" part="load"><span>Load</span><strong>{unit.load}%</strong></div>
+  <control-sensor-list .sensors={unit.sensors}></control-sensor-list>
+</article>
+
+<style>@property --load{syntax:"<number>";inherits:false;initial-value:0}:host{display:block}article{height:100%;box-sizing:border-box;border:1px solid #252c27;background:#121613;padding:15px;cursor:pointer}article[data-selected="true"]{outline:1px solid #a7d65b}article[data-status="alarm"]{border-color:#70413a}header,.load{display:flex;justify-content:space-between;align-items:center}.load{position:relative;padding-bottom:7px}.load::after{content:"";position:absolute;left:0;bottom:0;height:2px;width:calc(var(--load)*1%);background:#a7d65b}header span,.load span{color:#768078;font:700 9px ui-monospace,monospace;text-transform:uppercase}header b{font:700 10px ui-monospace,monospace;text-transform:uppercase;color:#d8ddda}h2{margin:10px 0 16px;font-size:18px}.load strong{font-size:20px}</style>

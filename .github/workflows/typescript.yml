@@ -61,9 +61,9 @@ jobs:
           printf '%s\n' "$output" | grep -q 'select-unit { id }'
           printf '%s\n' "$output" | grep -q 'slots: actions'
           printf '%s\n' "$output" | grep -q -- '--load: <number> = 0'
-      - name: Type-check Voxel Meadow
+      - name: Type-check The Night Shift
         run: node tools/skein-check.mjs examples/visualizer/index.html
-      - name: Verify Voxel Meadow design-time world
+      - name: Verify The Night Shift design-time graph
         run: node test/game-model.mjs
-      - name: Run Voxel Meadow browser regression
+      - name: Run The Night Shift browser regression
         run: node test/visualizer.mjs

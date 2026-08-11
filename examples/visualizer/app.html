@@ -11,7 +11,7 @@
   /** @typedef {{ entities:Entity[], systems:SystemSpec[], recipes:Recipe[], rules:Rules }} World */
   /** @typedef {{ x:number, z:number }} GameControls */
   /** @typedef {'jump'|'mine'|'place'|'craft'} GameCommand */
-  /** @typedef {{ position:{x:number,y:number,z:number}, speed:number, grounded:boolean, blocks:number, target:string, inventory:Inventory, crafted:number, message:string }} Telemetry */
+  /** @typedef {{ epoch:number, position:{x:number,y:number,z:number}, speed:number, grounded:boolean, blocks:number, target:string, inventory:Inventory, crafted:number, message:string }} Telemetry */
 
   this.world = /** @type {World} */ ({
     entities:[
@@ -44,7 +44,7 @@
   this.running = true
   this.resetToken = 0
   this.telemetry = /** @type {Telemetry} */ ({
-    position:{x:.5,y:4.9,z:.5}, speed:0, grounded:false, blocks:0, target:'none',
+    epoch:0, position:{x:.5,y:4.9,z:.5}, speed:0, grounded:false, blocks:0, target:'none',
     inventory:{dirt:3,stone:0,wood:2,plank:0}, crafted:0, message:'loading world'
   })
 

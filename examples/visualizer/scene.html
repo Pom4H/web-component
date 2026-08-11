@@ -334,7 +334,7 @@
     this.status='world live'
     let previous=performance.now(),accumulator=0,frames=0,fpsAt=previous,telemetryAt=previous,raf=0
     const render=now=>{
-      if(this.resetToken!==lastReset){lastReset=this.resetToken;generate();lastActions={...this.actions};accumulator=0}
+      if(this.resetToken!==lastReset){lastReset=this.resetToken;generate();accumulator=0}
       const realDt=Math.min(.08,(now-previous)/1000);previous=now
       const fixed=1/Math.max(30,this.world.rules.fixedHz||120)
       if(this.running){accumulator+=realDt;let steps=0;while(accumulator>=fixed&&steps<16){step(fixed);accumulator-=fixed;steps++}if(steps===16)accumulator=0}

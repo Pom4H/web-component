@@ -1,0 +1,90 @@
+<script>
+  const held = new Map()
+  let current = { x:0, z:0 }
+
+  const emitInput = () => {
+    let x=0,z=0
+    for(const value of held.values()) { x+=value.x; z+=value.z }
+    const length=Math.hypot(x,z)
+    if(length>1){x/=length;z/=length}
+    if(current.x===x && current.z===z) return
+    current={x,z}
+    host.dispatchEvent(new CustomEvent('game-input-change', {
+      detail:current, bubbles:true, composed:true
+    }))
+  }
+
+  this.pressMove = event => {
+    if(event.pointerType==='mouse' && event.button!==0) return
+    const x=Number(event.currentTarget.dataset.x)||0
+    const z=Number(event.currentTarget.dataset.z)||0
+    held.set(event.pointerId,{x,z})
+    try { event.currentTarget.setPointerCapture?.(event.pointerId) } catch {}
+    emitInput()
+    event.preventDefault()
+  }
+  this.releaseMove = event => {
+    held.delete(event.pointerId)
+    emitInput()
+    event.preventDefault()
+  }
+  this.action = event => {
+    if(event.pointerType==='mouse' && event.button!==0) return
+    const action=event.currentTarget.dataset.action
+    host.dispatchEvent(new CustomEvent('game-action', {
+      detail:{action}, bubbles:true, composed:true
+    }))
+    try { navigator.vibrate?.(8) } catch {}
+    event.preventDefault()
+  }
+  this.blockMenu = event => event.preventDefault()
+
+  onCleanup(()=>{
+    held.clear()
+    current={x:0,z:0}
+    host.dispatchEvent(new CustomEvent('game-input-change', {
+      detail:current, bubbles:true, composed:true
+    }))
+  })
+</script>
+
+<nav part="gamepad" aria-label="Voxel game controls" @contextmenu={blockMenu}>
+  <div class="dpad" aria-label="Move">
+    <button class="move up" data-x="0" data-z="-1" aria-label="Move forward" @pointerdown={pressMove} @pointerup={releaseMove} @pointercancel={releaseMove}>↑</button>
+    <button class="move left" data-x="-1" data-z="0" aria-label="Move left" @pointerdown={pressMove} @pointerup={releaseMove} @pointercancel={releaseMove}>←</button>
+    <span class="center"></span>
+    <button class="move right" data-x="1" data-z="0" aria-label="Move right" @pointerdown={pressMove} @pointerup={releaseMove} @pointercancel={releaseMove}>→</button>
+    <button class="move down" data-x="0" data-z="1" aria-label="Move backward" @pointerdown={pressMove} @pointerup={releaseMove} @pointercancel={releaseMove}>↓</button>
+  </div>
+
+  <div class="actions" aria-label="Actions">
+    <button class="jump" data-action="jump" @pointerdown={action}><b>↑</b><small>JUMP</small></button>
+    <button data-action="mine" @pointerdown={action}><b>−</b><small>BREAK</small></button>
+    <button data-action="place" @pointerdown={action}><b>+</b><small>PLACE</small></button>
+    <button class="craft" data-action="craft" @pointerdown={action}><b>▦</b><small>CRAFT</small></button>
+  </div>
+</nav>
+
+<style>
+  :host { display:block; touch-action:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
+  * { box-sizing:border-box; }
+  nav { display:flex; align-items:flex-end; justify-content:space-between; width:100%; pointer-events:none; }
+  .dpad { width:174px; height:174px; display:grid; grid-template:repeat(3,52px)/repeat(3,52px); gap:9px; place-content:center; pointer-events:auto; }
+  button { appearance:none; border:2px solid #526b49; background:#f7fff0e8; color:#25402b; box-shadow:0 5px 0 #526b49,0 10px 20px #6b845e33; touch-action:none; pointer-events:auto; font-family:ui-monospace,SFMono-Regular,monospace; }
+  button:active { translate:0 4px; box-shadow:0 1px 0 #526b49; background:#fff5b7; }
+  .move { width:52px; height:52px; border-radius:13px; font:900 26px/1 system-ui,sans-serif; }
+  .up{grid-area:1/2}.left{grid-area:2/1}.right{grid-area:2/3}.down{grid-area:3/2}
+  .center { grid-area:2/2; width:32px; height:32px; place-self:center; border:2px solid #718d65; border-radius:9px; background:#91b878; box-shadow:inset 0 0 0 7px #b7d49d; }
+  .actions { display:grid; grid-template:68px 68px/68px 68px; gap:11px; pointer-events:auto; }
+  .actions button { min-width:68px; min-height:68px; border-radius:16px; display:grid; place-content:center; gap:4px; }
+  .actions b { font:900 22px/1 system-ui,sans-serif; }
+  .actions small { font:900 7px/1 ui-monospace,monospace; letter-spacing:.08em; }
+  .jump { background:#e9f9d9ed; }
+  .craft { background:#fff0a8ed; border-color:#8b7335; box-shadow:0 5px 0 #8b7335,0 10px 20px #8b733533; }
+  @media(max-width:390px){
+    .dpad{width:154px;height:154px;grid-template:repeat(3,46px)/repeat(3,46px);gap:7px}
+    .move{width:46px;height:46px;border-radius:12px;font-size:23px}
+    .actions{grid-template:60px 60px/60px 60px;gap:9px}
+    .actions button{min-width:60px;min-height:60px;border-radius:14px}
+  }
+</style>

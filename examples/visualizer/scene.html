@@ -1,343 +1,424 @@
 <script>
-  /** @typedef {{ id:string, transform:{ position:[number,number,number] }, body?:{ velocity:[number,number,number], radius:number }, field?:{ kind:'gravity'|'repulsor'|'vortex', strength:number, radius:number }, controller?:{ thrust:number }, collectible?:{ value:number, respawnRadius:number }, render:{ color:string, size:number } }} Entity */
-  /** @typedef {{ id:'input'|'forces'|'integrate'|'bounds'|'collect', phase:'fixed', reads:string[], writes:string[] }} SystemSpec */
-  /** @typedef {{ fixedHz:number, arenaRadius:number, drag:number, restitution:number, maxSpeed:number, pickupRadius:number }} Rules */
-  /** @typedef {{ entities:Entity[], systems:SystemSpec[], rules:Rules }} World */
+  /** @typedef {'grass'|'dirt'|'stone'|'wood'|'leaf'|'plank'} BlockKind */
+  /** @typedef {{ seed:number, size:number, maxHeight:number }} VoxelWorld */
+  /** @typedef {{ velocity:[number,number,number], halfWidth:number, halfHeight:number }} Body */
+  /** @typedef {{ moveSpeed:number, jumpSpeed:number }} Controller */
+  /** @typedef {{ dirt:number, stone:number, wood:number, plank:number }} Inventory */
+  /** @typedef {{ id:string, transform?:{position:[number,number,number]}, body?:Body, controller?:Controller, inventory?:Inventory, voxelWorld?:VoxelWorld }} Entity */
+  /** @typedef {{ id:'input'|'gravity'|'locomotion'|'voxel-collision'|'interact', phase:'fixed', reads:string[], writes:string[] }} SystemSpec */
+  /** @typedef {{ id:'planks', input:{wood:number}, output:{plank:number} }} Recipe */
+  /** @typedef {{ fixedHz:number, gravity:number, maxFall:number, reach:number }} Rules */
+  /** @typedef {{ entities:Entity[], systems:SystemSpec[], recipes:Recipe[], rules:Rules }} World */
+  /** @typedef {{ x:number, z:number }} GameControls */
+  /** @typedef {'jump'|'mine'|'place'|'craft'} GameCommand */
 
-  input('world', /** @type {World} */ ({ entities:[], systems:[], rules:{
-    fixedHz:120, arenaRadius:6.4, drag:.16, restitution:.76, maxSpeed:8.5, pickupRadius:.5
-  }}))
+  input('world', /** @type {World} */ ({entities:[],systems:[],recipes:[],rules:{fixedHz:120,gravity:22,maxFall:17,reach:4.2}}))
+  input('controls', /** @type {GameControls} */ ({x:0,z:0}))
   input('running', /** @type {boolean} */ (true))
-  input('timeScale', /** @type {number} */ (1))
-  input('fieldScale', /** @type {number} */ (1))
   input('resetToken', /** @type {number} */ (0))
 
-  this.fields = computed(() => this.world.entities
-    .filter(entity => entity.field)
-    .map(entity => ({
-      id:entity.id,
-      kind:entity.field.kind,
-      position:entity.transform.position,
-      strength:entity.field.strength,
-      radius:entity.field.radius,
-      color:entity.render.color
-    }))
-  )
-  this.systemOrder = computed(() => this.world.systems.map(system => system.id).join(' → '))
-  this.status = 'booting'
-  this.fps = 0
-  this.score = 0
-  this.speedNow = 0
-  this.simTime = 0
-  this.contacts = 0
-  this.thrustNow = 0
+  this.systemOrder = computed(()=>this.world.systems.map(system=>system.id).join(' → '))
+  this.status='loading world'
+  this.fps=0
+  this.grounded=false
+  this.blockCount=0
+  this.targetKind='none'
+  this.message='generating terrain'
+  this.inventory={dirt:0,stone:0,wood:0,plank:0}
+  this.epoch=0
 
-  let pointerDown = false
-  let steer = [0, 0, 0]
-  let lastReset = this.resetToken
-  const keys = new Set()
+  queueMicrotask(()=>{
+    const canvas=host.shadowRoot.querySelector('canvas')
+    const gl=canvas.getContext('webgl2',{antialias:true,alpha:false,depth:true,powerPreference:'high-performance'})
+    if(!gl){this.status='WebGL2 unavailable';return}
 
-  const updatePointer = event => {
-    const box = event.currentTarget.getBoundingClientRect()
-    const x = ((event.clientX - box.left) / Math.max(1, box.width)) * 2 - 1
-    const y = 1 - ((event.clientY - box.top) / Math.max(1, box.height)) * 2
-    steer = [Math.max(-1, Math.min(1, x)), Math.max(-1, Math.min(1, y)), 0]
-  }
-
-  this.pointerStart = event => {
-    if (event.target?.closest?.('.hud,.math')) return
-    pointerDown = true
-    try { event.currentTarget.setPointerCapture?.(event.pointerId) } catch {}
-    updatePointer(event)
-  }
-  this.pointerMove = event => { if (pointerDown) updatePointer(event) }
-  this.pointerEnd = () => { pointerDown = false; steer = [0, 0, 0] }
-
-  queueMicrotask(() => {
-    const canvas = host.shadowRoot.querySelector('canvas')
-    const gl = canvas.getContext('webgl2', {
-      antialias:true, alpha:false, depth:false, powerPreference:'high-performance'
-    })
-    if (!gl) { this.status = 'WebGL2 unavailable'; return }
-
-    const compile = (type, source) => {
-      const shader = gl.createShader(type)
-      gl.shaderSource(shader, source)
+    const compile=(type,source)=>{
+      const shader=gl.createShader(type)
+      gl.shaderSource(shader,source)
       gl.compileShader(shader)
-      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(shader) || 'shader compile failed')
+      if(!gl.getShaderParameter(shader,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(shader)||'shader compile failed')
       return shader
     }
-    const link = (vertex, fragment) => {
-      const program = gl.createProgram()
-      gl.attachShader(program, compile(gl.VERTEX_SHADER, vertex))
-      gl.attachShader(program, compile(gl.FRAGMENT_SHADER, fragment))
-      gl.linkProgram(program)
-      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program) || 'program link failed')
-      return program
+    const program=gl.createProgram()
+    gl.attachShader(program,compile(gl.VERTEX_SHADER,`#version 300 es
+      precision highp float;
+      layout(location=0) in vec3 aPosition;
+      layout(location=1) in vec3 aColor;
+      uniform mat4 uViewProjection;
+      out vec3 vColor;
+      out float vFog;
+      void main(){
+        vec4 clip=uViewProjection*vec4(aPosition,1.0);
+        gl_Position=clip;
+        vColor=aColor;
+        vFog=clamp((clip.w-11.0)/24.0,0.0,1.0);
+      }
+    `))
+    gl.attachShader(program,compile(gl.FRAGMENT_SHADER,`#version 300 es
+      precision highp float;
+      in vec3 vColor;
+      in float vFog;
+      out vec4 outColor;
+      void main(){
+        vec3 sky=vec3(0.73,0.88,0.98);
+        outColor=vec4(mix(vColor,sky,vFog*.72),1.0);
+      }
+    `))
+    gl.linkProgram(program)
+    if(!gl.getProgramParameter(program,gl.LINK_STATUS)){this.status='shader error';return}
+
+    const vao=gl.createVertexArray()
+    const terrainBuffer=gl.createBuffer()
+    const dynamicBuffer=gl.createBuffer()
+    gl.bindVertexArray(vao)
+    gl.bindBuffer(gl.ARRAY_BUFFER,terrainBuffer)
+    gl.enableVertexAttribArray(0);gl.enableVertexAttribArray(1)
+    gl.vertexAttribPointer(0,3,gl.FLOAT,false,24,0)
+    gl.vertexAttribPointer(1,3,gl.FLOAT,false,24,12)
+    const uViewProjection=gl.getUniformLocation(program,'uViewProjection')
+
+    const blocks=new Map()
+    const palette={
+      grass:[.35,.68,.22],dirt:[.48,.31,.17],stone:[.52,.55,.54],wood:[.48,.30,.13],leaf:[.29,.58,.20],plank:[.72,.52,.26]
+    }
+    const key=(x,y,z)=>`${x},${y},${z}`
+    const get=(x,y,z)=>blocks.get(key(x,y,z))
+    const set=(x,y,z,kind)=>blocks.set(key(x,y,z),kind)
+    const del=(x,y,z)=>blocks.delete(key(x,y,z))
+
+    const terrainEntity=this.world.entities.find(entity=>entity.voxelWorld)
+    const playerEntity=this.world.entities.find(entity=>entity.body&&entity.controller)
+    const terrain=terrainEntity?.voxelWorld||{seed:1337,size:28,maxHeight:7}
+    const body=playerEntity?.body||{velocity:[0,0,0],halfWidth:.31,halfHeight:.88}
+    const controller=playerEntity?.controller||{moveSpeed:4.3,jumpSpeed:7.4}
+    let inventory={...(playerEntity?.inventory||{dirt:3,stone:0,wood:2,plank:0})}
+    let crafted=0
+    let player={position:[.5,5,.5],velocity:[...body.velocity],facing:[0,0,-1],grounded:false}
+    let lastReset=this.resetToken
+    const pendingActions={jump:0,mine:0,place:0,craft:0}
+    const queueCommand=event=>{
+      const action=event.detail?.action
+      if(action==='jump')pendingActions.jump++
+      if(action==='mine')pendingActions.mine++
+      if(action==='place')pendingActions.place++
+      if(action==='craft')pendingActions.craft++
+    }
+    host.addEventListener('game-command',queueCommand,{signal:abortSignal})
+    const keys=new Set()
+    let meshDirty=true
+    let terrainVertices=0
+    let target=null
+    let placement=null
+    let message='walk, break, place, craft'
+
+    const heightAt=(x,z)=>{
+      if(Math.abs(x)<=2&&Math.abs(z)<=2)return 3
+      const a=Math.sin((x+terrain.seed*.013)*.33)*1.15
+      const b=Math.cos((z-terrain.seed*.009)*.29)*.9
+      const c=Math.sin((x+z)*.16)*.55
+      return Math.max(2,Math.min(terrain.maxHeight,3+Math.floor(a+b+c)))
     }
 
-    let backgroundProgram, lineProgram, pointProgram
-    try {
-      backgroundProgram = link(`#version 300 es
-        precision highp float;
-        void main(){
-          vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));
-          gl_Position=vec4(p*2.0-1.0,0.0,1.0);
+    const generate=()=>{
+      blocks.clear()
+      const half=Math.floor(terrain.size/2)
+      for(let x=-half;x<half;x++)for(let z=-half;z<half;z++){
+        const h=heightAt(x,z)
+        for(let y=0;y<h;y++)set(x,y,z,y===h-1?'grass':y>=h-3?'dirt':'stone')
+      }
+      const trees=[[-8,-6],[7,-7],[-7,7],[8,6],[-10,2],[10,-1]]
+      for(const [x,z] of trees){
+        if(Math.abs(x)>=half-2||Math.abs(z)>=half-2)continue
+        const h=heightAt(x,z)
+        for(let y=h;y<h+3;y++)set(x,y,z,'wood')
+        for(let dx=-1;dx<=1;dx++)for(let dz=-1;dz<=1;dz++)for(let dy=2;dy<=3;dy++){
+          if(Math.abs(dx)+Math.abs(dz)>2)continue
+          set(x+dx,h+dy,z+dz,'leaf')
         }
-      `, `#version 300 es
-        precision highp float;
-        uniform vec2 uResolution;
-        uniform float uTime;
-        uniform float uDanger;
-        out vec4 outColor;
-        float box(vec2 p,vec2 b){vec2 d=abs(p)-b;return length(max(d,0.0))+min(max(d.x,d.y),0.0);}
-        void main(){
-          vec2 uv=gl_FragCoord.xy/max(uResolution,vec2(1.0));
-          vec3 sky=mix(vec3(.73,.89,1.0),vec3(.93,.97,1.0),smoothstep(.05,.9,uv.y));
-          float sun=smoothstep(.075,.02,length(uv-vec2(.78,.78)));
-          sky+=vec3(1.0,.86,.47)*sun*.75;
-          vec2 c=uv-vec2(.26+sin(uTime*.015)*.01,.78);
-          float cloud=smoothstep(.02,-.01,box(c,vec2(.12,.025)));
-          cloud=max(cloud,smoothstep(.02,-.01,box(c+vec2(.07,-.015),vec2(.06,.03))));
-          sky=mix(sky,vec3(1.0),cloud*.55);
-          sky=mix(sky,vec3(.96,.72,.62),uDanger*.08);
-          outColor=vec4(sky,1.0);
-        }
-      `)
-
-      lineProgram = link(`#version 300 es
-        precision highp float;
-        layout(location=0) in vec3 aPosition;
-        layout(location=1) in vec4 aColor;
-        out vec4 vColor;
-        void main(){gl_Position=vec4(aPosition,1.0);vColor=aColor;}
-      `, `#version 300 es
-        precision highp float;
-        in vec4 vColor; out vec4 outColor;
-        void main(){outColor=vColor;}
-      `)
-
-      pointProgram = link(`#version 300 es
-        precision highp float;
-        layout(location=0) in vec3 aPosition;
-        layout(location=1) in vec4 aColor;
-        layout(location=2) in float aSize;
-        out vec4 vColor;
-        void main(){gl_Position=vec4(aPosition,1.0);gl_PointSize=aSize;vColor=aColor;}
-      `, `#version 300 es
-        precision highp float;
-        in vec4 vColor; out vec4 outColor;
-        void main(){
-          vec2 p=gl_PointCoord;
-          float edge=min(min(p.x,p.y),min(1.0-p.x,1.0-p.y));
-          float top=mix(.78,1.12,1.0-p.y);
-          float bevel=smoothstep(0.0,.10,edge);
-          vec3 color=vColor.rgb*top;
-          color=mix(color*.62,color,bevel);
-          outColor=vec4(color,vColor.a);
-        }
-      `)
-    } catch (error) {
-      this.status='shader error'; console.error(error); return
+        set(x,h+4,z,'leaf')
+      }
+      const spawnTop=heightAt(0,0)
+      player={position:[.5,spawnTop+body.halfHeight+.03,.5],velocity:[0,0,0],facing:[0,0,-1],grounded:false}
+      inventory={...(playerEntity?.inventory||{dirt:3,stone:0,wood:2,plank:0})}
+      crafted=0
+      target=null;placement=null;message='walk, break, place, craft';meshDirty=true
+      this.blockCount=blocks.size
+      this.inventory={...inventory}
     }
-
-    const bgVao=gl.createVertexArray()
-    const lineVao=gl.createVertexArray(), lineBuffer=gl.createBuffer()
-    gl.bindVertexArray(lineVao); gl.bindBuffer(gl.ARRAY_BUFFER,lineBuffer)
-    gl.enableVertexAttribArray(0); gl.enableVertexAttribArray(1)
-    gl.vertexAttribPointer(0,3,gl.FLOAT,false,28,0); gl.vertexAttribPointer(1,4,gl.FLOAT,false,28,12)
-
-    const pointVao=gl.createVertexArray(), pointBuffer=gl.createBuffer()
-    gl.bindVertexArray(pointVao); gl.bindBuffer(gl.ARRAY_BUFFER,pointBuffer)
-    gl.enableVertexAttribArray(0); gl.enableVertexAttribArray(1); gl.enableVertexAttribArray(2)
-    gl.vertexAttribPointer(0,3,gl.FLOAT,false,32,0); gl.vertexAttribPointer(1,4,gl.FLOAT,false,32,12); gl.vertexAttribPointer(2,1,gl.FLOAT,false,32,28)
-
-    const uniform=(program,name)=>gl.getUniformLocation(program,name)
-    const uBgResolution=uniform(backgroundProgram,'uResolution')
-    const uBgTime=uniform(backgroundProgram,'uTime')
-    const uBgDanger=uniform(backgroundProgram,'uDanger')
+    generate()
+    this.epoch=lastReset
 
     const add=(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]]
     const sub=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]]
     const mul=(a,s)=>[a[0]*s,a[1]*s,a[2]*s]
-    const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2]
     const length=a=>Math.hypot(a[0],a[1],a[2])
     const normal=a=>{const m=length(a)||1;return[a[0]/m,a[1]/m,a[2]/m]}
-    const clampMagnitude=(a,max)=>{const m=length(a);return m>max?mul(a,max/m):a}
-    const hex=value=>{const n=Number.parseInt(String(value||'#70a65d').replace('#',''),16);return[((n>>16)&255)/255,((n>>8)&255)/255,(n&255)/255]}
+    const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2]
+    const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]
 
-    let seed=0x51e1d
-    const random=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296}
-    const randomSphere=radius=>{const z=random()*2-1,a=random()*Math.PI*2,r=Math.sqrt(Math.max(0,1-z*z)),s=radius*(.35+random()*.5);return[Math.cos(a)*r*s,z*s,Math.sin(a)*r*s]}
-
-    let player,previousPosition,score,contacts,simTime,cores,trail
-    const resetWorld=()=>{
-      seed=0x51e1d
-      const e=this.world.entities.find(entity=>entity.body&&entity.controller)||{transform:{position:[0,.15,3.5]},body:{velocity:[1.8,.25,-.45],radius:.18},controller:{thrust:7.5}}
-      player={position:[...e.transform.position],velocity:[...e.body.velocity],radius:e.body.radius,thrust:e.controller.thrust}
-      previousPosition=[...player.position]; score=0; contacts=0; simTime=0
-      cores=this.world.entities.filter(entity=>entity.collectible).map((entity,index)=>({id:entity.id,value:entity.collectible.value,respawnRadius:entity.collectible.respawnRadius,position:[...entity.transform.position],color:hex(entity.render.color),size:entity.render.size,pulse:index*.93}))
-      trail=[]; this.score=0; this.contacts=0; this.simTime=0; this.speedNow=length(player.velocity); this.thrustNow=0
+    const perspective=(fovy,aspect,near,far)=>{
+      const f=1/Math.tan(fovy/2),nf=1/(near-far)
+      return new Float32Array([f/aspect,0,0,0,0,f,0,0,0,0,(far+near)*nf,-1,0,0,2*far*near*nf,0])
     }
-    resetWorld()
-
-    const keyDown=event=>{if(['KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE'].includes(event.code)){keys.add(event.code);event.preventDefault()}}
-    const keyUp=event=>keys.delete(event.code)
-    window.addEventListener('keydown',keyDown,{signal:abortSignal}); window.addEventListener('keyup',keyUp,{signal:abortSignal})
-
-    const controlVector=()=>{
-      let x=steer[0],y=steer[1],z=0
-      if(keys.has('KeyA'))x-=1;if(keys.has('KeyD'))x+=1;if(keys.has('KeyW'))y+=1;if(keys.has('KeyS'))y-=1;if(keys.has('KeyQ'))z-=1;if(keys.has('KeyE'))z+=1
-      return clampMagnitude([x,y,z],1)
+    const lookAt=(eye,center,up)=>{
+      const z=normal(sub(eye,center)),x=normal(cross(up,z)),y=cross(z,x)
+      return new Float32Array([x[0],y[0],z[0],0,x[1],y[1],z[1],0,x[2],y[2],z[2],0,-dot(x,eye),-dot(y,eye),-dot(z,eye),1])
     }
-    const fieldAcceleration=position=>{
-      let acceleration=[0,0,0]
-      const scale=Math.max(0,Number(this.fieldScale)||0),epsilon2=.34
-      for(const field of this.fields){
-        const toward=sub(field.position,position),r2=dot(toward,toward)+epsilon2
-        if(field.kind==='vortex'){
-          const radial=sub(position,field.position),tangent=[radial[2],0,-radial[0]]
-          acceleration=add(acceleration,add(mul(tangent,(field.strength*scale)/(r2+.45)),mul(radial,-field.strength*scale*.055/(Math.sqrt(r2)+.6))))
-        }else{
-          const sign=field.kind==='gravity'?1:-1,invR3=1/(r2*Math.sqrt(r2))
-          acceleration=add(acceleration,mul(toward,sign*field.strength*scale*invR3))
+    const multiply=(a,b)=>{
+      const out=new Float32Array(16)
+      for(let c=0;c<4;c++)for(let r=0;r<4;r++)out[c*4+r]=a[r]*b[c*4]+a[4+r]*b[c*4+1]+a[8+r]*b[c*4+2]+a[12+r]*b[c*4+3]
+      return out
+    }
+
+    const faceDefs=[
+      {n:[1,0,0],shade:.78,c:[[1,0,0],[1,1,0],[1,1,1],[1,0,1]]},
+      {n:[-1,0,0],shade:.68,c:[[0,0,1],[0,1,1],[0,1,0],[0,0,0]]},
+      {n:[0,1,0],shade:1.08,c:[[0,1,0],[0,1,1],[1,1,1],[1,1,0]]},
+      {n:[0,-1,0],shade:.55,c:[[0,0,1],[0,0,0],[1,0,0],[1,0,1]]},
+      {n:[0,0,1],shade:.88,c:[[1,0,1],[1,1,1],[0,1,1],[0,0,1]]},
+      {n:[0,0,-1],shade:.74,c:[[0,0,0],[0,1,0],[1,1,0],[1,0,0]]}
+    ]
+    const triangles=[0,1,2,0,2,3]
+    const pushFace=(out,x,y,z,def,color)=>{
+      const c=color.map(value=>Math.min(1,value*def.shade))
+      for(const index of triangles){const p=def.c[index];out.push(x+p[0],y+p[1],z+p[2],c[0],c[1],c[2])}
+    }
+    const pushBox=(out,min,max,color)=>{
+      const sx=max[0]-min[0],sy=max[1]-min[1],sz=max[2]-min[2]
+      for(const def of faceDefs){
+        const c=def.c.map(p=>[min[0]+p[0]*sx,min[1]+p[1]*sy,min[2]+p[2]*sz])
+        const shade=color.map(v=>Math.min(1,v*def.shade))
+        for(const index of triangles){const p=c[index];out.push(p[0],p[1],p[2],shade[0],shade[1],shade[2])}
+      }
+    }
+    const rebuildMesh=()=>{
+      const out=[]
+      for(const [name,kind] of blocks){
+        const [x,y,z]=name.split(',').map(Number)
+        const color=palette[kind]||palette.stone
+        for(const def of faceDefs)if(!get(x+def.n[0],y+def.n[1],z+def.n[2]))pushFace(out,x,y,z,def,color)
+      }
+      gl.bindBuffer(gl.ARRAY_BUFFER,terrainBuffer)
+      gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(out),gl.STATIC_DRAW)
+      terrainVertices=out.length/6
+      meshDirty=false
+      this.blockCount=blocks.size
+    }
+
+    const collides=position=>{
+      const minX=Math.floor(position[0]-body.halfWidth),maxX=Math.floor(position[0]+body.halfWidth-.001)
+      const minY=Math.floor(position[1]-body.halfHeight),maxY=Math.floor(position[1]+body.halfHeight-.001)
+      const minZ=Math.floor(position[2]-body.halfWidth),maxZ=Math.floor(position[2]+body.halfWidth-.001)
+      for(let x=minX;x<=maxX;x++)for(let y=minY;y<=maxY;y++)for(let z=minZ;z<=maxZ;z++)if(get(x,y,z))return true
+      return false
+    }
+    const moveAxis=(axis,delta)=>{
+      if(!delta)return
+      const next=[...player.position];next[axis]+=delta
+      if(!collides(next)){player.position=next;return}
+      if(axis===1&&delta<0)player.grounded=true
+      player.velocity[axis]=0
+    }
+
+    const rayTarget=()=>{
+      const eye=[player.position[0],player.position[1]+.22,player.position[2]]
+      const dir=normal([player.facing[0],-.7,player.facing[2]])
+      let previous=null
+      for(let t=.35;t<=this.world.rules.reach;t+=.08){
+        const p=add(eye,mul(dir,t)),cell=[Math.floor(p[0]),Math.floor(p[1]),Math.floor(p[2])]
+        if(!previous||cell[0]!==previous[0]||cell[1]!==previous[1]||cell[2]!==previous[2]){
+          if(get(cell[0],cell[1],cell[2]))return{hit:cell,place:previous}
+          previous=cell
         }
       }
-      return acceleration
+      return{hit:null,place:null}
     }
+    const updateTarget=()=>{
+      const ray=rayTarget();target=ray.hit;placement=ray.place
+      this.targetKind=target?(get(...target)||'none'):'none'
+    }
+
+    const canPlace=cell=>{
+      if(!cell||get(...cell))return false
+      set(...cell,'plank')
+      const blocked=collides(player.position)
+      del(...cell)
+      return !blocked
+    }
+    const chosenBlock=()=>inventory.plank>0?'plank':inventory.wood>0?'wood':inventory.stone>0?'stone':inventory.dirt>0?'dirt':null
+    const mine=()=>{
+      updateTarget()
+      if(!target||target[1]<=0){message='nothing to break';return}
+      const kind=get(...target);if(!kind)return
+      del(...target)
+      const drop=kind==='grass'?'dirt':kind==='leaf'?'wood':kind
+      if(drop!=='grass'&&drop!=='leaf')inventory[drop]=(inventory[drop]||0)+1
+      meshDirty=true;message=`picked up ${drop}`
+    }
+    const place=()=>{
+      updateTarget()
+      const kind=chosenBlock()
+      if(!kind){message='inventory is empty';return}
+      if(!canPlace(placement)){message='no room to place';return}
+      set(...placement,kind);inventory[kind]--;meshDirty=true;message=`placed ${kind}`
+    }
+    const craft=()=>{
+      const recipe=this.world.recipes.find(item=>item.id==='planks')
+      if(!recipe||inventory.wood<recipe.input.wood){message='need 2 wood';return}
+      inventory.wood-=recipe.input.wood;inventory.plank+=recipe.output.plank;crafted++;message='crafted 4 planks'
+    }
+
+    const keyDown=event=>{
+      if(['KeyW','KeyA','KeyS','KeyD','Space','KeyF','KeyG','KeyC'].includes(event.code))event.preventDefault()
+      keys.add(event.code)
+      if(event.repeat)return
+      if(event.code==='Space')pendingActions.jump++
+      if(event.code==='KeyF')pendingActions.mine++
+      if(event.code==='KeyG')pendingActions.place++
+      if(event.code==='KeyC')pendingActions.craft++
+    }
+    const keyUp=event=>keys.delete(event.code)
+    window.addEventListener('keydown',keyDown,{signal:abortSignal})
+    window.addEventListener('keyup',keyUp,{signal:abortSignal})
 
     const systems={
-      input(frame){frame.control=controlVector()},
-      forces(frame){frame.acceleration=fieldAcceleration(player.position);frame.acceleration=add(frame.acceleration,mul(frame.control,player.thrust));frame.acceleration=add(frame.acceleration,mul(player.velocity,-this.world.rules.drag))},
-      integrate(frame,dt){player.velocity=add(player.velocity,mul(frame.acceleration,dt));player.velocity=clampMagnitude(player.velocity,this.world.rules.maxSpeed);player.position=add(player.position,mul(player.velocity,dt))},
-      bounds(){
-        const safe=this.world.rules.arenaRadius-player.radius,m=length(player.position);if(m<=safe)return
-        const n=normal(player.position);player.position=mul(n,safe);const outward=dot(player.velocity,n);if(outward<=0)return
-        player.velocity=sub(player.velocity,mul(n,(1+this.world.rules.restitution)*outward));contacts++
-        host.dispatchEvent(new CustomEvent('world-impact',{detail:{speed:Math.abs(outward),contacts},bubbles:true,composed:true}))
+      input(frame){
+        let x=Number(this.controls.x)||0,z=Number(this.controls.z)||0
+        if(keys.has('KeyA'))x-=1;if(keys.has('KeyD'))x+=1;if(keys.has('KeyW'))z-=1;if(keys.has('KeyS'))z+=1
+        const m=Math.hypot(x,z);if(m>1){x/=m;z/=m}
+        frame.move=[x,z]
+        if(m>.08)player.facing=normal([x,0,z])
+        frame.jump=pendingActions.jump>0
+        frame.mine=pendingActions.mine>0
+        frame.place=pendingActions.place>0
+        frame.craft=pendingActions.craft>0
+        if(frame.jump)pendingActions.jump--
+        if(frame.mine)pendingActions.mine--
+        if(frame.place)pendingActions.place--
+        if(frame.craft)pendingActions.craft--
       },
-      collect(){for(const core of cores){if(length(sub(player.position,core.position))>=this.world.rules.pickupRadius+player.radius)continue;score+=core.value;core.position=randomSphere(this.world.rules.arenaRadius*core.respawnRadius);core.pulse=random()*Math.PI*2;host.dispatchEvent(new CustomEvent('core-collect',{detail:{score,core:core.id,value:core.value},bubbles:true,composed:true}))}}
-    }
-    const step=dt=>{
-      previousPosition=[...player.position]
-      const frame={control:[0,0,0],acceleration:[0,0,0]}
-      for(const system of this.world.systems){if(system.phase==='fixed')systems[system.id]?.call(this,frame,dt)}
-      simTime+=dt;trail.push([...player.position]);if(trail.length>90)trail.shift();this.thrustNow=Number(length(frame.control).toFixed(2))
+      gravity(frame,dt){player.velocity[1]=Math.max(-this.world.rules.maxFall,player.velocity[1]-this.world.rules.gravity*dt)},
+      locomotion(frame){
+        player.velocity[0]=frame.move[0]*controller.moveSpeed
+        player.velocity[2]=frame.move[1]*controller.moveSpeed
+        if(frame.jump&&player.grounded){player.velocity[1]=controller.jumpSpeed;player.grounded=false;message='jump'}
+      },
+      'voxel-collision'(frame,dt){
+        player.grounded=false
+        moveAxis(0,player.velocity[0]*dt);moveAxis(1,player.velocity[1]*dt);moveAxis(2,player.velocity[2]*dt)
+        if(player.position[1]<-4){generate();message='respawned'}
+      },
+      interact(frame){if(frame.mine)mine();if(frame.place)place();if(frame.craft)craft()}
     }
 
-    const resize=()=>{const ratio=Math.min(1.6,window.devicePixelRatio||1),w=Math.max(1,Math.round(canvas.clientWidth*ratio)),h=Math.max(1,Math.round(canvas.clientHeight*ratio));if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h}gl.viewport(0,0,w,h)}
+    const step=dt=>{
+      const frame={move:[0,0],jump:false,mine:false,place:false,craft:false}
+      for(const system of this.world.systems)if(system.phase==='fixed')systems[system.id]?.call(this,frame,dt)
+      updateTarget()
+    }
+
+    const resize=()=>{
+      const ratio=Math.min(1.6,window.devicePixelRatio||1)
+      const width=Math.max(1,Math.round(canvas.clientWidth*ratio)),height=Math.max(1,Math.round(canvas.clientHeight*ratio))
+      if(canvas.width!==width||canvas.height!==height){canvas.width=width;canvas.height=height}
+      gl.viewport(0,0,width,height)
+    }
     const observer=new ResizeObserver(resize);observer.observe(canvas);resize()
 
-    const project=point=>{
-      const yaw=-.52,pitch=.34,cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch)
-      const rx=cy*point[0]-sy*point[2],rz=sy*point[0]+cy*point[2],ry=cp*point[1]-sp*rz,depth=sp*point[1]+cp*rz+13.5
-      const aspect=canvas.width/Math.max(1,canvas.height),focal=1/Math.tan(.72/2)
-      return[rx*focal/(aspect*depth),ry*focal/depth,Math.max(-.95,Math.min(.95,(depth-3)/17)),depth]
+    const dynamic=[]
+    const line=[]
+    const wireBox=(out,cell,color)=>{
+      if(!cell)return
+      const [x,y,z]=cell,e=.015
+      const p=[[x-e,y-e,z-e],[x+1+e,y-e,z-e],[x+1+e,y+1+e,z-e],[x-e,y+1+e,z-e],[x-e,y-e,z+1+e],[x+1+e,y-e,z+1+e],[x+1+e,y+1+e,z+1+e],[x-e,y+1+e,z+1+e]]
+      const edges=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]]
+      for(const [a,b] of edges)for(const index of [a,b])out.push(...p[index],...color)
     }
-    const lineVertex=(list,p,c,a)=>{const q=project(p),fade=Math.max(.2,Math.min(1,1.35-(q[3]-8)*.08));list.push(q[0],q[1],q[2],c[0],c[1],c[2],a*fade)}
-    const pointVertex=(list,p,c,a,size)=>{const q=project(p),fade=Math.max(.24,Math.min(1,1.3-(q[3]-8)*.07));list.push(q[0],q[1],q[2],c[0],c[1],c[2],a*fade,size*(15/Math.max(5,q[3])))}
-    const segment=(list,a,b,c,alpha)=>{lineVertex(list,a,c,alpha);lineVertex(list,b,c,alpha)}
-    const drawLines=data=>{if(!data.length)return;gl.useProgram(lineProgram);gl.bindVertexArray(lineVao);gl.bindBuffer(gl.ARRAY_BUFFER,lineBuffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(data),gl.DYNAMIC_DRAW);gl.drawArrays(gl.LINES,0,data.length/7)}
-    const drawPoints=data=>{if(!data.length)return;gl.useProgram(pointProgram);gl.bindVertexArray(pointVao);gl.bindBuffer(gl.ARRAY_BUFFER,pointBuffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(data),gl.DYNAMIC_DRAW);gl.drawArrays(gl.POINTS,0,data.length/8)}
 
-    const terrain=[]
-    for(let x=-7;x<=7;x++)for(let z=-7;z<=7;z++){
-      const hill=Math.max(0,Math.round((Math.sin(x*.72)+Math.cos(z*.61)+1.25)*.38))
-      for(let y=0;y<=hill;y++)terrain.push({position:[x*.72,-3.65+y*.42,z*.72],color:y===hill?[.38,.66,.28]:[.52,.38,.22],size:y===hill?13:11})
+    const drawBuffer=(buffer,data,mode)=>{
+      if(!data.length)return
+      gl.bindBuffer(gl.ARRAY_BUFFER,buffer)
+      gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(data),gl.DYNAMIC_DRAW)
+      gl.vertexAttribPointer(0,3,gl.FLOAT,false,24,0);gl.vertexAttribPointer(1,3,gl.FLOAT,false,24,12)
+      gl.drawArrays(mode,0,data.length/6)
     }
-    const clouds=[]
-    for(const base of [[-3.8,3.8,-1.5],[2.8,4.2,-3.5]])for(let x=0;x<5;x++)for(let z=0;z<2;z++)clouds.push([base[0]+x*.48,base[1]+((x+z)%2)*.08,base[2]+z*.48])
 
-    this.status='simulation live'
-    let previousFrame=performance.now(),accumulator=0,frames=0,fpsStart=previousFrame,telemetryAt=previousFrame,raf=0
+    this.status='world live'
+    let previous=performance.now(),accumulator=0,frames=0,fpsAt=previous,telemetryAt=previous,raf=0
     const render=now=>{
-      const realDt=Math.min(.1,(now-previousFrame)/1000);previousFrame=now
-      if(this.resetToken!==lastReset){lastReset=this.resetToken;resetWorld();accumulator=0}
-      const fixed=1/Math.max(30,Number(this.world.rules.fixedHz)||120)
-      if(this.running){accumulator+=realDt*Math.max(.01,Number(this.timeScale)||1);let steps=0;while(accumulator>=fixed&&steps<16){step(fixed);accumulator-=fixed;steps++}if(steps===16)accumulator=0}
+      if(this.resetToken!==lastReset){lastReset=this.resetToken;generate();this.epoch=lastReset;accumulator=0}
+      const realDt=Math.min(.08,(now-previous)/1000);previous=now
+      const fixed=1/Math.max(30,this.world.rules.fixedHz||120)
+      if(this.running){accumulator+=realDt;let steps=0;while(accumulator>=fixed&&steps<16){step(fixed);accumulator-=fixed;steps++}if(steps===16)accumulator=0}
+      if(meshDirty)rebuildMesh()
+      resize()
 
-      const alpha=Math.max(0,Math.min(1,accumulator/fixed))
-      const renderPosition=[previousPosition[0]+(player.position[0]-previousPosition[0])*alpha,previousPosition[1]+(player.position[1]-previousPosition[1])*alpha,previousPosition[2]+(player.position[2]-previousPosition[2])*alpha]
-      const speed=length(player.velocity),danger=Math.max(0,Math.min(1,(length(player.position)/this.world.rules.arenaRadius-.78)/.22))
+      const aspect=canvas.width/Math.max(1,canvas.height)
+      const facing=normal([player.facing[0],0,player.facing[2]])
+      const side=[facing[2],0,-facing[0]]
+      const eye=add(player.position,add(mul(facing,-7.5),[side[0]*2.4,5.4,side[2]*2.4]))
+      const center=add(player.position,[0,.35,0])
+      const vp=multiply(perspective(.9,aspect,.08,80),lookAt(eye,center,[0,1,0]))
 
-      gl.disable(gl.BLEND);gl.bindVertexArray(bgVao);gl.useProgram(backgroundProgram);gl.uniform2f(uBgResolution,canvas.width,canvas.height);gl.uniform1f(uBgTime,now*.001);gl.uniform1f(uBgDanger,danger);gl.drawArrays(gl.TRIANGLES,0,3)
-      gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA)
+      gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.disable(gl.BLEND)
+      gl.clearColor(.73,.88,.98,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT)
+      gl.useProgram(program);gl.uniformMatrix4fv(uViewProjection,false,vp);gl.bindVertexArray(vao)
 
-      const lines=[],points=[]
-      for(let i=-8;i<=8;i++){segment(lines,[i*.72,-3.44,-5.8],[i*.72,-3.44,5.8],[.25,.49,.22],.20);segment(lines,[-5.8,-3.44,i*.72],[5.8,-3.44,i*.72],[.25,.49,.22],.20)}
-      for(const block of terrain)pointVertex(points,block.position,block.color,1,block.size)
-      for(const cloud of clouds)pointVertex(points,cloud,[1,1,1],.88,17)
+      gl.bindBuffer(gl.ARRAY_BUFFER,terrainBuffer)
+      gl.vertexAttribPointer(0,3,gl.FLOAT,false,24,0);gl.vertexAttribPointer(1,3,gl.FLOAT,false,24,12)
+      gl.drawArrays(gl.TRIANGLES,0,terrainVertices)
 
-      for(let x=-4;x<=4;x+=2)for(let z=-4;z<=4;z+=2){const p=[x,-1.2,z];if(length(p)>this.world.rules.arenaRadius*.9)continue;const a=fieldAcceleration(p),m=length(a);if(m<.001)continue;segment(lines,p,add(p,mul(normal(a),.28+Math.min(.42,m*.08))),[.28,.52,.43],.18)}
-      for(let i=1;i<trail.length;i++){const t=i/trail.length;segment(lines,trail[i-1],trail[i],[.97,.72,.22],.04+t*.34)}
+      dynamic.length=0
+      const px=player.position[0],py=player.position[1],pz=player.position[2]
+      pushBox(dynamic,[px-.28,py-body.halfHeight,pz-.22],[px+.28,py+.25,pz+.22],[.94,.69,.18])
+      pushBox(dynamic,[px-.22,py+.25,pz-.22],[px+.22,py+.69,pz+.22],[.96,.82,.50])
+      pushBox(dynamic,[px-.38,py-.15,pz-.15],[px-.28,py+.22,pz+.15],[.88,.58,.20])
+      pushBox(dynamic,[px+.28,py-.15,pz-.15],[px+.38,py+.22,pz+.15],[.88,.58,.20])
+      drawBuffer(dynamicBuffer,dynamic,gl.TRIANGLES)
 
-      for(const field of this.fields){const c=hex(field.color);pointVertex(points,field.position,c,.95,field.radius*22);pointVertex(points,add(field.position,[0,.3,0]),[1,1,1],.45,field.radius*7)}
-      for(const core of cores){const pulse=.9+Math.sin(now*.004+core.pulse)*.10;pointVertex(points,core.position,core.color,.98,core.size*pulse)}
-      pointVertex(points,renderPosition,[1,.93,.57],1,15);pointVertex(points,add(renderPosition,[0,.08,0]),[1,1,1],.8,7)
+      line.length=0;wireBox(line,target,[1,.93,.30]);drawBuffer(dynamicBuffer,line,gl.LINES)
 
-      const velocityTip=add(renderPosition,mul(player.velocity,.16));segment(lines,renderPosition,velocityTip,[.24,.40,.28],.55)
-      const force=fieldAcceleration(renderPosition);if(length(force)>.0001)segment(lines,renderPosition,add(renderPosition,mul(normal(force),.62)),[.46,.35,.68],.45)
-      drawLines(lines);drawPoints(points)
-
-      frames++;if(now-fpsStart>500){this.fps=Math.round(frames*1000/(now-fpsStart));frames=0;fpsStart=now}
-      if(now-telemetryAt>90){
-        telemetryAt=now;this.score=score;this.contacts=contacts;this.simTime=Number(simTime.toFixed(2));this.speedNow=Number(speed.toFixed(2))
-        const detail={score,speed:Number(speed.toFixed(2)),contacts,simTime:Number(simTime.toFixed(2)),thrust:this.thrustNow,position:{x:Number(player.position[0].toFixed(3)),y:Number(player.position[1].toFixed(3)),z:Number(player.position[2].toFixed(3))}}
-        host.style.setProperty('--thrust',String(this.thrustNow));host.style.setProperty('--danger',String(danger));host.dispatchEvent(new CustomEvent('world-telemetry',{detail,bubbles:true,composed:true}))
+      frames++
+      if(now-fpsAt>500){this.fps=Math.round(frames*1000/(now-fpsAt));frames=0;fpsAt=now}
+      if(now-telemetryAt>80){
+        telemetryAt=now
+        const speed=Math.hypot(player.velocity[0],player.velocity[2])
+        this.grounded=player.grounded;this.blockCount=blocks.size;this.inventory={...inventory};this.message=message
+        host.dispatchEvent(new CustomEvent('world-telemetry',{detail:{
+          epoch:this.epoch,
+          position:{x:Number(player.position[0].toFixed(2)),y:Number(player.position[1].toFixed(2)),z:Number(player.position[2].toFixed(2))},
+          speed:Number(speed.toFixed(2)),grounded:player.grounded,blocks:blocks.size,target:this.targetKind,inventory:{...inventory},crafted,message
+        },bubbles:true,composed:true}))
       }
       raf=requestAnimationFrame(render)
     }
     raf=requestAnimationFrame(render)
-    onCleanup(()=>{cancelAnimationFrame(raf);observer.disconnect();gl.deleteBuffer(lineBuffer);gl.deleteBuffer(pointBuffer);gl.deleteProgram(backgroundProgram);gl.deleteProgram(lineProgram);gl.deleteProgram(pointProgram)})
+    onCleanup(()=>{cancelAnimationFrame(raf);observer.disconnect();gl.deleteBuffer(terrainBuffer);gl.deleteBuffer(dynamicBuffer);gl.deleteProgram(program)})
   })
 </script>
 
-<section class="surface" part="world" tabindex="0" @pointerdown={pointerStart} @pointermove={pointerMove} @pointerup={pointerEnd} @pointercancel={pointerEnd} @pointerleave={pointerEnd}>
+<section class="surface" part="world" tabindex="0">
   <canvas part="canvas"></canvas>
-
-  <div class="math" part="math">
-    <small>WORLD SYSTEMS · {systemOrder}</small>
-    <code>F(x) = Σ μr/(r²+ε²)<sup>3/2</sup> + κ(ŷ×r)/(r²+ε²) − γv + u</code>
-    <code>vₙ₊₁ = clamp(vₙ + aΔt) · xₙ₊₁ = xₙ + vₙ₊₁Δt</code>
-    <code>worldₙ₊₁ = S<sub>collect</sub> ∘ S<sub>bounds</sub> ∘ S<sub>integrate</sub> ∘ S<sub>forces</sub> ∘ S<sub>input</sub>(worldₙ)</code>
-  </div>
-
   <div class="hud" part="hud">
-    <span>{status}</span>
-    <b>{score} blocks</b>
-    <i>{speedNow} m/s</i>
-    <em>{fps} fps</em>
+    <span>{status}</span><b>{targetKind}</b><i>{blockCount} voxels</i><em>{fps} fps</em>
   </div>
-
-  <div class="hint">drag anywhere · W A S D + Q E</div>
+  <div class="hotbar" part="inventory">
+    <span>dirt <b>{inventory.dirt}</b></span><span>stone <b>{inventory.stone}</b></span><span>wood <b>{inventory.wood}</b></span><span>plank <b>{inventory.plank}</b></span>
+  </div>
+  <div class="message">{message}</div>
+  <div class="math" part="math"><small>{systemOrder}</small><code>vᵧ ← max(−vₘₐₓ, vᵧ − gΔt) · x ← collide(x + vΔt, voxels)</code></div>
 </section>
 
 <style>
-  @property --thrust { syntax:"<number>"; inherits:false; initial-value:0; }
-  @property --danger { syntax:"<number>"; inherits:false; initial-value:0; }
-  :host { --thrust:0; --danger:0; display:block; width:100%; height:100vh; min-height:520px; color:#29402e; }
-  * { box-sizing:border-box; }
-  .surface { position:relative; width:100%; height:100%; overflow:hidden; outline:none; cursor:grab; touch-action:none; background:#bfe5ff; }
-  .surface:active { cursor:grabbing; }
-  canvas { display:block; width:100%; height:100%; }
-  .math { position:absolute; left:30px; top:40%; display:grid; gap:7px; max-width:680px; pointer-events:none; opacity:.72; }
-  .math small,.hud,.hint { font:800 8px ui-monospace,monospace; letter-spacing:.08em; text-transform:uppercase; }
-  .math small { color:#49684f; }
-  .math code { color:#52725c; font:700 10px/1.4 ui-monospace,monospace; text-shadow:0 1px #fff9; }
-  .math code:last-of-type { color:#725a9a; }
-  .hud { position:absolute; left:50%; top:27px; translate:-50% 0; display:flex; gap:7px; align-items:center; color:#405a47; pointer-events:none; }
-  .hud span,.hud b,.hud i,.hud em { padding:7px 9px; border:1px solid #6c8a73aa; border-radius:7px; background:#f7fff2d9; box-shadow:0 3px 0 #4b674126; font-style:normal; font-weight:800; }
-  .hud b { color:#9a6b00; background:#fff6c8e8; }
-  .hud i { color:color-mix(in srgb,#2c7c50 calc(65% + var(--thrust)*25%),#516759); }
-  .hud span { color:#39724a; }
-  .hint { position:absolute; right:30px; bottom:28px; padding:7px 9px; border-radius:6px; color:#506959; background:#f3ffe9b8; pointer-events:none; }
-  .surface::after { content:""; position:absolute; inset:0; pointer-events:none; box-shadow:inset 0 0 calc(20px + var(--danger)*70px) color-mix(in srgb,#e58c61 calc(var(--danger)*16%),transparent); }
+  :host{display:block;width:100%;height:100vh;min-height:520px;color:#26392b}*{box-sizing:border-box}
+  .surface{position:relative;width:100%;height:100%;overflow:hidden;outline:none;touch-action:none;background:#b9e2ff}
+  canvas{display:block;width:100%;height:100%}
+  .hud{position:absolute;left:50%;top:26px;translate:-50% 0;display:flex;gap:7px;align-items:center;pointer-events:none;font:800 8px ui-monospace,monospace;text-transform:uppercase;letter-spacing:.07em}
+  .hud span,.hud b,.hud i,.hud em{padding:7px 9px;border:2px solid #70896a;border-radius:9px;background:#f8fff2db;color:#40543f;font-style:normal;box-shadow:0 3px 0 #70896a88}.hud b{background:#fff1a8;color:#6f5a20}.hud span{color:#35723e}
+  .hotbar{position:absolute;left:50%;bottom:24px;translate:-50% 0;display:flex;gap:6px;pointer-events:none}.hotbar span{min-width:70px;padding:8px;border:2px solid #72886a;border-radius:9px;background:#f8fff2e8;color:#526550;font:800 7px ui-monospace,monospace;text-transform:uppercase}.hotbar b{float:right;color:#304d32;font-size:11px}
+  .message{position:absolute;left:50%;bottom:74px;translate:-50% 0;padding:7px 10px;border-radius:8px;background:#fff8ccdd;color:#6b5a2b;font:800 8px ui-monospace,monospace;text-transform:uppercase;pointer-events:none}
+  .math{position:absolute;left:28px;top:42%;display:grid;gap:6px;pointer-events:none;color:#4e7256;font:700 9px ui-monospace,monospace}.math small{font-weight:900;text-transform:uppercase}.math code{max-width:680px}
   @media(max-width:800px),(pointer:coarse){
-    :host{height:100dvh;min-height:100dvh}
-    .math{display:none}
-    .hud{top:calc(env(safe-area-inset-top) + 64px);left:12px;translate:0;gap:5px}
-    .hud span,.hud em{display:none}
-    .hud b,.hud i{padding:7px 8px;background:#f7fff0e8}
-    .hint{display:none}
+    :host{height:100dvh;min-height:100dvh}.hud{left:12px;top:calc(env(safe-area-inset-top) + 67px);translate:0;gap:5px}.hud span,.hud em{display:none}.hud b,.hud i{padding:6px 8px}.hotbar{top:calc(env(safe-area-inset-top) + 112px);bottom:auto;left:12px;translate:0;gap:4px}.hotbar span{min-width:52px;padding:6px;font-size:6px}.message{display:none}.math{display:none}
   }
 </style>

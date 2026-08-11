@@ -61,9 +61,9 @@ jobs:
           printf '%s\n' "$output" | grep -q 'select-unit { id }'
           printf '%s\n' "$output" | grep -q 'slots: actions'
           printf '%s\n' "$output" | grep -q -- '--load: <number> = 0'
-      - name: Type-check Curvature Arena
+      - name: Type-check Voxel Meadow
         run: node tools/skein-check.mjs examples/visualizer/index.html
-      - name: Verify Curvature Arena design-time world
+      - name: Verify Voxel Meadow design-time world
         run: node test/game-model.mjs
-      - name: Run Curvature Arena browser regression
+      - name: Run Voxel Meadow browser regression
         run: node test/visualizer.mjs

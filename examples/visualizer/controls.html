@@ -1,50 +1,21 @@
 <script>
   input('running', /** @type {boolean} */ (true))
-  input('timeScale', /** @type {number} */ (1))
-  input('fieldScale', /** @type {number} */ (1))
-
-  this.action = computed(() => this.running ? 'pause' : 'play')
+  this.action = computed(() => this.running ? 'pause' : 'resume')
   this.toggle = () => host.dispatchEvent(new CustomEvent('run-change', {
-    detail:{ running:!this.running }, bubbles:true, composed:true
-  }))
-  this.changeTime = event => host.dispatchEvent(new CustomEvent('time-scale-change', {
-    detail:{ value:Number(event.currentTarget.valueAsNumber) }, bubbles:true, composed:true
-  }))
-  this.changeField = event => host.dispatchEvent(new CustomEvent('field-scale-change', {
-    detail:{ value:Number(event.currentTarget.valueAsNumber) }, bubbles:true, composed:true
+    detail:{running:!this.running}, bubbles:true, composed:true
   }))
   this.reset = () => host.dispatchEvent(new CustomEvent('world-reset', { bubbles:true, composed:true }))
 </script>
 
 <section part="controls">
   <button data-action="run" @click={toggle}>{action}</button>
-  <button data-action="reset" class="reset" @click={reset}>home</button>
-
-  <label>
-    <span>time</span><output>{timeScale}×</output>
-    <input data-control="time" type="range" min="0.25" max="2" step="0.25" .valueAsNumber={timeScale} @input={changeTime}>
-  </label>
-
-  <label>
-    <span>field</span><output>{fieldScale}×</output>
-    <input data-control="field" type="range" min="0" max="2" step="0.1" .valueAsNumber={fieldScale} @input={changeField}>
-  </label>
+  <button data-action="reset" class="reset" @click={reset}>new world</button>
 </section>
 
 <style>
-  :host { display:block; color:#314235; }
-  * { box-sizing:border-box; }
-  section { display:grid; grid-template-columns:auto auto 112px 112px; gap:8px; align-items:center; }
-  button,label { border:2px solid #66805f; border-radius:8px; background:#f7fff0e8; box-shadow:inset 0 2px #fff,0 4px 0 #55714e44; }
-  button { min-width:58px; padding:11px 13px; color:#344b37; font:900 9px ui-monospace,monospace; text-transform:uppercase; cursor:pointer; }
-  button:active { translate:0 3px; box-shadow:inset 0 1px #fff,0 1px 0 #55714e44; }
-  .reset { color:#5c4900; border-color:#9c8438; background:#fff1a8e8; box-shadow:inset 0 2px #fff9,0 4px 0 #8f793844; }
-  label { display:grid; grid-template-columns:1fr auto; gap:3px 8px; padding:7px 9px; color:#667966; font:800 7px ui-monospace,monospace; text-transform:uppercase; }
-  output { color:#334b37; }
-  input { grid-column:1/-1; width:100%; height:14px; accent-color:#5d9b65; }
-  @media(max-width:800px),(pointer:coarse){
-    section{grid-template-columns:auto auto;gap:7px}
-    label{display:none}
-    button{min-width:72px;min-height:44px;font-size:10px;background:#f9fff4f0}
-  }
+  :host { display:block; }
+  section { display:flex; gap:10px; }
+  button { min-height:46px; padding:0 16px; border:2px solid #526b49; border-radius:12px; background:#f7fff0e8; color:#25402b; box-shadow:0 4px 0 #526b49; font:900 9px/1 ui-monospace,monospace; letter-spacing:.08em; text-transform:uppercase; }
+  button:active { translate:0 3px; box-shadow:0 1px 0 #526b49; }
+  .reset { background:#fff0a8ed; border-color:#8b7335; box-shadow:0 4px 0 #8b7335; }
 </style>

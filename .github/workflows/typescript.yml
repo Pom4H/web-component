@@ -1,4 +1,4 @@
-name: TypeScript declarations
+name: TypeScript and Skein types
 
 on:
   pull_request:
@@ -25,3 +25,13 @@ jobs:
           --moduleResolution bundler
           --lib es2022,dom
           test/typescript-contract.ts
+      - name: Type-check the 18-component workspace
+        run: node tools/skein-check.mjs examples/workspace/index.html
+      - name: Type-check a known-good list scope
+        run: node tools/skein-check.mjs test/skein-check/valid/index.html
+      - name: Prove an invalid list binding fails
+        run: |
+          if node tools/skein-check.mjs test/skein-check/invalid/index.html; then
+            echo "Expected the invalid Skein fixture to fail type checking"
+            exit 1
+          fi

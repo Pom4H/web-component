@@ -8,8 +8,7 @@ assert.deepEqual(model.unresolved, [])
 const scene = model.byTag.get('visualizer-scene')
 assert.ok(scene)
 assert.deepEqual(scene.inputs.map(input => [input.name, input.type]), [
-  ['fields', 'Field[]'],
-  ['rules', 'Rules'],
+  ['world', 'World'],
   ['running', 'boolean'],
   ['timeScale', 'number'],
   ['fieldScale', 'number'],
@@ -37,6 +36,13 @@ for (const name of ['run-change','time-scale-change','field-scale-change','world
   assert.ok(controls.emits.some(event => event.name === name))
 }
 
+const inspector = model.byTag.get('visualizer-inspector')
+assert.ok(inspector)
+assert.deepEqual(inspector.inputs.map(input => [input.name, input.type]), [
+  ['telemetry', 'Telemetry'],
+  ['world', 'World']
+])
+
 const shell = model.byTag.get('visualizer-shell')
 assert.ok(shell)
 assert.deepEqual(shell.slots, ['scene', 'mast', 'controls', 'inspector'])
@@ -46,7 +52,8 @@ assert.ok(app)
 assert.ok(app.publicEvents.some(event => event.name === 'world-telemetry' && event.source === 'visualizer-scene'))
 
 const data = manifest(model)
-assert.equal(data.components['visualizer-scene'].inputs.rules, 'Rules')
+assert.equal(data.components['visualizer-scene'].inputs.world, 'World')
+assert.equal(data.components['visualizer-inspector'].inputs.world, 'World')
 assert.equal(data.components['visualizer-scene'].cssProperties['--danger'].syntax, '<number>')
 
-console.log('curvature-arena model: typed world, systems events, parts, CSS physics channels and component graph verified.')
+console.log('curvature-arena model: typed Entity+Components+Systems world, system events, parts, CSS physics channels and component graph verified.')

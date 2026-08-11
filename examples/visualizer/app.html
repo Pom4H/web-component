@@ -1,21 +1,59 @@
 <script>
-  /** @typedef {{ id:string, kind:'gravity'|'repulsor'|'vortex', position:[number,number,number], strength:number, radius:number, color:string }} Field */
-  /** @typedef {{ fixedHz:number, arenaRadius:number, drag:number, restitution:number, maxSpeed:number, pickupRadius:number, thrust:number }} Rules */
+  /** @typedef {{ id:string, transform:{ position:[number,number,number] }, body?:{ velocity:[number,number,number], radius:number }, field?:{ kind:'gravity'|'repulsor'|'vortex', strength:number, radius:number }, controller?:{ thrust:number }, collectible?:{ value:number, respawnRadius:number }, render:{ color:string, size:number } }} Entity */
+  /** @typedef {{ id:'input'|'forces'|'integrate'|'bounds'|'collect', phase:'fixed', reads:string[], writes:string[] }} SystemSpec */
+  /** @typedef {{ fixedHz:number, arenaRadius:number, drag:number, restitution:number, maxSpeed:number, pickupRadius:number }} Rules */
+  /** @typedef {{ entities:Entity[], systems:SystemSpec[], rules:Rules }} World */
   /** @typedef {{ score:number, speed:number, contacts:number, simTime:number, thrust:number, position:{x:number,y:number,z:number} }} Telemetry */
 
-  this.fields = /** @type {Field[]} */ ([
-    { id:'ASTER', kind:'gravity', position:[-2.8, .7, -.5], strength:14, radius:.72, color:'#68f7d2' },
-    { id:'RIFT', kind:'vortex', position:[1.6, -.5, .2], strength:9.5, radius:.82, color:'#a779ff' },
-    { id:'SUNDER', kind:'repulsor', position:[3.4, 1.2, -1.4], strength:11, radius:.68, color:'#ff8d63' }
-  ])
-  this.rules = /** @type {Rules} */ ({
-    fixedHz:120,
-    arenaRadius:6.4,
-    drag:.16,
-    restitution:.76,
-    maxSpeed:8.5,
-    pickupRadius:.5,
-    thrust:7.5
+  this.world = /** @type {World} */ ({
+    entities:[
+      {
+        id:'PILOT',
+        transform:{ position:[0,.15,3.5] },
+        body:{ velocity:[1.8,.25,-.45], radius:.18 },
+        controller:{ thrust:7.5 },
+        render:{ color:'#ffffff', size:18 }
+      },
+      {
+        id:'ASTER',
+        transform:{ position:[-2.8,.7,-.5] },
+        field:{ kind:'gravity', strength:14, radius:.72 },
+        render:{ color:'#68f7d2', size:30 }
+      },
+      {
+        id:'RIFT',
+        transform:{ position:[1.6,-.5,.2] },
+        field:{ kind:'vortex', strength:9.5, radius:.82 },
+        render:{ color:'#a779ff', size:34 }
+      },
+      {
+        id:'SUNDER',
+        transform:{ position:[3.4,1.2,-1.4] },
+        field:{ kind:'repulsor', strength:11, radius:.68 },
+        render:{ color:'#ff8d63', size:28 }
+      },
+      { id:'C-01', transform:{position:[-3.9,-1.4,2.1]}, collectible:{value:1,respawnRadius:.78}, render:{color:'#ffd26a',size:6} },
+      { id:'C-02', transform:{position:[-1.4,2.4,-3.2]}, collectible:{value:1,respawnRadius:.78}, render:{color:'#ffd26a',size:6} },
+      { id:'C-03', transform:{position:[2.8,-2.1,2.6]}, collectible:{value:1,respawnRadius:.78}, render:{color:'#ffd26a',size:6} },
+      { id:'C-04', transform:{position:[4.1,.3,.8]}, collectible:{value:1,respawnRadius:.78}, render:{color:'#ffd26a',size:6} },
+      { id:'C-05', transform:{position:[.6,3.4,1.7]}, collectible:{value:1,respawnRadius:.78}, render:{color:'#ffd26a',size:6} },
+      { id:'C-06', transform:{position:[-2.1,-2.8,-2.4]}, collectible:{value:1,respawnRadius:.78}, render:{color:'#ffd26a',size:6} }
+    ],
+    systems:[
+      { id:'input', phase:'fixed', reads:['controller'], writes:['intent'] },
+      { id:'forces', phase:'fixed', reads:['transform','body','field','intent'], writes:['acceleration'] },
+      { id:'integrate', phase:'fixed', reads:['acceleration','body'], writes:['transform','body'] },
+      { id:'bounds', phase:'fixed', reads:['transform','body'], writes:['transform','body','contacts'] },
+      { id:'collect', phase:'fixed', reads:['transform','collectible'], writes:['score','transform'] }
+    ],
+    rules:{
+      fixedHz:120,
+      arenaRadius:6.4,
+      drag:.16,
+      restitution:.76,
+      maxSpeed:8.5,
+      pickupRadius:.5
+    }
   })
   this.running = true
   this.timeScale = 1
@@ -35,19 +73,18 @@
 
 <visualizer-shell>
   <header slot="mast" class="mast">
-    <small>SKEIN / DESIGN-TIME WORLD / WEBGL2</small>
+    <small>SKEIN / ENTITY + COMPONENTS + SYSTEMS / WEBGL2</small>
     <h1>CURVATURE<br>ARENA.</h1>
     <p>
-      A tiny game world driven by real mathematics: fixed-step integration, softened inverse-square fields,
-      a curl force, damping and spherical collision response. Skein owns the declarative world contract;
-      WebGL owns continuous simulation and pixels.
+      A game-engine-shaped world declared as data. Entities are compositions of transform, body, field,
+      controller and collectible components. A fixed-step system schedule turns that schema into motion;
+      WebGL2 renders the exact force field used by physics.
     </p>
   </header>
 
   <visualizer-scene
     slot="scene"
-    .fields={fields}
-    .rules={rules}
+    .world={world}
     .running={running}
     .timeScale={timeScale}
     .fieldScale={fieldScale}
@@ -69,8 +106,7 @@
   <visualizer-inspector
     slot="inspector"
     .telemetry={telemetry}
-    .rules={rules}
-    .fields={fields}>
+    .world={world}>
   </visualizer-inspector>
 </visualizer-shell>
 
@@ -80,7 +116,7 @@
   .mast { min-width:0; }
   small { display:block; color:#68f7d2; font:800 9px/1.2 ui-monospace,SFMono-Regular,monospace; letter-spacing:.18em; }
   h1 { margin:9px 0 0; max-width:12ch; font:900 clamp(38px,5vw,74px)/.82 Arial Black,Impact,sans-serif; letter-spacing:-.075em; }
-  p { max-width:610px; margin:14px 0 0; color:#7f8da1; font-size:12px; line-height:1.58; }
+  p { max-width:650px; margin:14px 0 0; color:#7f8da1; font-size:12px; line-height:1.58; }
   visualizer-scene, visualizer-controls, visualizer-inspector { display:block; min-width:0; }
   @media(max-width:700px){h1{font-size:clamp(36px,11vw,58px)}p{display:none}}
 </style>

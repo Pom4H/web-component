@@ -1,38 +1,49 @@
 <script>
-  /** @typedef {{ id:string, kind:'gravity'|'repulsor'|'vortex', position:[number,number,number], strength:number, radius:number, color:string }} Field */
-  /** @typedef {{ fixedHz:number, arenaRadius:number, drag:number, restitution:number, maxSpeed:number, pickupRadius:number, thrust:number }} Rules */
+  /** @typedef {{ id:string, transform:{ position:[number,number,number] }, body?:{ velocity:[number,number,number], radius:number }, field?:{ kind:'gravity'|'repulsor'|'vortex', strength:number, radius:number }, controller?:{ thrust:number }, collectible?:{ value:number, respawnRadius:number }, render:{ color:string, size:number } }} Entity */
+  /** @typedef {{ id:'input'|'forces'|'integrate'|'bounds'|'collect', phase:'fixed', reads:string[], writes:string[] }} SystemSpec */
+  /** @typedef {{ fixedHz:number, arenaRadius:number, drag:number, restitution:number, maxSpeed:number, pickupRadius:number }} Rules */
+  /** @typedef {{ entities:Entity[], systems:SystemSpec[], rules:Rules }} World */
   /** @typedef {{ score:number, speed:number, contacts:number, simTime:number, thrust:number, position:{x:number,y:number,z:number} }} Telemetry */
 
   input('telemetry', /** @type {Telemetry} */ ({
     score:0, speed:0, contacts:0, simTime:0, thrust:0, position:{x:0,y:0,z:0}
   }))
-  input('rules', /** @type {Rules} */ ({
-    fixedHz:120, arenaRadius:6.4, drag:.16, restitution:.76, maxSpeed:8.5, pickupRadius:.5, thrust:7.5
-  }))
-  input('fields', /** @type {Field[]} */ ([]))
+  input('world', /** @type {World} */ ({ entities:[], systems:[], rules:{
+    fixedHz:120, arenaRadius:6.4, drag:.16, restitution:.76, maxSpeed:8.5, pickupRadius:.5
+  }}))
 
   this.position = computed(() =>
     `${this.telemetry.position.x.toFixed(2)} / ${this.telemetry.position.y.toFixed(2)} / ${this.telemetry.position.z.toFixed(2)}`
   )
   this.time = computed(() => `${this.telemetry.simTime.toFixed(1)} s`)
+  this.dynamicCount = computed(() => this.world.entities.filter(entity => entity.body).length)
+  this.fieldCount = computed(() => this.world.entities.filter(entity => entity.field).length)
+  this.collectibleCount = computed(() => this.world.entities.filter(entity => entity.collectible).length)
 </script>
 
 <section part="panel" --thrust={telemetry.thrust}>
-  <header><small>WORLD STATE</small><b>{telemetry.score}</b></header>
+  <header><small>WORLD SCHEMA</small><b>{telemetry.score}</b></header>
   <div class="hero">
     <span>velocity</span>
     <strong>{telemetry.speed}</strong>
     <em>m/s</em>
   </div>
+
+  <div class="systems">
+    <span each={world.systems}>{id}</span>
+  </div>
+
   <dl>
     <div><dt>position xyz</dt><dd>{position}</dd></div>
     <div><dt>simulation</dt><dd>{time}</dd></div>
-    <div><dt>contacts</dt><dd>{telemetry.contacts}</dd></div>
-    <div><dt>field nodes</dt><dd>{fields.length}</dd></div>
-    <div><dt>solver</dt><dd>{rules.fixedHz} Hz</dd></div>
-    <div><dt>arena radius</dt><dd>{rules.arenaRadius}</dd></div>
+    <div><dt>entities</dt><dd>{world.entities.length}</dd></div>
+    <div><dt>dynamic bodies</dt><dd>{dynamicCount}</dd></div>
+    <div><dt>field components</dt><dd>{fieldCount}</dd></div>
+    <div><dt>collectibles</dt><dd>{collectibleCount}</dd></div>
+    <div><dt>fixed systems</dt><dd>{world.systems.length}</dd></div>
+    <div><dt>solver</dt><dd>{world.rules.fixedHz} Hz</dd></div>
   </dl>
-  <p>Drag inside the world to apply screen-space thrust. The trajectory remains a 3D integration under the declared field nodes.</p>
+  <p>There is no runtime ECS package. The world is plain typed data; systems query component presence and run in the declared order.</p>
 </section>
 
 <style>
@@ -41,12 +52,15 @@
   * { box-sizing:border-box; }
   section { --thrust:0; height:100%; min-height:260px; padding:16px; border:1px solid #1a2c40; border-radius:16px; background:#07101bd9; color:#e8f0fb; backdrop-filter:blur(14px); box-shadow:inset 0 1px #29405a66; }
   header { display:flex; justify-content:space-between; align-items:center; }
-  small,dt,dd,p { font:700 8px ui-monospace,monospace; text-transform:uppercase; letter-spacing:.08em; }
+  small,dt,dd,p,.systems { font:700 8px ui-monospace,monospace; text-transform:uppercase; letter-spacing:.08em; }
   small { color:#607189; } header b { color:#68f7d2; font:900 24px/1 ui-monospace,monospace; }
-  .hero { display:grid; grid-template-columns:1fr auto auto; align-items:end; gap:5px; margin:28px 0 18px; padding-bottom:13px; border-bottom:2px solid color-mix(in srgb,#68f7d2 calc(var(--thrust)*45%),#193047); }
+  .hero { display:grid; grid-template-columns:1fr auto auto; align-items:end; gap:5px; margin:22px 0 12px; padding-bottom:11px; border-bottom:2px solid color-mix(in srgb,#68f7d2 calc(var(--thrust)*45%),#193047); }
   .hero span,.hero em { color:#61748d; font:700 8px ui-monospace,monospace; text-transform:uppercase; font-style:normal; }
   .hero strong { font:900 30px/1 ui-monospace,monospace; letter-spacing:-.07em; }
-  dl { margin:0; display:grid; gap:6px; } dl div { display:flex; justify-content:space-between; gap:14px; padding:7px 0; border-top:1px solid #142336; }
+  .systems { display:flex; flex-wrap:wrap; gap:5px; margin:0 0 14px; color:#68f7d2; }
+  .systems span { padding:5px 7px; border:1px solid #1a4250; border-radius:999px; background:#0b2028; }
+  .systems span:not(:last-child)::after { content:" →"; color:#4e687a; }
+  dl { margin:0; display:grid; gap:5px; } dl div { display:flex; justify-content:space-between; gap:14px; padding:6px 0; border-top:1px solid #142336; }
   dt { color:#53657d; } dd { margin:0; color:#b9c8da; text-align:right; }
-  p { margin:18px 0 0; color:#596b82; line-height:1.55; text-transform:none; letter-spacing:0; }
+  p { margin:14px 0 0; color:#596b82; line-height:1.55; text-transform:none; letter-spacing:0; }
 </style>

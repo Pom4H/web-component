@@ -25,6 +25,7 @@
   this.targetKind='none'
   this.message='generating terrain'
   this.inventory={dirt:0,stone:0,wood:0,plank:0}
+  this.epoch=0
 
   queueMicrotask(()=>{
     const canvas=host.shadowRoot.querySelector('canvas')
@@ -145,6 +146,7 @@
       this.inventory={...inventory}
     }
     generate()
+    this.epoch=lastReset
 
     const add=(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]]
     const sub=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]]
@@ -344,7 +346,7 @@
     this.status='world live'
     let previous=performance.now(),accumulator=0,frames=0,fpsAt=previous,telemetryAt=previous,raf=0
     const render=now=>{
-      if(this.resetToken!==lastReset){lastReset=this.resetToken;generate();accumulator=0}
+      if(this.resetToken!==lastReset){lastReset=this.resetToken;generate();this.epoch=lastReset;accumulator=0}
       const realDt=Math.min(.08,(now-previous)/1000);previous=now
       const fixed=1/Math.max(30,this.world.rules.fixedHz||120)
       if(this.running){accumulator+=realDt;let steps=0;while(accumulator>=fixed&&steps<16){step(fixed);accumulator-=fixed;steps++}if(steps===16)accumulator=0}
@@ -383,6 +385,7 @@
         const speed=Math.hypot(player.velocity[0],player.velocity[2])
         this.grounded=player.grounded;this.blockCount=blocks.size;this.inventory={...inventory};this.message=message
         host.dispatchEvent(new CustomEvent('world-telemetry',{detail:{
+          epoch:this.epoch,
           position:{x:Number(player.position[0].toFixed(2)),y:Number(player.position[1].toFixed(2)),z:Number(player.position[2].toFixed(2))},
           speed:Number(speed.toFixed(2)),grounded:player.grounded,blocks:blocks.size,target:this.targetKind,inventory:{...inventory},crafted,message
         },bubbles:true,composed:true}))

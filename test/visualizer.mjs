@@ -40,7 +40,7 @@ try{
   const send=(method,params={})=>new Promise((resolveRequest,reject)=>{const id=++requestId;pending.set(id,{resolve:resolveRequest,reject});socket.send(JSON.stringify({id,method,params}))})
   await send('Runtime.enable');await send('Page.enable')
   const evaluate=async expression=>{const result=await send('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});if(result.exceptionDetails)throw new Error(result.exceptionDetails.exception?.description||result.exceptionDetails.text);return result.result.value}
-  const telemetry=()=>evaluate(`(()=>{const t=document.querySelector('visualizer-app').state.telemetry;return{position:{...t.position},speed:t.speed,grounded:t.grounded,blocks:t.blocks,target:t.target,inventory:{...t.inventory},crafted:t.crafted,message:t.message}})()`)
+  const telemetry=()=>evaluate(`(()=>{const t=document.querySelector('visualizer-app').state.telemetry;return{epoch:t.epoch,position:{...t.position},speed:t.speed,grounded:t.grounded,blocks:t.blocks,target:t.target,inventory:{...t.inventory},crafted:t.crafted,message:t.message}})()`)
   const gamepad=`document.querySelector('visualizer-app').shadowRoot.querySelector('visualizer-gamepad').shadowRoot`
 
   const frameId=(await send('Page.getFrameTree')).frameTree.frame.id
@@ -68,8 +68,18 @@ try{
   if(!(state.position.x>spawn.x+.25))throw new Error(`Keyboard locomotion did not move grounded player: ${JSON.stringify({spawn,state})}`)
 
   const controls=`document.querySelector('visualizer-app').shadowRoot.querySelector('visualizer-controls').shadowRoot`
-  await evaluate(`${controls}.querySelector('button[data-action="reset"]').click()`)
-  for(let i=0;i<60;i++){await sleep(25);state=await telemetry();if(state.grounded&&Math.abs(state.position.x-.5)<.1)break}
+  const resetWorld=async()=>{
+    const previousEpoch=(await telemetry()).epoch
+    await evaluate(`${controls}.querySelector('button[data-action=\"reset\"]').click()`)
+    let current={}
+    for(let i=0;i<100;i++){
+      await sleep(25)
+      current=await telemetry()
+      if(current.epoch===previousEpoch+1&&current.grounded&&current.target!=='none'&&Math.abs(current.position.x-.5)<.1)return current
+    }
+    throw new Error(`Voxel reset did not reach a grounded new epoch: ${JSON.stringify({previousEpoch,current})}`)
+  }
+  state=await resetWorld()
 
   await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:3,mobile:true,screenWidth:390,screenHeight:844})
   await send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:5})
@@ -89,15 +99,13 @@ try{
   const released=await evaluate(`document.querySelector('visualizer-app').state.controls.x`)
   if(held!==1||released!==0||!(state.position.x>beforeMobile.position.x+.2))throw new Error(`Touch movement did not flow through typed game input: ${JSON.stringify({held,released,beforeMobile,state})}`)
 
-  await evaluate(`${controls}.querySelector('button[data-action="reset"]').click()`)
-  for(let i=0;i<60;i++){await sleep(25);state=await telemetry();if(state.grounded&&state.target!=='none'&&Math.abs(state.position.x-.5)<.1)break}
+  state=await resetWorld()
   const y0=state.position.y
   await evaluate(`${gamepad}.querySelector('[data-action="jump"]').click()`)
   await sleep(140);state=await telemetry()
   if(!(state.position.y>y0+.12)||state.grounded)throw new Error(`Jump did not leave voxel ground: ${JSON.stringify({y0,state,trace:await evaluate('window.__voxelTrace')})}`)
 
-  await evaluate(`${controls}.querySelector('button[data-action="reset"]').click()`)
-  for(let i=0;i<60;i++){await sleep(25);state=await telemetry();if(state.grounded&&state.target!=='none')break}
+  state=await resetWorld()
 
   await evaluate(`window.__voxelTrace={gameAction:[],gameCommand:[]}`)
   const beforeCraft=await telemetry()

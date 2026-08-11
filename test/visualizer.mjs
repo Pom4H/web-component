@@ -41,6 +41,7 @@ try{
   await send('Runtime.enable');await send('Page.enable')
   const evaluate=async expression=>{const result=await send('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});if(result.exceptionDetails)throw new Error(result.exceptionDetails.exception?.description||result.exceptionDetails.text);return result.result.value}
   const telemetry=()=>evaluate(`(()=>{const t=document.querySelector('visualizer-app').state.telemetry;return{position:{...t.position},speed:t.speed,grounded:t.grounded,blocks:t.blocks,target:t.target,inventory:{...t.inventory},crafted:t.crafted,message:t.message}})()`)
+  const gamepad=`document.querySelector('visualizer-app').shadowRoot.querySelector('visualizer-gamepad').shadowRoot`
 
   const frameId=(await send('Page.getFrameTree')).frameTree.frame.id
   await send('Page.setDocumentContent',{frameId,html:'<!doctype html><html><head><base href="http://example.test/examples/"></head><body><visualizer-app></visualizer-app></body></html>'})
@@ -77,11 +78,11 @@ try{
   if(mobile.display==='none'||mobile.width<44||mobile.height<44)throw new Error(`Mobile gamepad is not usable: ${JSON.stringify(mobile)}`)
 
   const beforeMobile=await telemetry()
-  await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),b=app.shadowRoot.querySelector('visualizer-gamepad').shadowRoot.querySelector('.right');b.dispatchEvent(new PointerEvent('pointerdown',{pointerId:41,pointerType:'touch',bubbles:true}));})()`)
+  await evaluate(`(()=>{const b=${gamepad}.querySelector('.right');b.dispatchEvent(new PointerEvent('pointerdown',{pointerId:41,pointerType:'touch',bubbles:true}));})()`)
   await sleep(230)
   const held=await evaluate(`document.querySelector('visualizer-app').state.controls.x`)
   state=await telemetry()
-  await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),b=app.shadowRoot.querySelector('visualizer-gamepad').shadowRoot.querySelector('.right');b.dispatchEvent(new PointerEvent('pointerup',{pointerId:41,pointerType:'touch',bubbles:true}));})()`)
+  await evaluate(`(()=>{const b=${gamepad}.querySelector('.right');b.dispatchEvent(new PointerEvent('pointerup',{pointerId:41,pointerType:'touch',bubbles:true}));})()`)
   await sleep(80)
   const released=await evaluate(`document.querySelector('visualizer-app').state.controls.x`)
   if(held!==1||released!==0||!(state.position.x>beforeMobile.position.x+.2))throw new Error(`Touch movement did not flow through typed game input: ${JSON.stringify({held,released,beforeMobile,state})}`)
@@ -89,7 +90,7 @@ try{
   await evaluate(`${controls}.querySelector('button[data-action="reset"]').click()`)
   for(let i=0;i<60;i++){await sleep(25);state=await telemetry();if(state.grounded&&state.target!=='none'&&Math.abs(state.position.x-.5)<.1)break}
   const y0=state.position.y
-  await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),b=app.shadowRoot.querySelector('visualizer-gamepad').shadowRoot.querySelector('[data-action="jump"]');b.dispatchEvent(new PointerEvent('pointerdown',{pointerId:42,pointerType:'touch',bubbles:true}));})()`)
+  await evaluate(`${gamepad}.querySelector('[data-action="jump"]').click()`)
   await sleep(40)
   const jumpFlow=await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),scene=app.shadowRoot.querySelector('visualizer-scene');return{app:app.state.actions.jump,scene:scene.state.actions.jump,grounded:scene.state.grounded}})()`)
   await sleep(100);state=await telemetry()
@@ -99,18 +100,18 @@ try{
   for(let i=0;i<60;i++){await sleep(25);state=await telemetry();if(state.grounded&&state.target!=='none')break}
 
   const beforeCraft=await telemetry()
-  await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),b=app.shadowRoot.querySelector('visualizer-gamepad').shadowRoot.querySelector('[data-action="craft"]');b.dispatchEvent(new PointerEvent('pointerdown',{pointerId:43,pointerType:'touch',bubbles:true}));})()`)
+  await evaluate(`${gamepad}.querySelector('[data-action="craft"]').click()`)
   await sleep(120);state=await telemetry()
   if(state.inventory.wood!==beforeCraft.inventory.wood-2||state.inventory.plank!==beforeCraft.inventory.plank+4||state.crafted!==beforeCraft.crafted+1)throw new Error(`Craft recipe did not mutate typed inventory: ${JSON.stringify({beforeCraft,state})}`)
 
   const beforeMine=await telemetry(),beforeInventory=Object.values(beforeMine.inventory).reduce((a,b)=>a+b,0)
-  await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),b=app.shadowRoot.querySelector('visualizer-gamepad').shadowRoot.querySelector('[data-action="mine"]');b.dispatchEvent(new PointerEvent('pointerdown',{pointerId:44,pointerType:'touch',bubbles:true}));})()`)
+  await evaluate(`${gamepad}.querySelector('[data-action="mine"]').click()`)
   await sleep(140);state=await telemetry()
   const afterInventory=Object.values(state.inventory).reduce((a,b)=>a+b,0)
   if(state.blocks!==beforeMine.blocks-1||afterInventory!==beforeInventory+1)throw new Error(`Mining did not remove a voxel and add inventory: ${JSON.stringify({beforeMine,state})}`)
 
   const beforePlace=await telemetry(),placeInventory=Object.values(beforePlace.inventory).reduce((a,b)=>a+b,0)
-  await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),b=app.shadowRoot.querySelector('visualizer-gamepad').shadowRoot.querySelector('[data-action="place"]');b.dispatchEvent(new PointerEvent('pointerdown',{pointerId:45,pointerType:'touch',bubbles:true}));})()`)
+  await evaluate(`${gamepad}.querySelector('[data-action="place"]').click()`)
   await sleep(140);state=await telemetry()
   const placedInventory=Object.values(state.inventory).reduce((a,b)=>a+b,0)
   if(state.blocks!==beforePlace.blocks+1||placedInventory!==placeInventory-1)throw new Error(`Placing did not create a voxel from inventory: ${JSON.stringify({beforePlace,state})}`)

@@ -90,8 +90,10 @@ try{
   for(let i=0;i<60;i++){await sleep(25);state=await telemetry();if(state.grounded&&state.target!=='none')break}
   const y0=state.position.y
   await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),b=app.shadowRoot.querySelector('visualizer-gamepad').shadowRoot.querySelector('[data-action="jump"]');b.dispatchEvent(new PointerEvent('pointerdown',{pointerId:42,pointerType:'touch',bubbles:true}));})()`)
-  await sleep(130);state=await telemetry()
-  if(!(state.position.y>y0+.12)||state.grounded)throw new Error(`Jump did not leave voxel ground: ${JSON.stringify({y0,state})}`)
+  await sleep(40)
+  const jumpFlow=await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),scene=app.shadowRoot.querySelector('visualizer-scene');return{app:app.state.actions.jump,scene:scene.state.actions.jump,grounded:scene.state.grounded}})()`)
+  await sleep(100);state=await telemetry()
+  if(!(state.position.y>y0+.12)||state.grounded)throw new Error(`Jump did not leave voxel ground: ${JSON.stringify({y0,jumpFlow,state})}`)
 
   await evaluate(`${controls}.querySelector('button[data-action="reset"]').click()`)
   for(let i=0;i<60;i++){await sleep(25);state=await telemetry();if(state.grounded&&state.target!=='none')break}

@@ -77,6 +77,8 @@ try{
   const mobile=await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),pad=app.shadowRoot.querySelector('visualizer-gamepad'),button=pad.shadowRoot.querySelector('.right');const style=getComputedStyle(pad);const rect=button.getBoundingClientRect();return{display:style.display,width:rect.width,height:rect.height}})()`)
   if(mobile.display==='none'||mobile.width<44||mobile.height<44)throw new Error(`Mobile gamepad is not usable: ${JSON.stringify(mobile)}`)
 
+  await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),pad=app.shadowRoot.querySelector('visualizer-gamepad'),scene=app.shadowRoot.querySelector('visualizer-scene');window.__voxelTrace={gameAction:[],gameCommand:[]};pad.addEventListener('game-action',event=>window.__voxelTrace.gameAction.push(event.detail?.action));scene.addEventListener('game-command',event=>window.__voxelTrace.gameCommand.push(event.detail?.action))})()`)
+
   const beforeMobile=await telemetry()
   await evaluate(`(()=>{const b=${gamepad}.querySelector('.right');b.dispatchEvent(new PointerEvent('pointerdown',{pointerId:41,pointerType:'touch',bubbles:true}));})()`)
   await sleep(230)
@@ -92,27 +94,33 @@ try{
   const y0=state.position.y
   await evaluate(`${gamepad}.querySelector('[data-action="jump"]').click()`)
   await sleep(140);state=await telemetry()
-  if(!(state.position.y>y0+.12)||state.grounded)throw new Error(`Jump did not leave voxel ground: ${JSON.stringify({y0,state})}`)
+  if(!(state.position.y>y0+.12)||state.grounded)throw new Error(`Jump did not leave voxel ground: ${JSON.stringify({y0,state,trace:await evaluate('window.__voxelTrace')})}`)
 
   await evaluate(`${controls}.querySelector('button[data-action="reset"]').click()`)
   for(let i=0;i<60;i++){await sleep(25);state=await telemetry();if(state.grounded&&state.target!=='none')break}
 
+  await evaluate(`window.__voxelTrace={gameAction:[],gameCommand:[]}`)
   const beforeCraft=await telemetry()
   await evaluate(`${gamepad}.querySelector('[data-action="craft"]').click()`)
-  await sleep(120);state=await telemetry()
-  if(state.inventory.wood!==beforeCraft.inventory.wood-2||state.inventory.plank!==beforeCraft.inventory.plank+4||state.crafted!==beforeCraft.crafted+1)throw new Error(`Craft recipe did not mutate typed inventory: ${JSON.stringify({beforeCraft,state})}`)
+  await sleep(160);state=await telemetry()
+  const craftTrace=await evaluate('window.__voxelTrace')
+  if(state.inventory.wood!==beforeCraft.inventory.wood-2||state.inventory.plank!==beforeCraft.inventory.plank+4||state.crafted!==beforeCraft.crafted+1)throw new Error(`Craft recipe did not mutate typed inventory: ${JSON.stringify({beforeCraft,state,craftTrace})}`)
 
+  await evaluate(`window.__voxelTrace={gameAction:[],gameCommand:[]}`)
   const beforeMine=await telemetry(),beforeInventory=Object.values(beforeMine.inventory).reduce((a,b)=>a+b,0)
   await evaluate(`${gamepad}.querySelector('[data-action="mine"]').click()`)
-  await sleep(140);state=await telemetry()
+  await sleep(160);state=await telemetry()
+  const mineTrace=await evaluate('window.__voxelTrace')
   const afterInventory=Object.values(state.inventory).reduce((a,b)=>a+b,0)
-  if(state.blocks!==beforeMine.blocks-1||afterInventory!==beforeInventory+1)throw new Error(`Mining did not remove a voxel and add inventory: ${JSON.stringify({beforeMine,state})}`)
+  if(state.blocks!==beforeMine.blocks-1||afterInventory!==beforeInventory+1)throw new Error(`Mining did not remove a voxel and add inventory: ${JSON.stringify({beforeMine,state,mineTrace})}`)
 
+  await evaluate(`window.__voxelTrace={gameAction:[],gameCommand:[]}`)
   const beforePlace=await telemetry(),placeInventory=Object.values(beforePlace.inventory).reduce((a,b)=>a+b,0)
   await evaluate(`${gamepad}.querySelector('[data-action="place"]').click()`)
-  await sleep(140);state=await telemetry()
+  await sleep(160);state=await telemetry()
+  const placeTrace=await evaluate('window.__voxelTrace')
   const placedInventory=Object.values(state.inventory).reduce((a,b)=>a+b,0)
-  if(state.blocks!==beforePlace.blocks+1||placedInventory!==placeInventory-1)throw new Error(`Placing did not create a voxel from inventory: ${JSON.stringify({beforePlace,state})}`)
+  if(state.blocks!==beforePlace.blocks+1||placedInventory!==placeInventory-1)throw new Error(`Placing did not create a voxel from inventory: ${JSON.stringify({beforePlace,state,placeTrace})}`)
 
   if(exceptions.length)throw new Error(`Browser exceptions:\n${exceptions.join('\n')}`)
   console.log('voxel-meadow-webgl-cubes: passed')

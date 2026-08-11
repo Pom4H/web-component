@@ -29,13 +29,11 @@
     event.preventDefault()
   }
   this.action = event => {
-    if(event.pointerType==='mouse' && event.button!==0) return
     const action=event.currentTarget.dataset.action
     host.dispatchEvent(new CustomEvent('game-action', {
       detail:{action}, bubbles:true, composed:true
     }))
     try { navigator.vibrate?.(8) } catch {}
-    event.preventDefault()
   }
   this.blockMenu = event => event.preventDefault()
 
@@ -58,10 +56,10 @@
   </div>
 
   <div class="actions" aria-label="Actions">
-    <button class="jump" data-action="jump" @pointerdown={action}><b>↑</b><small>JUMP</small></button>
-    <button data-action="mine" @pointerdown={action}><b>−</b><small>BREAK</small></button>
-    <button data-action="place" @pointerdown={action}><b>+</b><small>PLACE</small></button>
-    <button class="craft" data-action="craft" @pointerdown={action}><b>▦</b><small>CRAFT</small></button>
+    <button class="jump" data-action="jump" @click={action}><b>↑</b><small>JUMP</small></button>
+    <button data-action="mine" @click={action}><b>−</b><small>BREAK</small></button>
+    <button data-action="place" @click={action}><b>+</b><small>PLACE</small></button>
+    <button class="craft" data-action="craft" @click={action}><b>▦</b><small>CRAFT</small></button>
   </div>
 </nav>
 
@@ -70,7 +68,8 @@
   * { box-sizing:border-box; }
   nav { display:flex; align-items:flex-end; justify-content:space-between; width:100%; pointer-events:none; }
   .dpad { width:174px; height:174px; display:grid; grid-template:repeat(3,52px)/repeat(3,52px); gap:9px; place-content:center; pointer-events:auto; }
-  button { appearance:none; border:2px solid #526b49; background:#f7fff0e8; color:#25402b; box-shadow:0 5px 0 #526b49,0 10px 20px #6b845e33; touch-action:none; pointer-events:auto; font-family:ui-monospace,SFMono-Regular,monospace; }
+  button { appearance:none; border:2px solid #526b49; background:#f7fff0e8; color:#25402b; box-shadow:0 5px 0 #526b49,0 10px 20px #6b845e33; touch-action:manipulation; pointer-events:auto; font-family:ui-monospace,SFMono-Regular,monospace; }
+  .move { touch-action:none; }
   button:active { translate:0 4px; box-shadow:0 1px 0 #526b49; background:#fff5b7; }
   .move { width:52px; height:52px; border-radius:13px; font:900 26px/1 system-ui,sans-serif; }
   .up{grid-area:1/2}.left{grid-area:2/1}.right{grid-area:2/3}.down{grid-area:3/2}

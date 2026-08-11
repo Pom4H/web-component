@@ -104,6 +104,24 @@ Requirements: Node 22+ and Chrome/Chromium (`CHROME_BIN` optional). Tests intent
 
 `test/workspace.mjs` is the scale gate: it must continue to cover all 18 component definitions, native slot assignment, primitive static inputs, pre-mount property precedence, deep composed events, search reactivity, mutation and conditional teardown using generated `skein.min.js`.
 
+## Type validation for agents
+
+Skein application code remains plain HTML + JavaScript, but coding agents and CI should type-check bindings after changing components. Install the editor/checker dependency when needed:
+
+```bash
+npm install --no-save --ignore-scripts typescript@7.0.2
+```
+
+Then run the checker from an entry page so it follows the same tag-to-file mapping as the runtime:
+
+```bash
+node tools/skein-check.mjs examples/workspace/index.html
+```
+
+The checker infers state created by top-level `this.foo = ...`, follows `computed()` result types, models `each={items}` item scopes, validates binding paths, event handlers, native DOM property bindings, and `.property` names on discovered Skein child inputs. It reports diagnostics against the original `.html` file and exits non-zero on errors.
+
+Do not consider a component-editing task complete while `skein-check` reports diagnostics. The checker is development tooling only and must not be imported into the browser runtime.
+
 ## Documentation sync
 
 When public syntax/behavior changes, update README, docs, start/landing examples, `llms.txt`, `llms-full.txt`, `.agents/skills/skein/`, tests and Playground/examples together.

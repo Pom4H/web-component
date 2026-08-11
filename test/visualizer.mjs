@@ -40,6 +40,8 @@ try{
   const send=(method,params={})=>new Promise((resolveRequest,reject)=>{const id=++requestId;pending.set(id,{resolve:resolveRequest,reject});socket.send(JSON.stringify({id,method,params}))})
   await send('Runtime.enable');await send('Page.enable')
   const evaluate=async expression=>{const result=await send('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});if(result.exceptionDetails)throw new Error(result.exceptionDetails.exception?.description||result.exceptionDetails.text);return result.result.value}
+  const dialogueSnapshot=()=>evaluate(`(()=>{const d=document.querySelector('visualizer-app').state.state.dialogue;return{open:d.open,speaker:d.speaker,text:d.text,options:d.options.map(item=>({id:item.id,label:item.label}))}})()`)
+  const stateSnapshot=()=>evaluate(`(()=>{const s=document.querySelector('visualizer-app').state.state;return{objective:s.objective,prompt:s.prompt,stamina:s.stamina,danger:s.danger,hidden:s.hidden,hasFuse:s.hasFuse,power:s.power,caught:s.caught,ending:s.ending}})()`)
 
   const frameId=(await send('Page.getFrameTree')).frameTree.frame.id
   await send('Page.setDocumentContent',{frameId,html:'<!doctype html><html><head><base href="http://example.test/examples/"></head><body><visualizer-app></visualizer-app></body></html>'})
@@ -58,7 +60,7 @@ try{
 
   await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),scene=app.shadowRoot.querySelector('visualizer-scene');scene.game.npc.position.x=0;scene.game.npc.position.z=7.1;window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyE'}))})()`)
   let dialogue={}
-  for(let i=0;i<80;i++){await sleep(25);dialogue=await evaluate(`document.querySelector('visualizer-app').state.state.dialogue`);if(dialogue.open)break}
+  for(let i=0;i<80;i++){await sleep(25);dialogue=await dialogueSnapshot();if(dialogue.open)break}
   if(!dialogue.open||dialogue.speaker!=='DR. MIRA VALE'||dialogue.options.length!==2)throw new Error(`NPC dialogue did not open: ${JSON.stringify(dialogue)}`)
 
   const dialogueRoot=`document.querySelector('visualizer-app').shadowRoot.querySelector('visualizer-dialogue').shadowRoot`
@@ -66,16 +68,17 @@ try{
   if(initialButtons!==2)throw new Error(`Expected two dialogue choices, got ${initialButtons}`)
 
   await evaluate(`${dialogueRoot}.querySelector('button[data-id="elias"]').click()`);await sleep(80)
-  dialogue=await evaluate(`document.querySelector('visualizer-app').state.state.dialogue`)
+  dialogue=await dialogueSnapshot()
   if(!dialogue.text.includes('Patient 06')||dialogue.options[0]?.id!=='fuse')throw new Error(`Dialogue branch did not advance: ${JSON.stringify(dialogue)}`)
 
   await evaluate(`${dialogueRoot}.querySelector('button[data-id="fuse"]').click()`);await sleep(80)
   await evaluate(`${dialogueRoot}.querySelector('button[data-id="go"]').click()`);await sleep(100)
-  const afterBriefing=await evaluate(`(()=>{const s=document.querySelector('visualizer-app').state.state;return{objective:s.objective,open:s.dialogue.open,danger:s.danger}})()`)
-  if(afterBriefing.objective!=='Reach Archive B and recover the spare fuse'||afterBriefing.open)throw new Error(`Briefing did not enter stealth phase: ${JSON.stringify(afterBriefing)}`)
+  const afterBriefing=await stateSnapshot()
+  dialogue=await dialogueSnapshot()
+  if(afterBriefing.objective!=='Reach Archive B and recover the spare fuse'||dialogue.open)throw new Error(`Briefing did not enter stealth phase: ${JSON.stringify({afterBriefing,dialogue})}`)
 
   await evaluate(`document.querySelector('visualizer-app').shadowRoot.querySelector('visualizer-scene').dispatchEvent(new CustomEvent('game-command',{detail:{action:'restart'}}))`);await sleep(100)
-  const reset=await evaluate(`document.querySelector('visualizer-app').state.state`)
+  const reset=await stateSnapshot()
   if(reset.objective!=='Find Dr. Mira at reception'||reset.hasFuse||reset.power||reset.caught||reset.ending)throw new Error(`Restart did not reset story state: ${JSON.stringify(reset)}`)
 
   if(exceptions.length)throw new Error(`Browser exceptions:\n${exceptions.join('\n')}`)

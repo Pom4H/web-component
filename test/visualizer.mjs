@@ -70,13 +70,13 @@ try{
   await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:3,mobile:true,screenWidth:390,screenHeight:844})
   await send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:5})
   await sleep(120)
-  const touchLayout=await evaluate(`(()=>{const move=${sceneRoot}.querySelector('[data-touch="move"]'),use=${sceneRoot}.querySelector('[data-touch="interact"]'),controls=${sceneRoot}.querySelector('.touch-controls'),r=move.getBoundingClientRect(),u=use.getBoundingClientRect();return{display:getComputedStyle(controls).display,moveWidth:r.width,moveHeight:r.height,useWidth:u.width,useHeight:u.height}})()`)
+  const touchLayout=await evaluate(`(()=>{const move=${sceneRoot}.querySelector('[data-touch="move"]'),use=${sceneRoot}.querySelector('[data-touch="interact"]'),run=${sceneRoot}.querySelector('[data-touch="run"]'),controls=${sceneRoot}.querySelector('.touch-controls'),r=move.getBoundingClientRect(),u=use.getBoundingClientRect(),b=run.getBoundingClientRect();return{display:getComputedStyle(controls).display,moveWidth:r.width,moveHeight:r.height,useWidth:u.width,useHeight:u.height,moveX:r.left+r.width/2,moveY:r.top+r.height*.12,runX:b.left+b.width/2,runY:b.top+b.height/2}})()`)
   if(touchLayout.display==='none'||touchLayout.moveWidth<100||touchLayout.moveHeight<100||touchLayout.useWidth<44||touchLayout.useHeight<44)throw new Error(`Touch controls are not usable: ${JSON.stringify(touchLayout)}`)
 
-  await evaluate(`(()=>{const move=${sceneRoot}.querySelector('[data-touch="move"]'),run=${sceneRoot}.querySelector('[data-touch="run"]'),r=move.getBoundingClientRect();move.dispatchEvent(new PointerEvent('pointerdown',{pointerId:21,pointerType:'touch',clientX:r.left+r.width/2,clientY:r.top+r.height*.12,bubbles:true}));run.dispatchEvent(new PointerEvent('pointerdown',{pointerId:22,pointerType:'touch',clientX:10,clientY:10,bubbles:true}))})()`)
+  await send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:touchLayout.moveX,y:touchLayout.moveY,id:21},{x:touchLayout.runX,y:touchLayout.runY,id:22}]})
   await sleep(520)
   const touchState=await stateSnapshot()
-  await evaluate(`(()=>{const move=${sceneRoot}.querySelector('[data-touch="move"]'),run=${sceneRoot}.querySelector('[data-touch="run"]');move.dispatchEvent(new PointerEvent('pointerup',{pointerId:21,pointerType:'touch',bubbles:true}));run.dispatchEvent(new PointerEvent('pointerup',{pointerId:22,pointerType:'touch',bubbles:true}))})()`)
+  await send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]})
   if(!(touchState.stamina<.99))throw new Error(`Touch joystick/run input never reached the simulation loop: ${JSON.stringify(touchState)}`)
   await restart()
 

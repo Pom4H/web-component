@@ -1,36 +1,52 @@
 <script>
-  input('step', { id:1, title:'component.html', kicker:'author', detail:'', api:'HTML file', color:'#4f8cff' })
-  input('running', true)
-  input('speed', 1)
+  /** @typedef {{ id:string, kind:'gravity'|'repulsor'|'vortex', position:[number,number,number], strength:number, radius:number, color:string }} Field */
+  /** @typedef {{ fixedHz:number, arenaRadius:number, drag:number, restitution:number, maxSpeed:number, pickupRadius:number, thrust:number }} Rules */
+  /** @typedef {{ score:number, speed:number, contacts:number, simTime:number, thrust:number, position:{x:number,y:number,z:number} }} Telemetry */
+
+  input('telemetry', /** @type {Telemetry} */ ({
+    score:0, speed:0, contacts:0, simTime:0, thrust:0, position:{x:0,y:0,z:0}
+  }))
+  input('rules', /** @type {Rules} */ ({
+    fixedHz:120, arenaRadius:6.4, drag:.16, restitution:.76, maxSpeed:8.5, pickupRadius:.5, thrust:7.5
+  }))
+  input('fields', /** @type {Field[]} */ ([]))
+
+  this.position = computed(() =>
+    `${this.telemetry.position.x.toFixed(2)} / ${this.telemetry.position.y.toFixed(2)} / ${this.telemetry.position.z.toFixed(2)}`
+  )
+  this.time = computed(() => `${this.telemetry.simTime.toFixed(1)} s`)
 </script>
 
-<section --accent={step.color}>
-  <header><small>LIVE INSPECTOR</small><span>0{step.id}</span></header>
-  <p class="kicker">{step.kicker}</p>
-  <h2>{step.title}</h2>
-  <p class="detail">{step.detail}</p>
+<section part="panel" --thrust={telemetry.thrust}>
+  <header><small>WORLD STATE</small><b>{telemetry.score}</b></header>
+  <div class="hero">
+    <span>velocity</span>
+    <strong>{telemetry.speed}</strong>
+    <em>m/s</em>
+  </div>
   <dl>
-    <div><dt>primitive</dt><dd>{step.api}</dd></div>
-    <div><dt>flow</dt><dd>{running}</dd></div>
-    <div><dt>speed</dt><dd>{speed}</dd></div>
+    <div><dt>position xyz</dt><dd>{position}</dd></div>
+    <div><dt>simulation</dt><dd>{time}</dd></div>
+    <div><dt>contacts</dt><dd>{telemetry.contacts}</dd></div>
+    <div><dt>field nodes</dt><dd>{fields.length}</dd></div>
+    <div><dt>solver</dt><dd>{rules.fixedHz} Hz</dd></div>
+    <div><dt>arena radius</dt><dd>{rules.arenaRadius}</dd></div>
   </dl>
-  <div class="trace"><i></i><span>selected stage is a DOM property input</span></div>
+  <p>Drag inside the world to apply screen-space thrust. The trajectory remains a 3D integration under the declared field nodes.</p>
 </section>
 
 <style>
+  @property --thrust { syntax:"<number>"; inherits:false; initial-value:0; }
   :host { display:block; min-height:0; }
   * { box-sizing:border-box; }
-  section { --accent:#6ef0cf; height:100%; min-height:260px; padding:18px; border:1px solid color-mix(in srgb,var(--accent) 28%,#182433); border-radius:16px; background:linear-gradient(155deg,color-mix(in srgb,var(--accent) 7%,#0b111a),#070c12 56%); color:#e8f0fb; box-shadow:inset 0 1px color-mix(in srgb,var(--accent) 22%,transparent); }
-  header { display:flex; justify-content:space-between; gap:16px; align-items:center; }
-  small, header span, dt,dd,.trace { font:700 9px ui-monospace,monospace; letter-spacing:.1em; text-transform:uppercase; }
-  small { color:#72839b; }
-  header span { color:var(--accent); font-size:13px; }
-  .kicker { margin:44px 0 8px; color:var(--accent); font:700 10px ui-monospace,monospace; letter-spacing:.16em; text-transform:uppercase; }
-  h2 { margin:0; max-width:13ch; font:850 clamp(25px,3vw,40px)/.95 system-ui,sans-serif; letter-spacing:-.045em; }
-  .detail { margin:16px 0 22px; color:#8492a6; font-size:12px; line-height:1.6; }
-  dl { margin:0; display:grid; gap:7px; }
-  dl div { display:flex; justify-content:space-between; gap:16px; padding:9px 0; border-top:1px solid #172230; }
-  dt { color:#56657a; } dd { margin:0; color:#b9c6d8; text-align:right; }
-  .trace { display:flex; gap:8px; align-items:center; margin-top:20px; color:#69778b; line-height:1.4; }
-  .trace i { width:7px; height:7px; flex:0 0 auto; border-radius:50%; background:var(--accent); box-shadow:0 0 16px var(--accent); }
+  section { --thrust:0; height:100%; min-height:260px; padding:16px; border:1px solid #1a2c40; border-radius:16px; background:#07101bd9; color:#e8f0fb; backdrop-filter:blur(14px); box-shadow:inset 0 1px #29405a66; }
+  header { display:flex; justify-content:space-between; align-items:center; }
+  small,dt,dd,p { font:700 8px ui-monospace,monospace; text-transform:uppercase; letter-spacing:.08em; }
+  small { color:#607189; } header b { color:#68f7d2; font:900 24px/1 ui-monospace,monospace; }
+  .hero { display:grid; grid-template-columns:1fr auto auto; align-items:end; gap:5px; margin:28px 0 18px; padding-bottom:13px; border-bottom:2px solid color-mix(in srgb,#68f7d2 calc(var(--thrust)*45%),#193047); }
+  .hero span,.hero em { color:#61748d; font:700 8px ui-monospace,monospace; text-transform:uppercase; font-style:normal; }
+  .hero strong { font:900 30px/1 ui-monospace,monospace; letter-spacing:-.07em; }
+  dl { margin:0; display:grid; gap:6px; } dl div { display:flex; justify-content:space-between; gap:14px; padding:7px 0; border-top:1px solid #142336; }
+  dt { color:#53657d; } dd { margin:0; color:#b9c8da; text-align:right; }
+  p { margin:18px 0 0; color:#596b82; line-height:1.55; text-transform:none; letter-spacing:0; }
 </style>

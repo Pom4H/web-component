@@ -70,13 +70,23 @@ const bindBoolean = (node, name, path, bindingScope, owner) => {
   });
 };
 
+const propertyName = (node, name) => {
+  if (name in node) return name;
+  for (let target = Object.getPrototypeOf(node); target; target = Object.getPrototypeOf(target)) {
+    const key = Object.getOwnPropertyNames(target).find(property => property.toLowerCase() === name);
+    if (key) return key;
+  }
+  return name;
+};
+
 const bindProperty = (node, name, path, bindingScope, owner) => {
+  const property = propertyName(node, name);
   let previous = INITIAL;
   watch(owner, () => {
     const value = bindingScope.lookup(path);
     if (Object.is(value, previous)) return;
     previous = value;
-    node[name] = value;
+    node[property] = value;
   });
 };
 

@@ -1,42 +1,86 @@
-# Skein Reactive Matter
+# Curvature Arena
 
-A zero-dependency WebGL2 application that turns Skein's reactive graph into a living field while using the same composition model it explains.
+`examples/visualizer/` is now a game-world vertical slice rather than a diagram of Skein internals.
 
-## Component graph
+The domain is deliberately small but engine-shaped:
 
 ```text
-visualizer-app
-└─ visualizer-shell
-   ├─ mast                 slot=mast
-   ├─ visualizer-scene     slot=scene
-   ├─ visualizer-controls  slot=controls
-   └─ visualizer-inspector slot=inspector
+declarative world
+  fields[] + rules
+        ↓ typed DOM properties
+fixed-step simulation
+  input → forces → integrate → collisions → pickups
+        ↓
+native WebGL2 renderer
+        ↓
+bubbling + composed world events
+        ↓
+Skein state / HUD / inspector
 ```
 
-## Visual model
+There is no game-engine dependency and no second UI state system.
 
-The scene is intentionally not a row of 3D architecture boxes.
+## Mathematics
 
-- reactive properties are source nodes;
-- dependency edges are luminous fibers;
-- reactive reads reveal/weave those fibers;
-- a state write creates a local shockwave at one property;
-- only that property's dependency closure lights up;
-- the microtask phase collapses activity into one converging wavefront;
-- commit pulses terminate at real DOM targets;
-- the `textContent` target is an actual Skein text binding and visibly changes only on the commit phase;
-- pointer motion behaves like a temporary force field and bends the dependency fibers instead of orbiting a camera.
+The player body is integrated at a fixed simulation rate (`120 Hz` by default) with semi-implicit Euler:
 
-## What the example proves
+```text
+v[n+1] = clamp(v[n] + a Δt)
+x[n+1] = x[n] + v[n+1] Δt
+```
 
-- **WebGL stays imperative.** The frame loop owns shaders, GPU buffers, fibers, particles and pointer deformation instead of forcing animation frames through reactive DOM state.
-- **Skein owns application state.** `selected`, `running`, `speed`, `energy` and the explicit write trigger live in `visualizer-app`.
-- **Properties flow down.** Scene, controls and inspector receive live values as DOM property inputs.
-- **Events flow up.** Property selection, stage selection, controls and write actions use bubbling, composed `CustomEvent`s.
-- **Slots compose layout.** `visualizer-shell` uses ordinary named `<slot>` elements.
-- **Keyed DOM stays real.** Runtime-stage buttons and reactive-property buttons are keyed Skein lists layered over native WebGL.
-- **Exact DOM commit is visible.** WebGL carries the pulse, but the destination is ordinary DOM text updated by Skein.
-- **CSS custom-property bindings bridge state into visuals.** Root energy and per-node accent colors remain fine-grained CSS declarations.
-- **Lifecycle cleanup is explicit.** `requestAnimationFrame`, `ResizeObserver` and commit timers are torn down with `onCleanup()`.
+Acceleration combines four terms:
 
-The boundary is intentional: **Skein coordinates the system; WebGL renders the continuous medium; DOM remains DOM.** The example adds no Three.js scene graph, event bus or second application state system.
+```text
+a =
+  Σ μ r / (|r|² + ε²)^(3/2)       gravity / repulsor
+  + κ (ŷ × r) / (|r|² + ε²)       vortex / curl field
+  - γ v                             linear damping
+  + u                               player thrust
+```
+
+The arena is a sphere. Crossing the boundary projects the body back to the surface and reflects the outward velocity component with restitution `e`.
+
+The renderer also samples the same force function on a sparse 3D lattice, so the vectors visible in the scene are the actual field used by physics rather than decorative lines.
+
+## Why this is a useful game-engine domain
+
+The example has the pieces a small engine needs without inventing a Skein-specific runtime abstraction:
+
+- a declarative world schema (`Field[]`, `Rules`);
+- deterministic fixed-step simulation with render interpolation;
+- input as a system;
+- force/physics and collision systems;
+- collectibles and score as game rules;
+- continuous WebGL rendering;
+- game events (`world-telemetry`, `world-impact`, `core-collect`);
+- typed component boundaries;
+- a design-time semantic graph for coding agents.
+
+The world declaration lives in `visualizer-app` and is passed to the simulation through ordinary DOM properties. Changing that declaration changes both runtime behavior and the design-time type contract.
+
+## Design-time inspection
+
+```bash
+node tools/skein-check.mjs examples/visualizer/index.html
+node tools/skein-inspect.mjs examples/visualizer/index.html visualizer-scene
+node tools/skein-inspect.mjs examples/visualizer/index.html --manifest
+```
+
+The semantic model derives the scene inputs, emitted world events, shadow parts and typed CSS custom properties from the same source the browser runs.
+
+## Controls
+
+- drag inside the scene: screen-space thrust;
+- `W A S D`: planar thrust;
+- `Q / E`: depth thrust;
+- **pause world**: stop fixed-step integration while rendering continues;
+- **time**: simulation time scale;
+- **field**: scale all field forces;
+- **reset orbit**: deterministic world reset.
+
+Run the browser regression with:
+
+```bash
+node test/visualizer.mjs
+```

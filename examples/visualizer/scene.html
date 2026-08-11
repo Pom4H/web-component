@@ -45,17 +45,13 @@
   }
 
   this.pointerStart = event => {
+    if (event.target?.closest?.('.hud,.math')) return
     pointerDown = true
     try { event.currentTarget.setPointerCapture?.(event.pointerId) } catch {}
     updatePointer(event)
   }
-  this.pointerMove = event => {
-    if (pointerDown) updatePointer(event)
-  }
-  this.pointerEnd = () => {
-    pointerDown = false
-    steer = [0, 0, 0]
-  }
+  this.pointerMove = event => { if (pointerDown) updatePointer(event) }
+  this.pointerEnd = () => { pointerDown = false; steer = [0, 0, 0] }
 
   queueMicrotask(() => {
     const canvas = host.shadowRoot.querySelector('canvas')
@@ -68,9 +64,7 @@
       const shader = gl.createShader(type)
       gl.shaderSource(shader, source)
       gl.compileShader(shader)
-      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        throw new Error(gl.getShaderInfoLog(shader) || 'shader compile failed')
-      }
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(shader) || 'shader compile failed')
       return shader
     }
     const link = (vertex, fragment) => {
@@ -78,21 +72,17 @@
       gl.attachShader(program, compile(gl.VERTEX_SHADER, vertex))
       gl.attachShader(program, compile(gl.FRAGMENT_SHADER, fragment))
       gl.linkProgram(program)
-      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-        throw new Error(gl.getProgramInfoLog(program) || 'program link failed')
-      }
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program) || 'program link failed')
       return program
     }
 
-    let backgroundProgram
-    let lineProgram
-    let pointProgram
+    let backgroundProgram, lineProgram, pointProgram
     try {
       backgroundProgram = link(`#version 300 es
         precision highp float;
-        void main() {
-          vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
-          gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+        void main(){
+          vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));
+          gl_Position=vec4(p*2.0-1.0,0.0,1.0);
         }
       `, `#version 300 es
         precision highp float;
@@ -100,25 +90,18 @@
         uniform float uTime;
         uniform float uDanger;
         out vec4 outColor;
-        float hash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7))) * 43758.5453123); }
-        float noise(vec2 p){
-          vec2 i=floor(p),f=fract(p); f=f*f*(3.0-2.0*f);
-          return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);
-        }
-        void main() {
+        float box(vec2 p,vec2 b){vec2 d=abs(p)-b;return length(max(d,0.0))+min(max(d.x,d.y),0.0);}
+        void main(){
           vec2 uv=gl_FragCoord.xy/max(uResolution,vec2(1.0));
-          vec2 p=uv*2.0-1.0;
-          p.x*=uResolution.x/max(1.0,uResolution.y);
-          float n=noise(p*2.2+vec2(uTime*.018,-uTime*.012));
-          float n2=noise(p*4.7-vec2(uTime*.009,uTime*.014));
-          float halo=exp(-dot(p,p)*1.4);
-          vec3 color=vec3(.003,.007,.014);
-          color+=vec3(.018,.055,.085)*(n*.26+n2*.09);
-          color+=vec3(.025,.12,.16)*halo*.20;
-          color+=vec3(.18,.035,.02)*uDanger*halo*.12;
-          float vignette=smoothstep(1.55,.2,length(p*.72));
-          color*=.42+.58*vignette;
-          outColor=vec4(color,1.0);
+          vec3 sky=mix(vec3(.73,.89,1.0),vec3(.93,.97,1.0),smoothstep(.05,.9,uv.y));
+          float sun=smoothstep(.075,.02,length(uv-vec2(.78,.78)));
+          sky+=vec3(1.0,.86,.47)*sun*.75;
+          vec2 c=uv-vec2(.26+sin(uTime*.015)*.01,.78);
+          float cloud=smoothstep(.02,-.01,box(c,vec2(.12,.025)));
+          cloud=max(cloud,smoothstep(.02,-.01,box(c+vec2(.07,-.015),vec2(.06,.03))));
+          sky=mix(sky,vec3(1.0),cloud*.55);
+          sky=mix(sky,vec3(.96,.72,.62),uDanger*.08);
+          outColor=vec4(sky,1.0);
         }
       `)
 
@@ -127,12 +110,11 @@
         layout(location=0) in vec3 aPosition;
         layout(location=1) in vec4 aColor;
         out vec4 vColor;
-        void main(){ gl_Position=vec4(aPosition,1.0); vColor=aColor; }
+        void main(){gl_Position=vec4(aPosition,1.0);vColor=aColor;}
       `, `#version 300 es
         precision highp float;
-        in vec4 vColor;
-        out vec4 outColor;
-        void main(){ outColor=vColor; }
+        in vec4 vColor; out vec4 outColor;
+        void main(){outColor=vColor;}
       `)
 
       pointProgram = link(`#version 300 es
@@ -141,461 +123,176 @@
         layout(location=1) in vec4 aColor;
         layout(location=2) in float aSize;
         out vec4 vColor;
-        void main(){ gl_Position=vec4(aPosition,1.0); gl_PointSize=aSize; vColor=aColor; }
+        void main(){gl_Position=vec4(aPosition,1.0);gl_PointSize=aSize;vColor=aColor;}
       `, `#version 300 es
         precision highp float;
-        in vec4 vColor;
-        out vec4 outColor;
+        in vec4 vColor; out vec4 outColor;
         void main(){
-          vec2 p=gl_PointCoord*2.0-1.0;
-          float d=dot(p,p);
-          if(d>1.0) discard;
-          float glow=smoothstep(1.0,.0,d);
-          outColor=vec4(vColor.rgb*(.65+glow*1.35),vColor.a*smoothstep(1.0,.12,d));
+          vec2 p=gl_PointCoord;
+          float edge=min(min(p.x,p.y),min(1.0-p.x,1.0-p.y));
+          float top=mix(.78,1.12,1.0-p.y);
+          float bevel=smoothstep(0.0,.10,edge);
+          vec3 color=vColor.rgb*top;
+          color=mix(color*.62,color,bevel);
+          outColor=vec4(color,vColor.a);
         }
       `)
     } catch (error) {
-      this.status = 'shader error'
-      console.error(error)
-      return
+      this.status='shader error'; console.error(error); return
     }
 
-    const bgVao = gl.createVertexArray()
-    const lineVao = gl.createVertexArray()
-    const lineBuffer = gl.createBuffer()
-    gl.bindVertexArray(lineVao)
-    gl.bindBuffer(gl.ARRAY_BUFFER, lineBuffer)
-    gl.enableVertexAttribArray(0)
-    gl.enableVertexAttribArray(1)
-    gl.vertexAttribPointer(0,3,gl.FLOAT,false,28,0)
-    gl.vertexAttribPointer(1,4,gl.FLOAT,false,28,12)
+    const bgVao=gl.createVertexArray()
+    const lineVao=gl.createVertexArray(), lineBuffer=gl.createBuffer()
+    gl.bindVertexArray(lineVao); gl.bindBuffer(gl.ARRAY_BUFFER,lineBuffer)
+    gl.enableVertexAttribArray(0); gl.enableVertexAttribArray(1)
+    gl.vertexAttribPointer(0,3,gl.FLOAT,false,28,0); gl.vertexAttribPointer(1,4,gl.FLOAT,false,28,12)
 
-    const pointVao = gl.createVertexArray()
-    const pointBuffer = gl.createBuffer()
-    gl.bindVertexArray(pointVao)
-    gl.bindBuffer(gl.ARRAY_BUFFER, pointBuffer)
-    gl.enableVertexAttribArray(0)
-    gl.enableVertexAttribArray(1)
-    gl.enableVertexAttribArray(2)
-    gl.vertexAttribPointer(0,3,gl.FLOAT,false,32,0)
-    gl.vertexAttribPointer(1,4,gl.FLOAT,false,32,12)
-    gl.vertexAttribPointer(2,1,gl.FLOAT,false,32,28)
+    const pointVao=gl.createVertexArray(), pointBuffer=gl.createBuffer()
+    gl.bindVertexArray(pointVao); gl.bindBuffer(gl.ARRAY_BUFFER,pointBuffer)
+    gl.enableVertexAttribArray(0); gl.enableVertexAttribArray(1); gl.enableVertexAttribArray(2)
+    gl.vertexAttribPointer(0,3,gl.FLOAT,false,32,0); gl.vertexAttribPointer(1,4,gl.FLOAT,false,32,12); gl.vertexAttribPointer(2,1,gl.FLOAT,false,32,28)
 
-    const location = (program, name) => gl.getUniformLocation(program, name)
-    const uBgResolution = location(backgroundProgram, 'uResolution')
-    const uBgTime = location(backgroundProgram, 'uTime')
-    const uBgDanger = location(backgroundProgram, 'uDanger')
+    const uniform=(program,name)=>gl.getUniformLocation(program,name)
+    const uBgResolution=uniform(backgroundProgram,'uResolution')
+    const uBgTime=uniform(backgroundProgram,'uTime')
+    const uBgDanger=uniform(backgroundProgram,'uDanger')
 
-    const add = (a,b) => [a[0]+b[0],a[1]+b[1],a[2]+b[2]]
-    const sub = (a,b) => [a[0]-b[0],a[1]-b[1],a[2]-b[2]]
-    const mul = (a,s) => [a[0]*s,a[1]*s,a[2]*s]
-    const dot = (a,b) => a[0]*b[0]+a[1]*b[1]+a[2]*b[2]
-    const length = a => Math.hypot(a[0],a[1],a[2])
-    const normal = a => {
-      const m=length(a) || 1
-      return [a[0]/m,a[1]/m,a[2]/m]
-    }
-    const clampMagnitude = (a,max) => {
-      const m=length(a)
-      return m>max ? mul(a,max/m) : a
-    }
-    const hex = value => {
-      const text=String(value||'#68f7d2').replace('#','')
-      const n=Number.parseInt(text,16)
-      return [((n>>16)&255)/255,((n>>8)&255)/255,(n&255)/255]
-    }
+    const add=(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]]
+    const sub=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]]
+    const mul=(a,s)=>[a[0]*s,a[1]*s,a[2]*s]
+    const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2]
+    const length=a=>Math.hypot(a[0],a[1],a[2])
+    const normal=a=>{const m=length(a)||1;return[a[0]/m,a[1]/m,a[2]/m]}
+    const clampMagnitude=(a,max)=>{const m=length(a);return m>max?mul(a,max/m):a}
+    const hex=value=>{const n=Number.parseInt(String(value||'#70a65d').replace('#',''),16);return[((n>>16)&255)/255,((n>>8)&255)/255,(n&255)/255]}
 
     let seed=0x51e1d
-    const random=()=>{ seed=(seed*1664525+1013904223)>>>0; return seed/4294967296 }
-    const randomSphere = radius => {
-      const z=random()*2-1
-      const a=random()*Math.PI*2
-      const r=Math.sqrt(Math.max(0,1-z*z))
-      const s=radius*(.35+random()*.5)
-      return [Math.cos(a)*r*s,z*s,Math.sin(a)*r*s]
-    }
+    const random=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296}
+    const randomSphere=radius=>{const z=random()*2-1,a=random()*Math.PI*2,r=Math.sqrt(Math.max(0,1-z*z)),s=radius*(.35+random()*.5);return[Math.cos(a)*r*s,z*s,Math.sin(a)*r*s]}
 
-    let player
-    let previousPosition
-    let score
-    let contacts
-    let simTime
-    let cores
-    let trail
-
-    const resetWorld = () => {
+    let player,previousPosition,score,contacts,simTime,cores,trail
+    const resetWorld=()=>{
       seed=0x51e1d
-      const playerEntity=this.world.entities.find(entity => entity.body && entity.controller) || {
-        transform:{position:[0,.15,3.5]},
-        body:{velocity:[1.8,.25,-.45],radius:.18},
-        controller:{thrust:7.5}
-      }
-      player={
-        position:[...playerEntity.transform.position],
-        velocity:[...playerEntity.body.velocity],
-        radius:playerEntity.body.radius,
-        thrust:playerEntity.controller.thrust
-      }
-      previousPosition=[...player.position]
-      score=0
-      contacts=0
-      simTime=0
-      cores=this.world.entities
-        .filter(entity => entity.collectible)
-        .map((entity,index)=>({
-          id:entity.id,
-          value:entity.collectible.value,
-          respawnRadius:entity.collectible.respawnRadius,
-          position:[...entity.transform.position],
-          color:hex(entity.render.color),
-          size:entity.render.size,
-          pulse:index*.93
-        }))
-      trail=[]
-      this.score=0
-      this.contacts=0
-      this.simTime=0
-      this.speedNow=length(player.velocity)
+      const e=this.world.entities.find(entity=>entity.body&&entity.controller)||{transform:{position:[0,.15,3.5]},body:{velocity:[1.8,.25,-.45],radius:.18},controller:{thrust:7.5}}
+      player={position:[...e.transform.position],velocity:[...e.body.velocity],radius:e.body.radius,thrust:e.controller.thrust}
+      previousPosition=[...player.position]; score=0; contacts=0; simTime=0
+      cores=this.world.entities.filter(entity=>entity.collectible).map((entity,index)=>({id:entity.id,value:entity.collectible.value,respawnRadius:entity.collectible.respawnRadius,position:[...entity.transform.position],color:hex(entity.render.color),size:entity.render.size,pulse:index*.93}))
+      trail=[]; this.score=0; this.contacts=0; this.simTime=0; this.speedNow=length(player.velocity); this.thrustNow=0
     }
     resetWorld()
 
-    const keyDown = event => {
-      if (['KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE'].includes(event.code)) {
-        keys.add(event.code)
-        event.preventDefault()
-      }
-    }
-    const keyUp = event => keys.delete(event.code)
-    window.addEventListener('keydown', keyDown, { signal:abortSignal })
-    window.addEventListener('keyup', keyUp, { signal:abortSignal })
+    const keyDown=event=>{if(['KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE'].includes(event.code)){keys.add(event.code);event.preventDefault()}}
+    const keyUp=event=>keys.delete(event.code)
+    window.addEventListener('keydown',keyDown,{signal:abortSignal}); window.addEventListener('keyup',keyUp,{signal:abortSignal})
 
-    const controlVector = () => {
-      let x=steer[0], y=steer[1], z=0
-      if(keys.has('KeyA')) x-=1
-      if(keys.has('KeyD')) x+=1
-      if(keys.has('KeyW')) y+=1
-      if(keys.has('KeyS')) y-=1
-      if(keys.has('KeyQ')) z-=1
-      if(keys.has('KeyE')) z+=1
+    const controlVector=()=>{
+      let x=steer[0],y=steer[1],z=0
+      if(keys.has('KeyA'))x-=1;if(keys.has('KeyD'))x+=1;if(keys.has('KeyW'))y+=1;if(keys.has('KeyS'))y-=1;if(keys.has('KeyQ'))z-=1;if(keys.has('KeyE'))z+=1
       return clampMagnitude([x,y,z],1)
     }
-
-    const fieldAcceleration = position => {
+    const fieldAcceleration=position=>{
       let acceleration=[0,0,0]
-      const scale=Math.max(0,Number(this.fieldScale)||0)
-      const epsilon2=.34
-      for(const field of this.fields) {
-        const toward=sub(field.position,position)
-        const r2=dot(toward,toward)+epsilon2
-        if(field.kind==='vortex') {
-          const radial=sub(position,field.position)
-          const tangent=[radial[2],0,-radial[0]]
-          const tangentScale=(field.strength*scale)/(r2+.45)
-          const inward=mul(radial,-field.strength*scale*.055/(Math.sqrt(r2)+.6))
-          acceleration=add(acceleration,add(mul(tangent,tangentScale),inward))
-        } else {
-          const sign=field.kind==='gravity'?1:-1
-          const invR3=1/(r2*Math.sqrt(r2))
+      const scale=Math.max(0,Number(this.fieldScale)||0),epsilon2=.34
+      for(const field of this.fields){
+        const toward=sub(field.position,position),r2=dot(toward,toward)+epsilon2
+        if(field.kind==='vortex'){
+          const radial=sub(position,field.position),tangent=[radial[2],0,-radial[0]]
+          acceleration=add(acceleration,add(mul(tangent,(field.strength*scale)/(r2+.45)),mul(radial,-field.strength*scale*.055/(Math.sqrt(r2)+.6))))
+        }else{
+          const sign=field.kind==='gravity'?1:-1,invR3=1/(r2*Math.sqrt(r2))
           acceleration=add(acceleration,mul(toward,sign*field.strength*scale*invR3))
         }
       }
       return acceleration
     }
 
-    const systems = {
-      input(frame) {
-        frame.control=controlVector()
+    const systems={
+      input(frame){frame.control=controlVector()},
+      forces(frame){frame.acceleration=fieldAcceleration(player.position);frame.acceleration=add(frame.acceleration,mul(frame.control,player.thrust));frame.acceleration=add(frame.acceleration,mul(player.velocity,-this.world.rules.drag))},
+      integrate(frame,dt){player.velocity=add(player.velocity,mul(frame.acceleration,dt));player.velocity=clampMagnitude(player.velocity,this.world.rules.maxSpeed);player.position=add(player.position,mul(player.velocity,dt))},
+      bounds(){
+        const safe=this.world.rules.arenaRadius-player.radius,m=length(player.position);if(m<=safe)return
+        const n=normal(player.position);player.position=mul(n,safe);const outward=dot(player.velocity,n);if(outward<=0)return
+        player.velocity=sub(player.velocity,mul(n,(1+this.world.rules.restitution)*outward));contacts++
+        host.dispatchEvent(new CustomEvent('world-impact',{detail:{speed:Math.abs(outward),contacts},bubbles:true,composed:true}))
       },
-      forces(frame) {
-        frame.acceleration=fieldAcceleration(player.position)
-        frame.acceleration=add(frame.acceleration,mul(frame.control,player.thrust))
-        frame.acceleration=add(frame.acceleration,mul(player.velocity,-this.world.rules.drag))
-      },
-      integrate(frame,dt) {
-        player.velocity=add(player.velocity,mul(frame.acceleration,dt))
-        player.velocity=clampMagnitude(player.velocity,this.world.rules.maxSpeed)
-        player.position=add(player.position,mul(player.velocity,dt))
-      },
-      bounds() {
-        const safeRadius=this.world.rules.arenaRadius-player.radius
-        const radialLength=length(player.position)
-        if(radialLength<=safeRadius) return
-        const n=normal(player.position)
-        player.position=mul(n,safeRadius)
-        const outward=dot(player.velocity,n)
-        if(outward<=0) return
-        player.velocity=sub(player.velocity,mul(n,(1+this.world.rules.restitution)*outward))
-        contacts++
-        host.dispatchEvent(new CustomEvent('world-impact', {
-          detail:{ speed:Math.abs(outward), contacts },
-          bubbles:true, composed:true
-        }))
-      },
-      collect() {
-        for(const core of cores) {
-          if(length(sub(player.position,core.position))>=this.world.rules.pickupRadius+player.radius) continue
-          score+=core.value
-          core.position=randomSphere(this.world.rules.arenaRadius*core.respawnRadius)
-          core.pulse=random()*Math.PI*2
-          host.dispatchEvent(new CustomEvent('core-collect', {
-            detail:{ score, core:core.id, value:core.value },
-            bubbles:true, composed:true
-          }))
-        }
-      }
+      collect(){for(const core of cores){if(length(sub(player.position,core.position))>=this.world.rules.pickupRadius+player.radius)continue;score+=core.value;core.position=randomSphere(this.world.rules.arenaRadius*core.respawnRadius);core.pulse=random()*Math.PI*2;host.dispatchEvent(new CustomEvent('core-collect',{detail:{score,core:core.id,value:core.value},bubbles:true,composed:true}))}}
     }
-
-    const step = dt => {
+    const step=dt=>{
       previousPosition=[...player.position]
-      const frame={ control:[0,0,0], acceleration:[0,0,0] }
-      for(const system of this.world.systems) {
-        if(system.phase!=='fixed') continue
-        systems[system.id]?.call(this,frame,dt)
-      }
-      simTime+=dt
-      trail.push([...player.position])
-      if(trail.length>150) trail.shift()
-      this.thrustNow=Number(length(frame.control).toFixed(2))
+      const frame={control:[0,0,0],acceleration:[0,0,0]}
+      for(const system of this.world.systems){if(system.phase==='fixed')systems[system.id]?.call(this,frame,dt)}
+      simTime+=dt;trail.push([...player.position]);if(trail.length>90)trail.shift();this.thrustNow=Number(length(frame.control).toFixed(2))
     }
 
-    const resize=()=>{
-      const ratio=Math.min(1.7,window.devicePixelRatio||1)
-      const width=Math.max(1,Math.round(canvas.clientWidth*ratio))
-      const height=Math.max(1,Math.round(canvas.clientHeight*ratio))
-      if(canvas.width!==width||canvas.height!==height){canvas.width=width;canvas.height=height}
-      gl.viewport(0,0,width,height)
-    }
-    const observer=new ResizeObserver(resize)
-    observer.observe(canvas)
-    resize()
+    const resize=()=>{const ratio=Math.min(1.6,window.devicePixelRatio||1),w=Math.max(1,Math.round(canvas.clientWidth*ratio)),h=Math.max(1,Math.round(canvas.clientHeight*ratio));if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h}gl.viewport(0,0,w,h)}
+    const observer=new ResizeObserver(resize);observer.observe(canvas);resize()
 
-    const project=(point,now)=>{
-      const yaw=-.32+now*.000035
-      const pitch=.18+Math.sin(now*.00017)*.035
-      const cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch)
-      const rx=cy*point[0]-sy*point[2]
-      const rz=sy*point[0]+cy*point[2]
-      const ry=cp*point[1]-sp*rz
-      const depth=sp*point[1]+cp*rz+12.5
-      const aspect=canvas.width/Math.max(1,canvas.height)
-      const focal=1/Math.tan(.68/2)
-      return [rx*focal/(aspect*depth),ry*focal/depth,Math.max(-.95,Math.min(.95,(depth-3)/16)),depth]
+    const project=point=>{
+      const yaw=-.52,pitch=.34,cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch)
+      const rx=cy*point[0]-sy*point[2],rz=sy*point[0]+cy*point[2],ry=cp*point[1]-sp*rz,depth=sp*point[1]+cp*rz+13.5
+      const aspect=canvas.width/Math.max(1,canvas.height),focal=1/Math.tan(.72/2)
+      return[rx*focal/(aspect*depth),ry*focal/depth,Math.max(-.95,Math.min(.95,(depth-3)/17)),depth]
     }
+    const lineVertex=(list,p,c,a)=>{const q=project(p),fade=Math.max(.2,Math.min(1,1.35-(q[3]-8)*.08));list.push(q[0],q[1],q[2],c[0],c[1],c[2],a*fade)}
+    const pointVertex=(list,p,c,a,size)=>{const q=project(p),fade=Math.max(.24,Math.min(1,1.3-(q[3]-8)*.07));list.push(q[0],q[1],q[2],c[0],c[1],c[2],a*fade,size*(15/Math.max(5,q[3])))}
+    const segment=(list,a,b,c,alpha)=>{lineVertex(list,a,c,alpha);lineVertex(list,b,c,alpha)}
+    const drawLines=data=>{if(!data.length)return;gl.useProgram(lineProgram);gl.bindVertexArray(lineVao);gl.bindBuffer(gl.ARRAY_BUFFER,lineBuffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(data),gl.DYNAMIC_DRAW);gl.drawArrays(gl.LINES,0,data.length/7)}
+    const drawPoints=data=>{if(!data.length)return;gl.useProgram(pointProgram);gl.bindVertexArray(pointVao);gl.bindBuffer(gl.ARRAY_BUFFER,pointBuffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(data),gl.DYNAMIC_DRAW);gl.drawArrays(gl.POINTS,0,data.length/8)}
 
-    const lineVertex=(list,point,color,alpha,now)=>{
-      const q=project(point,now)
-      const fade=Math.max(.12,Math.min(1,1.4-(q[3]-8)*.12))
-      list.push(q[0],q[1],q[2],color[0],color[1],color[2],alpha*fade)
+    const terrain=[]
+    for(let x=-7;x<=7;x++)for(let z=-7;z<=7;z++){
+      const hill=Math.max(0,Math.round((Math.sin(x*.72)+Math.cos(z*.61)+1.25)*.38))
+      for(let y=0;y<=hill;y++)terrain.push({position:[x*.72,-3.65+y*.42,z*.72],color:y===hill?[.38,.66,.28]:[.52,.38,.22],size:y===hill?13:11})
     }
-    const pointVertex=(list,point,color,alpha,size,now)=>{
-      const q=project(point,now)
-      const fade=Math.max(.16,Math.min(1,1.45-(q[3]-8)*.11))
-      list.push(q[0],q[1],q[2],color[0],color[1],color[2],alpha*fade,size*(13/Math.max(5,q[3])))
-    }
-    const segment=(list,a,b,color,alpha,now)=>{
-      lineVertex(list,a,color,alpha,now)
-      lineVertex(list,b,color,alpha,now)
-    }
-
-    const drawLines=data=>{
-      if(!data.length)return
-      gl.useProgram(lineProgram)
-      gl.bindVertexArray(lineVao)
-      gl.bindBuffer(gl.ARRAY_BUFFER,lineBuffer)
-      gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(data),gl.DYNAMIC_DRAW)
-      gl.drawArrays(gl.LINES,0,data.length/7)
-    }
-    const drawPoints=data=>{
-      if(!data.length)return
-      gl.useProgram(pointProgram)
-      gl.bindVertexArray(pointVao)
-      gl.bindBuffer(gl.ARRAY_BUFFER,pointBuffer)
-      gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(data),gl.DYNAMIC_DRAW)
-      gl.drawArrays(gl.POINTS,0,data.length/8)
-    }
-
-    const sphereWire=(list,radius,color,alpha,now)=>{
-      const rings=[
-        t=>[Math.cos(t)*radius,Math.sin(t)*radius,0],
-        t=>[Math.cos(t)*radius,0,Math.sin(t)*radius],
-        t=>[0,Math.cos(t)*radius,Math.sin(t)*radius]
-      ]
-      for(const ring of rings) {
-        let previous=ring(0)
-        for(let i=1;i<=72;i++) {
-          const current=ring(i/72*Math.PI*2)
-          segment(list,previous,current,color,alpha,now)
-          previous=current
-        }
-      }
-    }
-
-    const stars=Array.from({length:180},()=>({
-      position:randomSphere(10+random()*6),
-      size:.7+random()*1.8,
-      alpha:.08+random()*.25
-    }))
+    const clouds=[]
+    for(const base of [[-3.8,3.8,-1.5],[2.8,4.2,-3.5]])for(let x=0;x<5;x++)for(let z=0;z<2;z++)clouds.push([base[0]+x*.48,base[1]+((x+z)%2)*.08,base[2]+z*.48])
 
     this.status='simulation live'
-    let previousFrame=performance.now()
-    let accumulator=0
-    let frames=0
-    let fpsStart=previousFrame
-    let telemetryAt=previousFrame
-    let raf=0
-
+    let previousFrame=performance.now(),accumulator=0,frames=0,fpsStart=previousFrame,telemetryAt=previousFrame,raf=0
     const render=now=>{
-      const realDt=Math.min(.1,(now-previousFrame)/1000)
-      previousFrame=now
-
-      if(this.resetToken!==lastReset) {
-        lastReset=this.resetToken
-        resetWorld()
-        accumulator=0
-      }
-
+      const realDt=Math.min(.1,(now-previousFrame)/1000);previousFrame=now
+      if(this.resetToken!==lastReset){lastReset=this.resetToken;resetWorld();accumulator=0}
       const fixed=1/Math.max(30,Number(this.world.rules.fixedHz)||120)
-      if(this.running) {
-        accumulator+=realDt*Math.max(.01,Number(this.timeScale)||1)
-        let steps=0
-        while(accumulator>=fixed && steps<16) {
-          step(fixed)
-          accumulator-=fixed
-          steps++
-        }
-        if(steps===16) accumulator=0
-      }
+      if(this.running){accumulator+=realDt*Math.max(.01,Number(this.timeScale)||1);let steps=0;while(accumulator>=fixed&&steps<16){step(fixed);accumulator-=fixed;steps++}if(steps===16)accumulator=0}
 
       const alpha=Math.max(0,Math.min(1,accumulator/fixed))
-      const renderPosition=[
-        previousPosition[0]+(player.position[0]-previousPosition[0])*alpha,
-        previousPosition[1]+(player.position[1]-previousPosition[1])*alpha,
-        previousPosition[2]+(player.position[2]-previousPosition[2])*alpha
-      ]
-      const speed=length(player.velocity)
-      const danger=Math.max(0,Math.min(1,(length(player.position)/this.world.rules.arenaRadius-.72)/.28))
+      const renderPosition=[previousPosition[0]+(player.position[0]-previousPosition[0])*alpha,previousPosition[1]+(player.position[1]-previousPosition[1])*alpha,previousPosition[2]+(player.position[2]-previousPosition[2])*alpha]
+      const speed=length(player.velocity),danger=Math.max(0,Math.min(1,(length(player.position)/this.world.rules.arenaRadius-.78)/.22))
 
-      gl.disable(gl.BLEND)
-      gl.bindVertexArray(bgVao)
-      gl.useProgram(backgroundProgram)
-      gl.uniform2f(uBgResolution,canvas.width,canvas.height)
-      gl.uniform1f(uBgTime,now*.001)
-      gl.uniform1f(uBgDanger,danger)
-      gl.drawArrays(gl.TRIANGLES,0,3)
+      gl.disable(gl.BLEND);gl.bindVertexArray(bgVao);gl.useProgram(backgroundProgram);gl.uniform2f(uBgResolution,canvas.width,canvas.height);gl.uniform1f(uBgTime,now*.001);gl.uniform1f(uBgDanger,danger);gl.drawArrays(gl.TRIANGLES,0,3)
+      gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA)
 
-      gl.enable(gl.BLEND)
-      gl.blendFunc(gl.SRC_ALPHA,gl.ONE)
+      const lines=[],points=[]
+      for(let i=-8;i<=8;i++){segment(lines,[i*.72,-3.44,-5.8],[i*.72,-3.44,5.8],[.25,.49,.22],.20);segment(lines,[-5.8,-3.44,i*.72],[5.8,-3.44,i*.72],[.25,.49,.22],.20)}
+      for(const block of terrain)pointVertex(points,block.position,block.color,1,block.size)
+      for(const cloud of clouds)pointVertex(points,cloud,[1,1,1],.88,17)
 
-      const lines=[]
-      const points=[]
-      sphereWire(lines,this.world.rules.arenaRadius,[.16,.35,.48],.10,now)
+      for(let x=-4;x<=4;x+=2)for(let z=-4;z<=4;z+=2){const p=[x,-1.2,z];if(length(p)>this.world.rules.arenaRadius*.9)continue;const a=fieldAcceleration(p),m=length(a);if(m<.001)continue;segment(lines,p,add(p,mul(normal(a),.28+Math.min(.42,m*.08))),[.28,.52,.43],.18)}
+      for(let i=1;i<trail.length;i++){const t=i/trail.length;segment(lines,trail[i-1],trail[i],[.97,.72,.22],.04+t*.34)}
 
-      for(let x=-5;x<=5;x+=2) {
-        for(let z=-5;z<=5;z+=2) {
-          for(const y of [-1.7,0,1.7]) {
-            const p=[x,y,z]
-            if(length(p)>this.world.rules.arenaRadius*.9) continue
-            const a=fieldAcceleration(p)
-            const magnitude=length(a)
-            if(magnitude<.001) continue
-            const direction=normal(a)
-            const endpoint=add(p,mul(direction,.25+Math.min(.55,magnitude*.10)))
-            segment(lines,p,endpoint,[.20,.55,.65],.08+Math.min(.16,magnitude*.025),now)
-          }
-        }
+      for(const field of this.fields){const c=hex(field.color);pointVertex(points,field.position,c,.95,field.radius*22);pointVertex(points,add(field.position,[0,.3,0]),[1,1,1],.45,field.radius*7)}
+      for(const core of cores){const pulse=.9+Math.sin(now*.004+core.pulse)*.10;pointVertex(points,core.position,core.color,.98,core.size*pulse)}
+      pointVertex(points,renderPosition,[1,.93,.57],1,15);pointVertex(points,add(renderPosition,[0,.08,0]),[1,1,1],.8,7)
+
+      const velocityTip=add(renderPosition,mul(player.velocity,.16));segment(lines,renderPosition,velocityTip,[.24,.40,.28],.55)
+      const force=fieldAcceleration(renderPosition);if(length(force)>.0001)segment(lines,renderPosition,add(renderPosition,mul(normal(force),.62)),[.46,.35,.68],.45)
+      drawLines(lines);drawPoints(points)
+
+      frames++;if(now-fpsStart>500){this.fps=Math.round(frames*1000/(now-fpsStart));frames=0;fpsStart=now}
+      if(now-telemetryAt>90){
+        telemetryAt=now;this.score=score;this.contacts=contacts;this.simTime=Number(simTime.toFixed(2));this.speedNow=Number(speed.toFixed(2))
+        const detail={score,speed:Number(speed.toFixed(2)),contacts,simTime:Number(simTime.toFixed(2)),thrust:this.thrustNow,position:{x:Number(player.position[0].toFixed(3)),y:Number(player.position[1].toFixed(3)),z:Number(player.position[2].toFixed(3))}}
+        host.style.setProperty('--thrust',String(this.thrustNow));host.style.setProperty('--danger',String(danger));host.dispatchEvent(new CustomEvent('world-telemetry',{detail,bubbles:true,composed:true}))
       }
-
-      for(let i=1;i<trail.length;i++) {
-        const t=i/trail.length
-        segment(lines,trail[i-1],trail[i],[.38,.95,.83],.035+t*.34,now)
-      }
-
-      for(const star of stars) pointVertex(points,star.position,[.45,.62,.78],star.alpha,star.size,now)
-
-      for(const field of this.fields) {
-        const color=hex(field.color)
-        pointVertex(points,field.position,color,.18,field.radius*30,now)
-        pointVertex(points,field.position,color,.92,field.radius*10,now)
-        const axis=field.kind==='vortex'?[0,1.35,0]:field.kind==='repulsor'?[1.1,0,0]:[0,-1.1,0]
-        segment(lines,sub(field.position,axis),add(field.position,axis),color,.34,now)
-      }
-
-      for(const core of cores) {
-        const pulse=.82+Math.sin(now*.003+core.pulse)*.18
-        pointVertex(points,core.position,core.color,.72,core.size*pulse,now)
-      }
-
-      pointVertex(points,renderPosition,[.35,1,.82],.35,18,now)
-      pointVertex(points,renderPosition,[1,1,1],1,6.5,now)
-
-      const velocityTip=add(renderPosition,mul(player.velocity,.18))
-      segment(lines,renderPosition,velocityTip,[1,1,1],.55,now)
-      const force=fieldAcceleration(renderPosition)
-      if(length(force)>.0001) {
-        const forceTip=add(renderPosition,mul(normal(force),.7))
-        segment(lines,renderPosition,forceTip,[.64,.42,1],.48,now)
-      }
-
-      drawLines(lines)
-      drawPoints(points)
-
-      frames++
-      if(now-fpsStart>500) {
-        this.fps=Math.round(frames*1000/(now-fpsStart))
-        frames=0
-        fpsStart=now
-      }
-
-      if(now-telemetryAt>90) {
-        telemetryAt=now
-        this.score=score
-        this.contacts=contacts
-        this.simTime=Number(simTime.toFixed(2))
-        this.speedNow=Number(speed.toFixed(2))
-        const detail={
-          score,
-          speed:Number(speed.toFixed(2)),
-          contacts,
-          simTime:Number(simTime.toFixed(2)),
-          thrust:this.thrustNow,
-          position:{
-            x:Number(player.position[0].toFixed(3)),
-            y:Number(player.position[1].toFixed(3)),
-            z:Number(player.position[2].toFixed(3))
-          }
-        }
-        host.style.setProperty('--thrust',String(this.thrustNow))
-        host.style.setProperty('--danger',String(danger))
-        host.dispatchEvent(new CustomEvent('world-telemetry', {
-          detail, bubbles:true, composed:true
-        }))
-      }
-
       raf=requestAnimationFrame(render)
     }
-
     raf=requestAnimationFrame(render)
-    onCleanup(()=>{
-      cancelAnimationFrame(raf)
-      observer.disconnect()
-      gl.deleteBuffer(lineBuffer)
-      gl.deleteBuffer(pointBuffer)
-      gl.deleteProgram(backgroundProgram)
-      gl.deleteProgram(lineProgram)
-      gl.deleteProgram(pointProgram)
-    })
+    onCleanup(()=>{cancelAnimationFrame(raf);observer.disconnect();gl.deleteBuffer(lineBuffer);gl.deleteBuffer(pointBuffer);gl.deleteProgram(backgroundProgram);gl.deleteProgram(lineProgram);gl.deleteProgram(pointProgram)})
   })
 </script>
 
-<section
-  class="surface"
-  part="world"
-  tabindex="0"
-  @pointerdown={pointerStart}
-  @pointermove={pointerMove}
-  @pointerup={pointerEnd}
-  @pointercancel={pointerEnd}
-  @pointerleave={pointerEnd}>
+<section class="surface" part="world" tabindex="0" @pointerdown={pointerStart} @pointermove={pointerMove} @pointerup={pointerEnd} @pointercancel={pointerEnd} @pointerleave={pointerEnd}>
   <canvas part="canvas"></canvas>
 
   <div class="math" part="math">
@@ -607,33 +304,40 @@
 
   <div class="hud" part="hud">
     <span>{status}</span>
-    <b>{score} energy</b>
+    <b>{score} blocks</b>
     <i>{speedNow} m/s</i>
     <em>{fps} fps</em>
   </div>
 
-  <div class="hint">drag to thrust · W A S D + Q E</div>
+  <div class="hint">drag anywhere · W A S D + Q E</div>
 </section>
 
 <style>
   @property --thrust { syntax:"<number>"; inherits:false; initial-value:0; }
   @property --danger { syntax:"<number>"; inherits:false; initial-value:0; }
-  :host { --thrust:0; --danger:0; display:block; width:100%; height:100vh; min-height:520px; color:#eaf3ff; }
+  :host { --thrust:0; --danger:0; display:block; width:100%; height:100vh; min-height:520px; color:#29402e; }
   * { box-sizing:border-box; }
-  .surface { position:relative; width:100%; height:100%; overflow:hidden; outline:none; cursor:crosshair; touch-action:none; }
+  .surface { position:relative; width:100%; height:100%; overflow:hidden; outline:none; cursor:grab; touch-action:none; background:#bfe5ff; }
+  .surface:active { cursor:grabbing; }
   canvas { display:block; width:100%; height:100%; }
-  .math { position:absolute; left:30px; top:38%; display:grid; gap:7px; max-width:680px; pointer-events:none; opacity:.74; }
-  .math small,.hud,.hint { font:700 8px ui-monospace,monospace; letter-spacing:.08em; text-transform:uppercase; }
-  .math small { color:#53677f; }
-  .math code { color:#66809a; font:600 10px/1.4 ui-monospace,monospace; text-shadow:0 0 20px #000; }
-  .math code:first-of-type { color:#8caec6; }
-  .math code:last-of-type { color:#68f7d2; opacity:.65; }
-  .hud { position:absolute; left:50%; top:27px; translate:-50% 0; display:flex; gap:7px; align-items:center; color:#6e8199; pointer-events:none; }
-  .hud span,.hud b,.hud i,.hud em { padding:7px 9px; border:1px solid #17304a; border-radius:999px; background:#06101bbb; font-style:normal; font-weight:700; }
-  .hud b { color:#ffd26a; }
-  .hud i { color:color-mix(in srgb,#68f7d2 calc(60% + var(--thrust)*30%),#71839b); }
-  .hud span { color:#68f7d2; }
-  .hint { position:absolute; right:30px; bottom:28px; color:#40536a; pointer-events:none; }
-  .surface::after { content:""; position:absolute; inset:0; pointer-events:none; box-shadow:inset 0 0 calc(70px + var(--danger)*100px) color-mix(in srgb,#ff644d calc(var(--danger)*28%),transparent); }
-  @media(max-width:800px){.math{left:18px;top:44%;max-width:78vw}.math code:nth-of-type(2),.math code:nth-of-type(3){display:none}.hud{top:auto;bottom:82px;left:18px;translate:0}.hud em{display:none}.hint{right:18px;bottom:18px}}
+  .math { position:absolute; left:30px; top:40%; display:grid; gap:7px; max-width:680px; pointer-events:none; opacity:.72; }
+  .math small,.hud,.hint { font:800 8px ui-monospace,monospace; letter-spacing:.08em; text-transform:uppercase; }
+  .math small { color:#49684f; }
+  .math code { color:#52725c; font:700 10px/1.4 ui-monospace,monospace; text-shadow:0 1px #fff9; }
+  .math code:last-of-type { color:#725a9a; }
+  .hud { position:absolute; left:50%; top:27px; translate:-50% 0; display:flex; gap:7px; align-items:center; color:#405a47; pointer-events:none; }
+  .hud span,.hud b,.hud i,.hud em { padding:7px 9px; border:1px solid #6c8a73aa; border-radius:7px; background:#f7fff2d9; box-shadow:0 3px 0 #4b674126; font-style:normal; font-weight:800; }
+  .hud b { color:#9a6b00; background:#fff6c8e8; }
+  .hud i { color:color-mix(in srgb,#2c7c50 calc(65% + var(--thrust)*25%),#516759); }
+  .hud span { color:#39724a; }
+  .hint { position:absolute; right:30px; bottom:28px; padding:7px 9px; border-radius:6px; color:#506959; background:#f3ffe9b8; pointer-events:none; }
+  .surface::after { content:""; position:absolute; inset:0; pointer-events:none; box-shadow:inset 0 0 calc(20px + var(--danger)*70px) color-mix(in srgb,#e58c61 calc(var(--danger)*16%),transparent); }
+  @media(max-width:800px),(pointer:coarse){
+    :host{height:100dvh;min-height:100dvh}
+    .math{display:none}
+    .hud{top:calc(env(safe-area-inset-top) + 64px);left:12px;translate:0;gap:5px}
+    .hud span,.hud em{display:none}
+    .hud b,.hud i{padding:7px 8px;background:#f7fff0e8}
+    .hint{display:none}
+  }
 </style>

@@ -1,0 +1,16 @@
+<script>
+  /** @typedef {{ id:string, unitId:string, severity:'warning'|'alarm', message:string, acknowledged:boolean }} Alarm */
+  input('alarms', /** @type {Alarm[]} */ ([]))
+</script>
+
+<section>
+  <header><span>Active events</span><b>{alarms.length}</b></header>
+  <article each={alarms} key={id} data-severity={severity}>
+    <code>{id}</code>
+    <strong>{unitId}</strong>
+    <span>{message}</span>
+    <small>{severity}</small>
+  </article>
+</section>
+
+<style>:host{display:block}section{border:1px solid #252b26;background:#101411}header,article{display:grid;grid-template-columns:90px 90px 1fr 80px;gap:10px;align-items:center;padding:10px 13px}header{display:flex;justify-content:space-between;border-bottom:1px solid #252b26;color:#7d887f;font:700 10px ui-monospace,monospace;text-transform:uppercase}article+article{border-top:1px solid #202521}article{font-size:12px}article small{text-transform:uppercase;text-align:right}article[data-severity="alarm"] small{color:#ff8978}article[data-severity="warning"] small{color:#ffd176}@media(max-width:650px){article{grid-template-columns:70px 70px 1fr}article small{display:none}}</style>

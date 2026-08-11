@@ -1,0 +1,17 @@
+<script>
+  /** @typedef {{ status:'normal'|'warning'|'alarm' }} UnitStatus */
+  input('units', /** @type {UnitStatus[]} */ ([]))
+  this.normal = computed(() => this.units.filter(unit => unit.status === 'normal').length)
+  this.warning = computed(() => this.units.filter(unit => unit.status === 'warning').length)
+  this.alarm = computed(() => this.units.filter(unit => unit.status === 'alarm').length)
+  this.total = computed(() => this.units.length)
+</script>
+
+<section>
+  <control-kpi label="Units" .value={total}></control-kpi>
+  <control-kpi label="Normal" .value={normal}></control-kpi>
+  <control-kpi label="Warning" .value={warning}></control-kpi>
+  <control-kpi label="Alarm" .value={alarm}></control-kpi>
+</section>
+
+<style>:host{display:block}section{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}@media(max-width:650px){section{grid-template-columns:repeat(2,1fr)}}</style>

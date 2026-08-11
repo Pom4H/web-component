@@ -1,0 +1,18 @@
+<script>
+  /** @typedef {{ id:string, name:string, area:string, status:'normal'|'warning'|'alarm', load:number, metrics:{ pressure:number, temperature:number }, sensors:{ id:string, label:string, value:number, unit:string, severity:'normal'|'warning'|'alarm' }[] }} Unit */
+  input('unit', /** @type {Unit} */ ({ id:'', name:'', area:'', status:'normal', load:0, metrics:{ pressure:0, temperature:0 }, sensors:[] }))
+</script>
+
+<aside data-status={unit.status}>
+  <small>Selected unit</small>
+  <h2>{unit.name}</h2>
+  <dl>
+    <div><dt>ID</dt><dd>{unit.id}</dd></div>
+    <div><dt>Area</dt><dd>{unit.area}</dd></div>
+    <div><dt>Pressure</dt><dd>{unit.metrics.pressure} bar</dd></div>
+    <div><dt>Temperature</dt><dd>{unit.metrics.temperature} °C</dd></div>
+    <div><dt>Load</dt><dd>{unit.load}%</dd></div>
+  </dl>
+</aside>
+
+<style>:host{display:block}aside{height:100%;box-sizing:border-box;border:1px solid #272e28;background:#101411;padding:18px}small{color:#768078;font:700 9px ui-monospace,monospace;text-transform:uppercase}h2{margin:8px 0 20px}dl{margin:0;display:grid;gap:10px}dl div{display:flex;justify-content:space-between;border-bottom:1px solid #232824;padding-bottom:8px}dt{color:#758078}dd{margin:0;font-weight:700}aside[data-status="alarm"]{border-color:#70413a}</style>

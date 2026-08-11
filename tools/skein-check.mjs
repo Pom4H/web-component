@@ -63,27 +63,84 @@ function splitTopLevel(source) {
   return statements;
 }
 
+function balancedType(source, marker) {
+  const at = source.indexOf(marker);
+  if (at < 0) return null;
+  const open = source.indexOf('{', at + marker.length);
+  if (open < 0) return null;
+  let depth = 0;
+  for (let i = open; i < source.length; i++) {
+    if (source[i] === '{') depth++;
+    else if (source[i] === '}') {
+      depth--;
+      if (!depth) {
+        const type = source.slice(open + 1, i).replace(/\n\s*\*\s?/g, '\n').trim();
+        return { type, end: i + 1 };
+      }
+    }
+  }
+  return null;
+}
+
+const jsdocType = source => balancedType(source, '@type')?.type || null;
+
+function extractTypedefs(script) {
+  const types = new Map();
+  let offset = 0;
+  while (offset < script.length) {
+    const at = script.indexOf('@typedef', offset);
+    if (at < 0) break;
+    const parsed = balancedType(script.slice(at), '@typedef');
+    if (!parsed) { offset = at + 8; continue; }
+    const absoluteEnd = at + parsed.end;
+    const commentEnd = script.indexOf('*/', absoluteEnd);
+    if (commentEnd < 0) break;
+    const tail = script.slice(absoluteEnd, commentEnd).replace(/^\s*\*\s?/gm, ' ').trim();
+    const name = tail.match(/^([A-Za-z_$][\w$]*)\b/)?.[1];
+    if (name) types.set(name, parsed.type);
+    offset = commentEnd + 2;
+  }
+  return types;
+}
+
+const stripLeadingTypedefs = statement => {
+  let value = statement;
+  while (true) {
+    const hit = value.match(/^\s*\/\*\*[\s\S]*?\*\/\s*/);
+    if (!hit || !hit[0].includes('@typedef')) return value.trim();
+    value = value.slice(hit[0].length);
+  }
+};
+
 function extractState(source) {
   const scriptMatch = source.match(/<script\b[^>]*>([\s\S]*?)<\/script\s*>/i);
   const script = scriptMatch?.[1] || '';
+  const typedefs = extractTypedefs(script);
   const members = new Map();
-  const inputs = new Set();
+  const inputs = new Map();
   for (const statementRaw of splitTopLevel(script)) {
-    const statement = statementRaw.trim().replace(/;\s*$/, '');
+    const statement = stripLeadingTypedefs(statementRaw).replace(/;\s*$/, '');
+    if (!statement) continue;
     let hit = statement.match(/^input\(\s*(['"])([^'"]+)\1\s*(?:,\s*([\s\S]*))?\)$/);
     if (hit) {
       const name = hit[2];
       if (/^[A-Za-z_$][\w$]*$/.test(name)) {
         const fallback = hit[3] == null ? 'undefined' : hit[3].trim();
-        members.set(name, `input(${JSON.stringify(name)}, ${fallback})`);
-        inputs.add(name);
+        const explicitType = jsdocType(fallback);
+        const call = `input(${JSON.stringify(name)}, ${fallback})`;
+        members.set(name, explicitType ? `(${call} as ${explicitType})` : call);
+        inputs.set(name, explicitType);
       }
       continue;
     }
     hit = statement.match(/^this\.([A-Za-z_$][\w$]*)\s*=\s*([\s\S]+)$/);
-    if (hit) members.set(hit[1], hit[2].trim());
+    if (hit) {
+      const rhs = hit[2].trim();
+      const explicitType = jsdocType(rhs);
+      members.set(hit[1], explicitType ? `(${rhs} as ${explicitType})` : rhs);
+    }
   }
-  return { members, inputs };
+  return { members, inputs, typedefs };
 }
 
 function parseAttrs(token, tokenOffset) {
@@ -161,7 +218,7 @@ function analyzeTemplate(source) {
 }
 
 function stateSource(component) {
-  const { members, inputs } = component.state;
+  const { members, inputs, typedefs } = component.state;
   const lines = [
     '// @ts-nocheck',
     'declare function input(name: string, fallback: []): any[];',
@@ -172,12 +229,13 @@ function stateSource(component) {
     'declare function effect(callback: () => void): void;',
     'declare function onCleanup(callback: () => void): void;',
     'declare const host: HTMLElement;',
-    'declare const abortSignal: AbortSignal;',
-    'export class SkeinState {'
+    'declare const abortSignal: AbortSignal;'
   ];
+  for (const [name, type] of typedefs) lines.push(`export type ${name} = ${type};`);
+  lines.push('export class SkeinState {');
   for (const [name, rhs] of members) lines.push(`  ${name} = ${rhs}`);
   lines.push('}', 'export const state = new SkeinState();');
-  if (inputs.size) lines.push(`export type Inputs = Pick<SkeinState, ${[...inputs].map(JSON.stringify).join(' | ')}>;`);
+  if (inputs.size) lines.push(`export type Inputs = Pick<SkeinState, ${[...inputs.keys()].map(JSON.stringify).join(' | ')}>;`);
   else lines.push('export type Inputs = {};');
   return lines.join('\n') + '\n';
 }
@@ -212,7 +270,9 @@ function checkSource(component, componentByTag) {
       const child = componentByTag.get(check.tag);
       if (child) {
         const current = serial++;
-        code = `const $input${current}: keyof import('./${child.id}.state.js').Inputs = ${JSON.stringify(check.name)}; void (${expr});`;
+        const explicitType = child.state.inputs.get(check.name);
+        if (explicitType) code = `const $prop${current}: import('./${child.id}.state.js').Inputs[${JSON.stringify(check.name)}] = ${expr};`;
+        else code = `const $input${current}: keyof import('./${child.id}.state.js').Inputs = ${JSON.stringify(check.name)}; void (${expr});`;
       } else if (!check.tag.includes('-')) {
         const current = serial++;
         code = `declare const $native${current}: HTMLElementTagNameMap[${JSON.stringify(check.tag)}]; const $prop${current}: typeof $native${current}[${JSON.stringify(check.name)}] = ${expr};`;

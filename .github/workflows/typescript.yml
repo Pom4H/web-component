@@ -35,3 +35,18 @@ jobs:
             echo "Expected the invalid Skein fixture to fail type checking"
             exit 1
           fi
+      - name: Type-check the typed control room
+        run: node tools/skein-check.mjs examples/control-room/index.html
+      - name: Prove an invalid component contract fails
+        run: |
+          set +e
+          output=$(node tools/skein-check.mjs test/skein-check/invalid-contract/index.html 2>&1)
+          status=$?
+          set -e
+          printf '%s\n' "$output"
+          if [ "$status" -eq 0 ]; then
+            echo "Expected the invalid component contract to fail type checking"
+            exit 1
+          fi
+          printf '%s\n' "$output" | grep -q 'SKEIN2741'
+          printf '%s\n' "$output" | grep -q 'property={alarm}'

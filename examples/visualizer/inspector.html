@@ -1,0 +1,36 @@
+<script>
+  input('step', { id:1, title:'component.html', kicker:'author', detail:'', api:'HTML file', color:'#4f8cff' })
+  input('running', true)
+  input('speed', 1)
+</script>
+
+<section --accent={step.color}>
+  <header><small>LIVE INSPECTOR</small><span>0{step.id}</span></header>
+  <p class="kicker">{step.kicker}</p>
+  <h2>{step.title}</h2>
+  <p class="detail">{step.detail}</p>
+  <dl>
+    <div><dt>primitive</dt><dd>{step.api}</dd></div>
+    <div><dt>flow</dt><dd>{running}</dd></div>
+    <div><dt>speed</dt><dd>{speed}</dd></div>
+  </dl>
+  <div class="trace"><i></i><span>selected stage is a DOM property input</span></div>
+</section>
+
+<style>
+  :host { display:block; min-height:0; }
+  * { box-sizing:border-box; }
+  section { --accent:#6ef0cf; height:100%; min-height:260px; padding:18px; border:1px solid color-mix(in srgb,var(--accent) 28%,#182433); border-radius:16px; background:linear-gradient(155deg,color-mix(in srgb,var(--accent) 7%,#0b111a),#070c12 56%); color:#e8f0fb; box-shadow:inset 0 1px color-mix(in srgb,var(--accent) 22%,transparent); }
+  header { display:flex; justify-content:space-between; gap:16px; align-items:center; }
+  small, header span, dt,dd,.trace { font:700 9px ui-monospace,monospace; letter-spacing:.1em; text-transform:uppercase; }
+  small { color:#72839b; }
+  header span { color:var(--accent); font-size:13px; }
+  .kicker { margin:44px 0 8px; color:var(--accent); font:700 10px ui-monospace,monospace; letter-spacing:.16em; text-transform:uppercase; }
+  h2 { margin:0; max-width:13ch; font:850 clamp(25px,3vw,40px)/.95 system-ui,sans-serif; letter-spacing:-.045em; }
+  .detail { margin:16px 0 22px; color:#8492a6; font-size:12px; line-height:1.6; }
+  dl { margin:0; display:grid; gap:7px; }
+  dl div { display:flex; justify-content:space-between; gap:16px; padding:9px 0; border-top:1px solid #172230; }
+  dt { color:#56657a; } dd { margin:0; color:#b9c6d8; text-align:right; }
+  .trace { display:flex; gap:8px; align-items:center; margin-top:20px; color:#69778b; line-height:1.4; }
+  .trace i { width:7px; height:7px; flex:0 0 auto; border-radius:50%; background:var(--accent); box-shadow:0 0 16px var(--accent); }
+</style>

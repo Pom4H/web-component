@@ -10,7 +10,7 @@
   /** @typedef {{ fixedHz:number, gravity:number, maxFall:number, reach:number }} Rules */
   /** @typedef {{ entities:Entity[], systems:SystemSpec[], recipes:Recipe[], rules:Rules }} World */
   /** @typedef {{ x:number, z:number }} GameControls */
-  /** @typedef {{ jump:number, mine:number, place:number, craft:number }} GameActions */
+  /** @typedef {'jump'|'mine'|'place'|'craft'} GameCommand */
   /** @typedef {{ position:{x:number,y:number,z:number}, speed:number, grounded:boolean, blocks:number, target:string, inventory:Inventory, crafted:number, message:string }} Telemetry */
 
   this.world = /** @type {World} */ ({
@@ -28,11 +28,11 @@
       }
     ],
     systems:[
-      { id:'input', phase:'fixed', reads:['controller','controls','actions'], writes:['intent','facing'] },
+      { id:'input', phase:'fixed', reads:['controller','controls','commands'], writes:['intent','facing'] },
       { id:'gravity', phase:'fixed', reads:['body'], writes:['body.velocity.y'] },
       { id:'locomotion', phase:'fixed', reads:['intent','controller','body'], writes:['body.velocity'] },
       { id:'voxel-collision', phase:'fixed', reads:['transform','body','voxels'], writes:['transform','body','grounded'] },
-      { id:'interact', phase:'fixed', reads:['actions','voxels','inventory','facing'], writes:['voxels','inventory'] }
+      { id:'interact', phase:'fixed', reads:['commands','voxels','inventory','facing'], writes:['voxels','inventory'] }
     ],
     recipes:[
       { id:'planks', input:{wood:2}, output:{plank:4} }
@@ -41,7 +41,7 @@
   })
 
   this.controls = /** @type {GameControls} */ ({ x:0, z:0 })
-  this.actions = /** @type {GameActions} */ ({ jump:0, mine:0, place:0, craft:0 })
+  this.commands = /** @type {GameCommand[]} */ ([])
   this.running = true
   this.resetToken = 0
   this.telemetry = /** @type {Telemetry} */ ({
@@ -53,10 +53,7 @@
     this.controls.x = event.detail.x
     this.controls.z = event.detail.z
   }
-  this.gameAction = event => {
-    const action = event.detail.action
-    this.actions[action]++
-  }
+  this.gameAction = event => this.commands.push(event.detail.action)
   this.runChange = event => this.running = event.detail.running
   this.reset = () => this.resetToken++
   this.telemetryChange = event => this.telemetry = event.detail
@@ -66,14 +63,14 @@
   <header slot="mast" class="mast">
     <small>SKEIN / TYPED VOXEL WORLD / WEBGL2</small>
     <h1>VOXEL<br>MEADOW.</h1>
-    <p>Walk on generated terrain, jump, mine real voxels, place blocks and craft planks. The world, controls, actions and system schedule are typed design-time contracts; the browser runs the fixed-step game loop directly.</p>
+    <p>Walk on generated terrain, jump, mine real voxels, place blocks and craft planks. The world, controls, command queue and system schedule are typed design-time contracts; the browser runs the fixed-step game loop directly.</p>
   </header>
 
   <visualizer-scene
     slot="scene"
     .world={world}
     .controls={controls}
-    .actions={actions}
+    .commands={commands}
     .running={running}
     .resetToken={resetToken}
     @world-telemetry={telemetryChange}>

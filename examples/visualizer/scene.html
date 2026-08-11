@@ -11,6 +11,12 @@
 
   queueMicrotask(() => {
     const canvas = host.shadowRoot.querySelector('canvas')
+    const movePad = host.shadowRoot.querySelector('[data-touch="move"]')
+    const moveKnob = movePad?.querySelector('i')
+    const lookPad = host.shadowRoot.querySelector('[data-touch="look"]')
+    const runButton = host.shadowRoot.querySelector('[data-touch="run"]')
+    const interactButton = host.shadowRoot.querySelector('[data-touch="interact"]')
+    const crouchButton = host.shadowRoot.querySelector('[data-touch="crouch"]')
     const gl = canvas.getContext('webgl2', { antialias:true, alpha:false, depth:true, powerPreference:'high-performance' })
     if (!gl) { this.status = 'WebGL2 unavailable'; return }
 
@@ -118,7 +124,9 @@
     let audio=null,hum=null,humGain=null,lastBeat=0
     const ensureAudio=()=>{
       if(audio){audio.resume?.();return}
-      audio=new (window.AudioContext||window.webkitAudioContext)()
+      const Audio=window.AudioContext||window.webkitAudioContext
+      if(!Audio)return
+      audio=new Audio()
       hum=audio.createOscillator();humGain=audio.createGain();hum.type='sine';hum.frequency.value=47;humGain.gain.value=.012;hum.connect(humGain).connect(audio.destination);hum.start()
     }
     const tone=(frequency=.0,duration=.12,volume=.04,type='sine')=>{
@@ -133,6 +141,12 @@
     }
 
     const keys=new Set()
+    const coarse=matchMedia('(pointer:coarse)').matches||navigator.maxTouchPoints>0
+    const touch={forward:0,right:0,sprint:false,moveId:null,lookId:null,lastX:0,lastY:0}
+    let focused=false,dragId=null,dragX=0,dragY=0
+    const locked=()=>host.shadowRoot?.pointerLockElement===canvas||document.pointerLockElement===canvas
+    const releasePointerLock=()=>{if(locked())document.exitPointerLock?.()}
+    const controlsActive=()=>locked()||focused||coarse||touch.moveId!==null||touch.lookId!==null
     let yaw=this.game.player.yaw,pitch=0
     let player={x:this.game.player.spawn.x,z:this.game.player.spawn.z,y:this.game.player.spawn.y}
     let crouched=false,hidden=false,hiddenLocker=null,preHide=null,stamina=1,moving=false,sprinting=false
@@ -166,15 +180,15 @@
       lastPublish=now
       let prompt=''
       if(!dialogue.open&&!caught&&!ending){
-        if(document.pointerLockElement!==canvas)prompt='Click the scene to enter'
-        else if(hidden)prompt='[E] leave locker'
-        else if(phase==='meet-mira'&&near(player,this.game.npc.position,2.05))prompt='[E] talk to Dr. Mira'
-        else if(phase==='find-fuse'&&near(player,this.game.fuse,1.15))prompt='[E] take the fuse'
-        else if(hasFuse&&!power&&near(player,this.game.panel,1.25))prompt='[E] install fuse'
-        else if(power&&near(player,this.game.exit,1.2))prompt='[E] open reception exit'
+        if(!controlsActive()&&!coarse)prompt='Click the scene to enter'
+        else if(hidden)prompt=coarse?'Tap USE to leave locker':'[E] leave locker'
+        else if(phase==='meet-mira'&&near(player,this.game.npc.position,2.05))prompt=coarse?'Tap USE to talk':'[E] talk to Dr. Mira'
+        else if(phase==='find-fuse'&&near(player,this.game.fuse,1.15))prompt=coarse?'Tap USE to take fuse':'[E] take the fuse'
+        else if(hasFuse&&!power&&near(player,this.game.panel,1.25))prompt=coarse?'Tap USE to install fuse':'[E] install fuse'
+        else if(power&&near(player,this.game.exit,1.2))prompt=coarse?'Tap USE to open exit':'[E] open reception exit'
         else {
           const locker=this.game.lockers.find(item=>near(player,item,1.05))
-          if(locker)prompt='[E] hide in locker'
+          if(locker)prompt=coarse?'Tap USE to hide':'[E] hide in locker'
         }
       }
       lastPrompt=prompt
@@ -188,7 +202,7 @@
     const closeDialogue=()=>{dialogue={open:false,speaker:'',text:'',options:[]};publish(true)}
     const say=(speaker,text,options)=>{
       dialogue={open:true,speaker,text,options}
-      if(document.pointerLockElement===canvas)document.exitPointerLock()
+      releasePointerLock()
       publish(true)
     }
     const talkMira=()=>{
@@ -217,20 +231,21 @@
     }
     const capture=()=>{
       if(caught||ending)return
-      caught=true;enemy.state='caught';objective='';this.blackout=false;scareBurst('caught');if(document.pointerLockElement===canvas)document.exitPointerLock();publish(true)
+      caught=true;enemy.state='caught';objective='';this.blackout=false;scareBurst('caught');releasePointerLock();publish(true)
     }
     const finish=()=>{
       if(!power||caught||ending)return
       ending='The booth is empty. Mira died in 2019. The voice guiding you through Ward C was a recording that knew which answers you would choose.'
-      objective='';enemy.active=false;enemy.state='dormant';this.blackout=false;if(document.pointerLockElement===canvas)document.exitPointerLock();tone(330,.5,.035,'sine');publish(true)
+      objective='';enemy.active=false;enemy.state='dormant';this.blackout=false;releasePointerLock();tone(330,.5,.035,'sine');publish(true)
     }
     const restart=()=>{
       yaw=this.game.player.yaw;pitch=0;player={x:this.game.player.spawn.x,z:this.game.player.spawn.z,y:this.game.player.spawn.y};crouched=false;hidden=false;hiddenLocker=null;preHide=null;stamina=1;moving=false;sprinting=false
       hasFuse=false;power=false;caught=false;ending='';phase='meet-mira';objective='Find Dr. Mira at reception';dialogue={open:false,speaker:'',text:'',options:[]};npcVisible=true;scriptDark=0
-      enemy={x:this.game.enemy.position.x,z:this.game.enemy.position.z,dx:0,dz:-1,state:'dormant',active:false,patrol:0,suspicion:0,lost:0,search:0,lastX:0,lastZ:0};this.scare=false;this.blackout=false;publish(true)
+      touch.forward=0;touch.right=0;touch.sprint=false;keys.clear();enemy={x:this.game.enemy.position.x,z:this.game.enemy.position.z,dx:0,dz:-1,state:'dormant',active:false,patrol:0,suspicion:0,lost:0,search:0,lastX:0,lastZ:0};this.scare=false;this.blackout=false;publish(true)
     }
 
     const interact=()=>{
+      ensureAudio()
       if(dialogue.open||caught||ending)return
       if(hidden){hidden=false;this.blackout=false;if(preHide){player.x=preHide.x;player.z=preHide.z}hiddenLocker=null;publish(true);return}
       if(phase==='meet-mira'&&near(player,this.game.npc.position,2.05)){talkMira();return}
@@ -246,27 +261,61 @@
       if(locker){preHide={x:player.x,z:player.z};hidden=true;hiddenLocker=locker;player.x=locker.x;player.z=locker.z;this.blackout=true;publish(true)}
     }
 
+    const toggleCrouch=()=>{if(!dialogue.open&&!hidden&&!caught&&!ending)crouched=!crouched}
+    const setMoveFromPointer=event=>{
+      const rect=movePad.getBoundingClientRect(),cx=rect.left+rect.width/2,cy=rect.top+rect.height/2,r=Math.max(1,rect.width*.34)
+      let dx=(event.clientX-cx)/r,dy=(event.clientY-cy)/r
+      const len=Math.hypot(dx,dy);if(len>1){dx/=len;dy/=len}
+      touch.right=Math.max(-1,Math.min(1,dx));touch.forward=Math.max(-1,Math.min(1,-dy))
+      if(moveKnob)moveKnob.style.transform=`translate(${touch.right*r*.52}px,${-touch.forward*r*.52}px)`
+    }
+    const clearMove=()=>{touch.moveId=null;touch.forward=0;touch.right=0;if(moveKnob)moveKnob.style.transform='translate(0,0)'}
+
     host.addEventListener('dialogue-choice',event=>chooseDialogue(event.detail?.id),{signal:abortSignal})
     host.addEventListener('game-command',event=>{if(event.detail?.action==='restart')restart()},{signal:abortSignal})
-    canvas.addEventListener('click',()=>{if(!dialogue.open&&!caught&&!ending){ensureAudio();canvas.requestPointerLock?.()}},{signal:abortSignal})
-    document.addEventListener('pointerlockchange',()=>publish(true),{signal:abortSignal})
+    canvas.addEventListener('pointerdown',event=>{
+      focused=true;canvas.focus({preventScroll:true});ensureAudio()
+      if(event.pointerType==='mouse'){
+        dragId=event.pointerId;dragX=event.clientX;dragY=event.clientY
+        if(!locked())canvas.requestPointerLock?.()
+      }
+      publish(true)
+    },{signal:abortSignal})
+    canvas.addEventListener('pointermove',event=>{
+      if(event.pointerId!==dragId||locked()||event.pointerType!=='mouse'||dialogue.open||caught||ending||hidden)return
+      yaw+=(event.clientX-dragX)*.005;pitch=Math.max(-1.25,Math.min(1.25,pitch-(event.clientY-dragY)*.004));dragX=event.clientX;dragY=event.clientY
+    },{signal:abortSignal})
+    canvas.addEventListener('pointerup',event=>{if(event.pointerId===dragId)dragId=null},{signal:abortSignal})
+    document.addEventListener('pointerlockchange',()=>{focused=focused||locked();publish(true)},{signal:abortSignal})
     document.addEventListener('mousemove',event=>{
-      if(document.pointerLockElement!==canvas||dialogue.open||caught||ending||hidden)return
+      if(!locked()||dialogue.open||caught||ending||hidden)return
       yaw+=event.movementX*.0022;pitch=Math.max(-1.25,Math.min(1.25,pitch-event.movementY*.0019))
     },{signal:abortSignal})
     window.addEventListener('keydown',event=>{
       if(event.code==='KeyE'&&!event.repeat){interact();return}
-      if(event.code==='KeyC'&&!event.repeat&&!dialogue.open&&!hidden){crouched=!crouched;return}
+      if(event.code==='KeyC'&&!event.repeat){toggleCrouch();return}
       keys.add(event.code)
     },{signal:abortSignal})
     window.addEventListener('keyup',event=>keys.delete(event.code),{signal:abortSignal})
+    window.addEventListener('blur',()=>{keys.clear();touch.sprint=false},{signal:abortSignal})
+
+    movePad?.addEventListener('pointerdown',event=>{focused=true;ensureAudio();touch.moveId=event.pointerId;movePad.setPointerCapture?.(event.pointerId);setMoveFromPointer(event);event.preventDefault()},{signal:abortSignal})
+    movePad?.addEventListener('pointermove',event=>{if(event.pointerId===touch.moveId){setMoveFromPointer(event);event.preventDefault()}},{signal:abortSignal})
+    for(const type of ['pointerup','pointercancel','lostpointercapture'])movePad?.addEventListener(type,event=>{if(event.pointerId===touch.moveId)clearMove()},{signal:abortSignal})
+    lookPad?.addEventListener('pointerdown',event=>{focused=true;ensureAudio();touch.lookId=event.pointerId;touch.lastX=event.clientX;touch.lastY=event.clientY;lookPad.setPointerCapture?.(event.pointerId);event.preventDefault()},{signal:abortSignal})
+    lookPad?.addEventListener('pointermove',event=>{if(event.pointerId!==touch.lookId||dialogue.open||caught||ending||hidden)return;yaw+=(event.clientX-touch.lastX)*.008;pitch=Math.max(-1.25,Math.min(1.25,pitch-(event.clientY-touch.lastY)*.006));touch.lastX=event.clientX;touch.lastY=event.clientY;event.preventDefault()},{signal:abortSignal})
+    for(const type of ['pointerup','pointercancel','lostpointercapture'])lookPad?.addEventListener(type,event=>{if(event.pointerId===touch.lookId)touch.lookId=null},{signal:abortSignal})
+    runButton?.addEventListener('pointerdown',event=>{focused=true;ensureAudio();touch.sprint=true;runButton.setPointerCapture?.(event.pointerId);event.preventDefault()},{signal:abortSignal})
+    for(const type of ['pointerup','pointercancel','lostpointercapture'])runButton?.addEventListener(type,()=>touch.sprint=false,{signal:abortSignal})
+    interactButton?.addEventListener('pointerdown',event=>{focused=true;interact();event.preventDefault()},{signal:abortSignal})
+    crouchButton?.addEventListener('pointerdown',event=>{focused=true;toggleCrouch();event.preventDefault()},{signal:abortSignal})
 
     const updatePlayer=dt=>{
       moving=false;sprinting=false
-      if(dialogue.open||caught||ending||hidden||document.pointerLockElement!==canvas){stamina=Math.min(1,stamina+dt*.18);return}
-      let f=(keys.has('KeyW')?1:0)-(keys.has('KeyS')?1:0),r=(keys.has('KeyD')?1:0)-(keys.has('KeyA')?1:0)
-      const len=Math.hypot(f,r);if(len>0){f/=len;r/=len;moving=true}
-      const wantsSprint=keys.has('ShiftLeft')||keys.has('ShiftRight')
+      if(dialogue.open||caught||ending||hidden||!controlsActive()){stamina=Math.min(1,stamina+dt*.18);return}
+      let f=(keys.has('KeyW')?1:0)-(keys.has('KeyS')?1:0)+touch.forward,r=(keys.has('KeyD')?1:0)-(keys.has('KeyA')?1:0)+touch.right
+      const len=Math.hypot(f,r);if(len>1){f/=len;r/=len}if(len>.06)moving=true
+      const wantsSprint=keys.has('ShiftLeft')||keys.has('ShiftRight')||touch.sprint
       sprinting=moving&&wantsSprint&&!crouched&&stamina>.03
       const speed=crouched?1.28:sprinting?4.25:2.25
       if(sprinting)stamina=Math.max(0,stamina-dt*.25);else stamina=Math.min(1,stamina+dt*.17)
@@ -381,13 +430,20 @@
       requestAnimationFrame(frame)
     }
 
-    onCleanup(()=>{clearTimeout(scareTimer);try{hum?.stop()}catch{};try{audio?.close()}catch{};if(document.pointerLockElement===canvas)document.exitPointerLock()})
+    onCleanup(()=>{clearTimeout(scareTimer);try{hum?.stop()}catch{};try{audio?.close()}catch{};releasePointerLock()})
     this.status='world live';publish(true);requestAnimationFrame(frame)
   })
 </script>
 
-<canvas aria-label="First person horror game"></canvas>
+<canvas tabindex="0" aria-label="First person horror game"></canvas>
 <div class="vignette"></div>
+<div class="touch-controls" aria-label="Touch game controls">
+  <div class="move-pad" data-touch="move"><i></i><span>MOVE</span></div>
+  <div class="look-pad" data-touch="look"><span>LOOK</span></div>
+  <button class="touch-button run" data-touch="run">RUN</button>
+  <button class="touch-button crouch" data-touch="crouch">CROUCH</button>
+  <button class="touch-button use" data-touch="interact">USE</button>
+</div>
 <div class="locker" if={blackout}><span>...</span></div>
 <div class="jumpscare" if={scare}>
   <div class="face"><i></i><i></i><b></b></div>
@@ -395,13 +451,20 @@
 
 <style>
   :host{position:relative;display:block;width:100%;height:100%;min-height:100vh;background:#030405;overflow:hidden}
-  canvas{display:block;width:100%;height:100%;min-height:100vh;cursor:crosshair}
+  canvas{display:block;width:100%;height:100%;min-height:100vh;cursor:crosshair;outline:none;touch-action:none}
   .vignette{position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 50% 48%,transparent 0 35%,#0005 68%,#000d 100%),linear-gradient(#10120f10,#160c0a18);mix-blend-mode:multiply}
-  .locker{position:absolute;inset:0;display:grid;place-items:center;background:linear-gradient(90deg,#020303 0 44%,transparent 46% 54%,#020303 56% 100%);pointer-events:none}.locker:before,.locker:after{content:"";position:absolute;top:0;bottom:0;width:1px;background:#41413d55}.locker:before{left:44%}.locker:after{right:44%}.locker span{color:#4f4c45;font:900 12px ui-monospace,monospace;letter-spacing:.5em}
+  .touch-controls{display:none;position:absolute;inset:0;z-index:12;pointer-events:none;touch-action:none;user-select:none;-webkit-user-select:none}
+  .move-pad,.look-pad,.touch-button{pointer-events:auto;touch-action:none;-webkit-tap-highlight-color:transparent}
+  .move-pad{position:absolute;left:max(18px,env(safe-area-inset-left));bottom:max(24px,calc(env(safe-area-inset-bottom) + 16px));width:132px;height:132px;border:1px solid #d8d0c42b;border-radius:50%;background:#0a0b0b55;box-shadow:inset 0 0 35px #0008;backdrop-filter:blur(4px)}
+  .move-pad:before{content:"";position:absolute;left:50%;top:50%;width:56px;height:56px;translate:-50% -50%;border-radius:50%;border:1px solid #d8d0c435;background:#bab2a90c}.move-pad i{position:absolute;left:50%;top:50%;width:44px;height:44px;margin:-22px;border-radius:50%;background:#d7cec02c;border:1px solid #e4dbce55;box-shadow:0 6px 22px #0008;will-change:transform}.move-pad span,.look-pad span{position:absolute;color:#aaa29775;font:800 7px/1 ui-monospace,monospace;letter-spacing:.18em}.move-pad span{left:50%;bottom:10px;translate:-50% 0}
+  .look-pad{position:absolute;right:0;top:0;width:56%;height:72%;background:transparent}.look-pad span{right:max(18px,env(safe-area-inset-right));top:max(18px,env(safe-area-inset-top))}
+  .touch-button{position:absolute;display:grid;place-items:center;width:66px;height:52px;border:1px solid #d9d0c43b;border-radius:16px;background:#0c0d0dbb;color:#d9d1c5;font:900 9px/1 ui-monospace,monospace;letter-spacing:.08em;box-shadow:0 8px 24px #0009;backdrop-filter:blur(7px)}
+  .touch-button:active{background:#3a1c19cc;border-color:#b55c53}.use{right:max(18px,env(safe-area-inset-right));bottom:max(28px,calc(env(safe-area-inset-bottom) + 18px));width:76px;height:60px;border-color:#a34e4866}.crouch{right:max(102px,calc(env(safe-area-inset-right) + 102px));bottom:max(30px,calc(env(safe-area-inset-bottom) + 20px))}.run{right:max(18px,env(safe-area-inset-right));bottom:max(100px,calc(env(safe-area-inset-bottom) + 90px))}
+  .locker{position:absolute;inset:0;display:grid;place-items:center;background:linear-gradient(90deg,#020303 0 44%,transparent 46% 54%,#020303 56% 100%);pointer-events:none;z-index:16}.locker:before,.locker:after{content:"";position:absolute;top:0;bottom:0;width:1px;background:#41413d55}.locker:before{left:44%}.locker:after{right:44%}.locker span{color:#4f4c45;font:900 12px ui-monospace,monospace;letter-spacing:.5em}
   .jumpscare{position:absolute;inset:0;display:grid;place-items:center;background:#d9d0bd;z-index:20;animation:shake .07s steps(2,end) infinite,flash .32s steps(2,end) both;pointer-events:none}
   .face{position:relative;width:min(76vw,600px);aspect-ratio:1;border-radius:46% 46% 40% 40%;background:radial-gradient(circle at 50% 38%,#d6c9b5 0 21%,#83776b 57%,#171515 100%);filter:contrast(1.5) saturate(.3)}
   .face i{position:absolute;top:34%;width:22%;height:13%;border-radius:50%;background:#070707;box-shadow:0 0 0 18px #443d38aa}.face i:first-child{left:17%;rotate:8deg}.face i:nth-child(2){right:17%;rotate:-8deg}.face b{position:absolute;left:31%;bottom:17%;width:38%;height:25%;border-radius:20% 20% 50% 50%;background:#080707;box-shadow:inset 0 18px #352522}
   @keyframes shake{0%{transform:translate(-8px,5px) scale(1.04)}100%{transform:translate(7px,-6px) scale(1.12)}}
   @keyframes flash{0%{filter:invert(1) contrast(2)}35%{filter:none}60%{filter:invert(.8)}100%{filter:none}}
-  @media(max-width:800px),(pointer:coarse){canvas{min-height:100dvh}}
+  @media(max-width:800px),(pointer:coarse){canvas{min-height:100dvh;cursor:default}.touch-controls{display:block}}
 </style>

@@ -10,7 +10,6 @@ assert.ok(scene)
 assert.deepEqual(scene.inputs.map(input => [input.name, input.type]), [
   ['world', 'World'],
   ['controls', 'GameControls'],
-  ['commands', 'GameCommand[]'],
   ['running', 'boolean'],
   ['resetToken', 'number']
 ])
@@ -43,7 +42,6 @@ assert.ok(app.children.includes('visualizer-gamepad'))
 const data = manifest(model)
 assert.equal(data.components['visualizer-scene'].inputs.world, 'World')
 assert.equal(data.components['visualizer-scene'].inputs.controls, 'GameControls')
-assert.equal(data.components['visualizer-scene'].inputs.commands, 'GameCommand[]')
 assert.equal(data.components['visualizer-gamepad'].emits['game-action'].bubbles, true)
 
-console.log('voxel-meadow model: typed voxel world, continuous controls, queued commands, fixed systems, inventory and mobile gamepad graph verified.')
+console.log('voxel-meadow model: typed voxel world, continuous property input, native command events, fixed systems, inventory and mobile gamepad graph verified.')

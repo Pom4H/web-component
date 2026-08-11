@@ -108,30 +108,42 @@ export class SkeinElement extends HTMLElement {
   acceptInput(name, fallback) {
     if (typeof name !== 'string' || !name) throw new TypeError('Skein input name must be a non-empty string');
     if (name === 'state' || name in SkeinElement.prototype) throw new TypeError('Skein input conflicts with host property: ' + name);
+    const alias = name.toLowerCase();
+    if (this.#inputs) for (const existing of this.#inputs) {
+      if (existing !== name && existing.toLowerCase() === alias) {
+        throw new TypeError('Skein input names are case-insensitively ambiguous: ' + existing + ' / ' + name);
+      }
+    }
     if (this.#inputs?.has(name)) return this.state[name];
 
-    const pending = Object.hasOwn(this, name);
+    const property = Object.hasOwn(this, name) ? name : alias !== name && Object.hasOwn(this, alias) ? alias : null;
+    const pending = property !== null;
     let initial;
     if (pending) {
-      initial = this[name];
-      delete this[name];
-    } else if (this.hasAttribute(name)) {
-      const value = this.getAttribute(name);
-      if (typeof fallback === 'boolean') initial = true;
-      else if (typeof fallback === 'number') {
-        initial = Number(value);
-        if (Number.isNaN(initial)) throw new TypeError('Skein numeric input attribute must be a number: ' + name);
-      } else if (fallback !== null && (typeof fallback === 'object' || typeof fallback === 'function')) {
-        throw new TypeError('Skein non-primitive input requires a DOM property: ' + name);
-      } else initial = value;
-    } else initial = fallback;
+      initial = this[property];
+      delete this[property];
+    } else {
+      const attribute = this.hasAttribute(name) ? name : alias !== name && this.hasAttribute(alias) ? alias : null;
+      if (attribute !== null) {
+        const value = this.getAttribute(attribute);
+        if (typeof fallback === 'boolean') initial = true;
+        else if (typeof fallback === 'number') {
+          initial = Number(value);
+          if (Number.isNaN(initial)) throw new TypeError('Skein numeric input attribute must be a number: ' + name);
+        } else if (fallback !== null && (typeof fallback === 'object' || typeof fallback === 'function')) {
+          throw new TypeError('Skein non-primitive input requires a DOM property: ' + name);
+        } else initial = value;
+      } else initial = fallback;
+    }
 
-    Object.defineProperty(this, name, {
+    const descriptor = {
       configurable: true,
       enumerable: true,
       get: () => this.state[name],
       set: value => { this.state[name] = value; },
-    });
+    };
+    Object.defineProperty(this, name, descriptor);
+    if (alias !== name) Object.defineProperty(this, alias, descriptor);
     (this.#inputs ||= new Set()).add(name);
     this.state[name] = initial;
     return initial;

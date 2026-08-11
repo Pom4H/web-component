@@ -41,7 +41,6 @@
   })
 
   this.controls = /** @type {GameControls} */ ({ x:0, z:0 })
-  this.commands = /** @type {GameCommand[]} */ ([])
   this.running = true
   this.resetToken = 0
   this.telemetry = /** @type {Telemetry} */ ({
@@ -53,7 +52,13 @@
     this.controls.x = event.detail.x
     this.controls.z = event.detail.z
   }
-  this.gameAction = event => this.commands.push(event.detail.action)
+  this.gameAction = event => {
+    /** @type {GameCommand} */
+    const action = event.detail.action
+    host.shadowRoot.querySelector('visualizer-scene')?.dispatchEvent(new CustomEvent('game-command', {
+      detail:{ action }
+    }))
+  }
   this.runChange = event => this.running = event.detail.running
   this.reset = () => this.resetToken++
   this.telemetryChange = event => this.telemetry = event.detail
@@ -63,14 +68,13 @@
   <header slot="mast" class="mast">
     <small>SKEIN / TYPED VOXEL WORLD / WEBGL2</small>
     <h1>VOXEL<br>MEADOW.</h1>
-    <p>Walk on generated terrain, jump, mine real voxels, place blocks and craft planks. The world, controls, command queue and system schedule are typed design-time contracts; the browser runs the fixed-step game loop directly.</p>
+    <p>Walk on generated terrain, jump, mine real voxels, place blocks and craft planks. Continuous movement is a typed DOM property; discrete commands are native events buffered by the fixed-step game loop.</p>
   </header>
 
   <visualizer-scene
     slot="scene"
     .world={world}
     .controls={controls}
-    .commands={commands}
     .running={running}
     .resetToken={resetToken}
     @world-telemetry={telemetryChange}>

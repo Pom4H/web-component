@@ -102,6 +102,7 @@ const evaluate=async expression=>{
   if(result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description||result.exceptionDetails.text)
   return result.result.value
 }
+const telemetrySnapshot=()=>evaluate(`(()=>{const t=document.querySelector('visualizer-app').state.telemetry;return{score:t.score,speed:t.speed,contacts:t.contacts,simTime:t.simTime,thrust:t.thrust,position:{x:t.position.x,y:t.position.y,z:t.position.z}}})()`)
 
 try {
   const frameId=(await send('Page.getFrameTree')).frameTree.frame.id
@@ -131,7 +132,7 @@ try {
   let progressed=false
   for(let i=0;i<40;i++){
     await sleep(30)
-    state=await evaluate(`document.querySelector('visualizer-app').state.telemetry`)
+    state=await telemetrySnapshot()
     if(state.simTime>.15){progressed=true;break}
   }
   if(!progressed) throw new Error(`Fixed-step simulation did not advance: ${JSON.stringify(state)}`)
@@ -139,7 +140,7 @@ try {
 
   await evaluate(`document.querySelector('visualizer-app').shadowRoot.querySelector('visualizer-controls').shadowRoot.querySelector('button[data-action="run"]').click()`)
   await sleep(180)
-  state=await evaluate(`document.querySelector('visualizer-app').state.telemetry`)
+  state=await telemetrySnapshot()
   if(Math.abs(state.simTime-beforePause)>.03) throw new Error(`Pause did not stop fixed-step integration: ${beforePause} -> ${state.simTime}`)
 
   await evaluate(`(()=>{const input=document.querySelector('visualizer-app').shadowRoot.querySelector('visualizer-controls').shadowRoot.querySelector('input[data-control="time"]');input.valueAsNumber=1.5;input.dispatchEvent(new Event('input',{bubbles:true}))})()`)
@@ -155,15 +156,16 @@ try {
   const beforeReset=await evaluate(`document.querySelector('visualizer-app').state.resetToken`)
   await evaluate(`document.querySelector('visualizer-app').shadowRoot.querySelector('visualizer-controls').shadowRoot.querySelector('button[data-action="reset"]').click()`)
   await sleep(130)
-  flow=await evaluate(`(()=>{const app=document.querySelector('visualizer-app');return{token:app.state.resetToken,score:app.state.telemetry.score,simTime:app.state.telemetry.simTime}})()`)
-  if(flow.token!==beforeReset+1||flow.score!==0||flow.simTime>.03) throw new Error(`Deterministic reset failed: ${JSON.stringify(flow)}`)
+  const resetTelemetry=await telemetrySnapshot()
+  flow=await evaluate(`document.querySelector('visualizer-app').state.resetToken`)
+  if(flow!==beforeReset+1||resetTelemetry.score!==0||resetTelemetry.simTime>.03) throw new Error(`Deterministic reset failed: ${JSON.stringify({token:flow,telemetry:resetTelemetry})}`)
 
   await evaluate(`document.querySelector('visualizer-app').shadowRoot.querySelector('visualizer-controls').shadowRoot.querySelector('button[data-action="run"]').click()`)
   await evaluate(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyD'}))`)
   await sleep(150)
+  state=await telemetrySnapshot()
   await evaluate(`window.dispatchEvent(new KeyboardEvent('keyup',{code:'KeyD'}))`)
-  flow=await evaluate(`document.querySelector('visualizer-app').state.telemetry`)
-  if(flow.thrust<=0) throw new Error(`Input system did not feed physics: ${JSON.stringify(flow)}`)
+  if(state.thrust<=0) throw new Error(`Input system did not feed physics: ${JSON.stringify(state)}`)
 
   const sceneContract=await evaluate(`(()=>{const scene=document.querySelector('visualizer-app').shadowRoot.querySelector('visualizer-scene');return{thrust:scene.style.getPropertyValue('--thrust'),danger:scene.style.getPropertyValue('--danger'),parts:['world','canvas','math','hud'].map(name=>!!scene.shadowRoot.querySelector('[part~="'+name+'"]'))}})()`)
   if(!sceneContract.thrust||!sceneContract.danger||sceneContract.parts.some(value=>!value)) {

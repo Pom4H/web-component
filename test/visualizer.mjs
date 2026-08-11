@@ -16,7 +16,7 @@ const tags=['visualizer-app','visualizer-shell','visualizer-scene','visualizer-c
 const fixtures=Object.fromEntries(await Promise.all(paths.map(async path=>[path,await readFile(join(root,'examples',path),'utf8')])))
 const runtime=await readFile(join(root,'skein.min.js'),'utf8')
 const port=await new Promise((resolvePort,reject)=>{const server=createServer();server.on('error',reject);server.listen(0,'127.0.0.1',()=>{const {port}=server.address();server.close(()=>resolvePort(port))})})
-const profile=await mkdtemp(join(tmpdir(),'skein-curvature-'))
+const profile=await mkdtemp(join(tmpdir(),'skein-voxel-meadow-'))
 const browser=spawn(browserPath,['--headless=new','--no-sandbox','--disable-dev-shm-usage','--use-angle=swiftshader','--enable-unsafe-swiftshader',`--remote-debugging-port=${port}`,`--user-data-dir=${profile}`,'about:blank'],{stdio:'ignore'})
 const endpoint=`http://127.0.0.1:${port}`
 let socket=null
@@ -50,7 +50,7 @@ try{
 
   let ready=false
   for(let i=0;i<240;i++){await sleep(25);ready=await evaluate(`document.querySelector('visualizer-app')?.shadowRoot?.querySelector('visualizer-scene')?.state?.status==='simulation live'`);if(ready)break}
-  if(!ready)throw new Error(`Curvature Arena did not mount: ${exceptions.join('\n')}`)
+  if(!ready)throw new Error(`Voxel Meadow did not mount: ${exceptions.join('\n')}`)
 
   const defined=await evaluate(`(${JSON.stringify(tags)}).filter(tag=>customElements.get(tag)).length`)
   if(defined!==tags.length)throw new Error(`Expected ${tags.length} component types, got ${defined}`)
@@ -86,7 +86,23 @@ try{
 
   await evaluate(`${controls}.querySelector('button[data-action="run"]').click()`)
   await evaluate(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyD'}))`);await sleep(160);state=await telemetry();await evaluate(`window.dispatchEvent(new KeyboardEvent('keyup',{code:'KeyD'}))`)
-  if(state.thrust<=0)throw new Error(`Input did not feed physics: ${JSON.stringify(state)}`)
+  if(state.thrust<=0)throw new Error(`Keyboard input did not feed physics: ${JSON.stringify(state)}`)
+
+  await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:3,mobile:true})
+  await send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:5})
+  await sleep(80)
+  const mobile=`document.querySelector('visualizer-app').shadowRoot.querySelector('visualizer-shell').shadowRoot`
+  const mobileLayout=await evaluate(`(()=>{const root=${mobile},pad=root.querySelector('.mobile-gamepad'),right=root.querySelector('[data-key="KeyD"]');return{display:getComputedStyle(pad).display,width:right.getBoundingClientRect().width,height:right.getBoundingClientRect().height,touchAction:getComputedStyle(right).touchAction}})()`)
+  if(mobileLayout.display==='none'||mobileLayout.width<44||mobileLayout.height<44||mobileLayout.touchAction!=='none')throw new Error(`Mobile controls are not touch-ready: ${JSON.stringify(mobileLayout)}`)
+
+  await evaluate(`(()=>{const b=${mobile}.querySelector('[data-key="KeyD"]');b.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,pointerId:41,pointerType:'touch',button:0,isPrimary:true}))})()`)
+  await sleep(170);state=await telemetry()
+  if(state.thrust<=0)throw new Error(`Mobile gamepad did not feed physics: ${JSON.stringify(state)}`)
+  await evaluate(`(()=>{const b=${mobile}.querySelector('[data-key="KeyD"]');b.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,pointerId:41,pointerType:'touch',button:0,isPrimary:true}))})()`)
+  await sleep(150);state=await telemetry()
+  if(state.thrust>.01)throw new Error(`Mobile gamepad did not release thrust: ${JSON.stringify(state)}`)
+  await send('Emulation.clearDeviceMetricsOverride')
+  await send('Emulation.setTouchEmulationEnabled',{enabled:false})
 
   await evaluate(`${controls}.querySelector('button[data-action="run"]').click()`)
   await evaluate(`(()=>{const app=document.querySelector('visualizer-app');app.state.world.systems=app.state.world.systems.filter(system=>system.id!=='input')})()`)
@@ -99,13 +115,14 @@ try{
   if(!flow.thrust||!flow.danger||!flow.parts)throw new Error(`Native styling contract failed: ${JSON.stringify(flow)}`)
   if(exceptions.length)throw new Error(`Browser exceptions:\n${exceptions.join('\n')}`)
 
-  console.log('curvature-arena-webgl: passed')
-  console.log('curvature-arena-fixed-step: passed')
-  console.log('curvature-arena-ecs-world: passed')
-  console.log('curvature-arena-system-schedule: passed')
-  console.log('curvature-arena-property-flow: passed')
-  console.log('curvature-arena-input-system: passed')
-  console.log('curvature-arena-design-contracts: passed')
+  console.log('voxel-meadow-webgl: passed')
+  console.log('voxel-meadow-fixed-step: passed')
+  console.log('voxel-meadow-ecs-world: passed')
+  console.log('voxel-meadow-system-schedule: passed')
+  console.log('voxel-meadow-property-flow: passed')
+  console.log('voxel-meadow-keyboard-input: passed')
+  console.log('voxel-meadow-mobile-gamepad: passed')
+  console.log('voxel-meadow-design-contracts: passed')
 }finally{
   try{socket?.close()}catch{}
   if(browser.exitCode===null){browser.kill('SIGTERM');await Promise.race([once(browser,'exit'),sleep(1000)])}

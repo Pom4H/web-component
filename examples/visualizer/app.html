@@ -49,10 +49,13 @@
     inventory:{dirt:3,stone:0,wood:2,plank:0}, crafted:0, message:'loading world'
   })
 
-  this.gameInput = event => this.controls = { x:event.detail.x, z:event.detail.z }
+  this.gameInput = event => {
+    this.controls.x = event.detail.x
+    this.controls.z = event.detail.z
+  }
   this.gameAction = event => {
     const action = event.detail.action
-    this.actions = { ...this.actions, [action]:this.actions[action] + 1 }
+    this.actions[action]++
   }
   this.runChange = event => this.running = event.detail.running
   this.reset = () => this.resetToken++

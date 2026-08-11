@@ -213,7 +213,7 @@
 
     const rayTarget=()=>{
       const eye=[player.position[0],player.position[1]+.22,player.position[2]]
-      const dir=normal([player.facing[0],-.32,player.facing[2]])
+      const dir=normal([player.facing[0],-.7,player.facing[2]])
       let previous=null
       for(let t=.35;t<=this.world.rules.reach;t+=.08){
         const p=add(eye,mul(dir,t)),cell=[Math.floor(p[0]),Math.floor(p[1]),Math.floor(p[2])]

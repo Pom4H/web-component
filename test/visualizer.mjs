@@ -42,6 +42,8 @@ try{
   const evaluate=async expression=>{const result=await send('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});if(result.exceptionDetails)throw new Error(result.exceptionDetails.exception?.description||result.exceptionDetails.text);return result.result.value}
   const dialogueSnapshot=()=>evaluate(`(()=>{const d=document.querySelector('visualizer-app').state.state.dialogue;return{open:d.open,speaker:d.speaker,text:d.text,options:d.options.map(item=>({id:item.id,label:item.label}))}})()`)
   const stateSnapshot=()=>evaluate(`(()=>{const s=document.querySelector('visualizer-app').state.state;return{objective:s.objective,prompt:s.prompt,stamina:s.stamina,danger:s.danger,hidden:s.hidden,hasFuse:s.hasFuse,power:s.power,caught:s.caught,ending:s.ending}})()`)
+  const sceneRoot=`document.querySelector('visualizer-app').shadowRoot.querySelector('visualizer-scene').shadowRoot`
+  const restart=async()=>{await evaluate(`document.querySelector('visualizer-app').shadowRoot.querySelector('visualizer-scene').dispatchEvent(new CustomEvent('game-command',{detail:{action:'restart'}}))`);await sleep(120)}
 
   const frameId=(await send('Page.getFrameTree')).frameTree.frame.id
   await send('Page.setDocumentContent',{frameId,html:'<!doctype html><html><head><base href="http://example.test/examples/"></head><body><visualizer-app></visualizer-app></body></html>'})
@@ -55,8 +57,28 @@ try{
   const defined=await evaluate(`(${JSON.stringify(tags)}).filter(tag=>customElements.get(tag)).length`)
   if(defined!==tags.length)throw new Error(`Expected ${tags.length} horror component types, got ${defined}`)
 
-  const contract=await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),scene=app.shadowRoot.querySelector('visualizer-scene');return{title:app.state.game.title,walls:app.state.game.walls.length,props:app.state.game.props.length,lockers:app.state.game.lockers.length,patrol:app.state.game.enemy.patrol.length,objective:app.state.state.objective,webgl:!!scene.shadowRoot.querySelector('canvas').getContext('webgl2')}})()`)
-  if(contract.title!=='THE NIGHT SHIFT'||contract.walls<8||contract.props<5||contract.lockers!==2||contract.patrol<5||contract.objective!=='Find Dr. Mira at reception'||!contract.webgl)throw new Error(`Horror game contract failed: ${JSON.stringify(contract)}`)
+  const contract=await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),scene=app.shadowRoot.querySelector('visualizer-scene');return{title:app.state.game.title,walls:app.state.game.walls.length,props:app.state.game.props.length,lockers:app.state.game.lockers.length,patrol:app.state.game.enemy.patrol.length,objective:app.state.state.objective,webgl:!!scene.shadowRoot.querySelector('canvas').getContext('webgl2'),touchButtons:scene.shadowRoot.querySelectorAll('.touch-button').length,movePad:!!scene.shadowRoot.querySelector('[data-touch="move"]'),lookPad:!!scene.shadowRoot.querySelector('[data-touch="look"]')}})()`)
+  if(contract.title!=='THE NIGHT SHIFT'||contract.walls<8||contract.props<5||contract.lockers!==2||contract.patrol<5||contract.objective!=='Find Dr. Mira at reception'||!contract.webgl||contract.touchButtons!==3||!contract.movePad||!contract.lookPad)throw new Error(`Horror game contract failed: ${JSON.stringify(contract)}`)
+
+  await evaluate(`(()=>{const canvas=${sceneRoot}.querySelector('canvas');canvas.dispatchEvent(new PointerEvent('pointerdown',{pointerId:7,pointerType:'pen',clientX:200,clientY:180,bubbles:true}));window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyW'}));window.dispatchEvent(new KeyboardEvent('keydown',{code:'ShiftLeft'}))})()`)
+  await sleep(520)
+  const keyboardState=await stateSnapshot()
+  await evaluate(`window.dispatchEvent(new KeyboardEvent('keyup',{code:'KeyW'}));window.dispatchEvent(new KeyboardEvent('keyup',{code:'ShiftLeft'}))`)
+  if(!(keyboardState.stamina<.95))throw new Error(`Desktop keyboard input never reached the simulation loop: ${JSON.stringify(keyboardState)}`)
+  await restart()
+
+  await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:3,mobile:true,screenWidth:390,screenHeight:844})
+  await send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:5})
+  await sleep(120)
+  const touchLayout=await evaluate(`(()=>{const move=${sceneRoot}.querySelector('[data-touch="move"]'),use=${sceneRoot}.querySelector('[data-touch="interact"]'),controls=${sceneRoot}.querySelector('.touch-controls'),r=move.getBoundingClientRect(),u=use.getBoundingClientRect();return{display:getComputedStyle(controls).display,moveWidth:r.width,moveHeight:r.height,useWidth:u.width,useHeight:u.height}})()`)
+  if(touchLayout.display==='none'||touchLayout.moveWidth<100||touchLayout.moveHeight<100||touchLayout.useWidth<44||touchLayout.useHeight<44)throw new Error(`Touch controls are not usable: ${JSON.stringify(touchLayout)}`)
+
+  await evaluate(`(()=>{const move=${sceneRoot}.querySelector('[data-touch="move"]'),run=${sceneRoot}.querySelector('[data-touch="run"]'),r=move.getBoundingClientRect();move.dispatchEvent(new PointerEvent('pointerdown',{pointerId:21,pointerType:'touch',clientX:r.left+r.width/2,clientY:r.top+r.height*.12,bubbles:true}));run.dispatchEvent(new PointerEvent('pointerdown',{pointerId:22,pointerType:'touch',clientX:10,clientY:10,bubbles:true}))})()`)
+  await sleep(520)
+  const touchState=await stateSnapshot()
+  await evaluate(`(()=>{const move=${sceneRoot}.querySelector('[data-touch="move"]'),run=${sceneRoot}.querySelector('[data-touch="run"]');move.dispatchEvent(new PointerEvent('pointerup',{pointerId:21,pointerType:'touch',bubbles:true}));run.dispatchEvent(new PointerEvent('pointerup',{pointerId:22,pointerType:'touch',bubbles:true}))})()`)
+  if(!(touchState.stamina<.95))throw new Error(`Touch joystick/run input never reached the simulation loop: ${JSON.stringify(touchState)}`)
+  await restart()
 
   await evaluate(`(()=>{const app=document.querySelector('visualizer-app'),scene=app.shadowRoot.querySelector('visualizer-scene');scene.game.npc.position.x=0;scene.game.npc.position.z=7.1;window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyE'}))})()`)
   let dialogue={}
@@ -77,13 +99,16 @@ try{
   dialogue=await dialogueSnapshot()
   if(afterBriefing.objective!=='Reach Archive B and recover the spare fuse'||dialogue.open)throw new Error(`Briefing did not enter stealth phase: ${JSON.stringify({afterBriefing,dialogue})}`)
 
-  await evaluate(`document.querySelector('visualizer-app').shadowRoot.querySelector('visualizer-scene').dispatchEvent(new CustomEvent('game-command',{detail:{action:'restart'}}))`);await sleep(100)
+  await restart()
   const reset=await stateSnapshot()
   if(reset.objective!=='Find Dr. Mira at reception'||reset.hasFuse||reset.power||reset.caught||reset.ending)throw new Error(`Restart did not reset story state: ${JSON.stringify(reset)}`)
 
   if(exceptions.length)throw new Error(`Browser exceptions:\n${exceptions.join('\n')}`)
   console.log('night-shift-webgl-mount: passed')
   console.log('night-shift-world-contract: passed')
+  console.log('night-shift-desktop-keyboard-input: passed')
+  console.log('night-shift-touch-layout: passed')
+  console.log('night-shift-touch-movement: passed')
   console.log('night-shift-npc-dialogue: passed')
   console.log('night-shift-dialogue-branching: passed')
   console.log('night-shift-story-phase: passed')
